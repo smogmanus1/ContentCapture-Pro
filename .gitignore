@@ -1,0 +1,43 @@
+# ContentCapture Pro - Git Ignore File
+
+# User data files (contain personal captures)
+captures.dat
+captures.dat.bak
+
+# User configuration (contains personal settings/paths)
+config.ini
+
+# Generated hotstrings (rebuilt on each run)
+# Keep the starter file, ignore the populated version
+# ContentCapture_Generated.ahk
+
+# Backup files
+backups/*.dat
+backups/*.bak
+*.backup
+
+# Favorites list (personal)
+favorites.txt
+
+# Log files
+*.log
+
+# Windows system files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# AutoHotkey compiled executables (if user compiles)
+*.exe
+
+# Editor backup files
+*.bak
+*~
+*.swp
+*.swo
+
+# VS Code
+.vscode/
+
+# Index files
+index.dat
