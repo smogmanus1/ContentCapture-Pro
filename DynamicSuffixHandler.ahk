@@ -1,14 +1,14 @@
 ; ==============================================================================
 ; DynamicSuffixHandler.ahk - Dynamic Suffix Detection for ContentCapture Pro
 ; ==============================================================================
-; Version:     1.0
+; Version:     1.1 (Fixed pattern detection)
 ; Author:      Brad (with Claude AI assistance)
 ; License:     MIT
 ;
 ; Instead of generating thousands of suffix variants (scriptem, scriptgo, etc.),
 ; this module monitors typing and intercepts suffix patterns dynamically.
 ;
-; Supported Suffixes (type ::scriptnameSUFFIX::):
+; Supported Suffixes (type scriptnameSUFFIX then space/enter):
 ;   em  → Email via Outlook
 ;   vi  → View/Edit in GUI
 ;   go  → Open URL in browser
@@ -86,27 +86,32 @@ class DynamicSuffixHandler {
     
     ; ==== INPUT MONITORING ====
     static OnCharTyped(ih, char) {
+        ; Check if this is an ending character (triggers hotstring)
+        endingChars := " `t`n.,;:!?/)>]}-=`r"
+        
+        if (InStr(endingChars, char)) {
+            ; Check for suffix pattern BEFORE adding the ending char
+            this.CheckForSuffixPattern(char)
+        }
+        
+        ; Add character to buffer
         this.inputBuffer .= char
         
         if (StrLen(this.inputBuffer) > this.maxBufferLen)
             this.inputBuffer := SubStr(this.inputBuffer, -(this.maxBufferLen // 2))
-        
-        ; Check for patterns when : is typed (end of hotstring)
-        if (char = ":")
-            this.CheckForSuffixPattern()
     }
     
     static OnKeyDown(ih, vk, sc) {
-        ; Clear buffer on Enter, Escape, Tab
-        if (vk = 13 || vk = 27 || vk = 9)
+        ; Clear buffer on Escape
+        if (vk = 27)
             this.inputBuffer := ""
     }
     
     ; ==== PATTERN DETECTION ====
-    static CheckForSuffixPattern() {
+    static CheckForSuffixPattern(endChar) {
         buffer := this.inputBuffer
         
-        if (StrLen(buffer) < 6)
+        if (StrLen(buffer) < 4)
             return
         
         ; Check each suffix (longest first to avoid partial matches)
@@ -117,21 +122,43 @@ class DynamicSuffixHandler {
                 continue
                 
             action := this.SUFFIX_MAP[suffix]
+            suffixLen := StrLen(suffix)
             
-            ; Pattern: ::name{suffix}::
-            pattern := "::(\w+)" . suffix . "::$"
+            ; Check if buffer ends with this suffix
+            if (StrLen(buffer) < suffixLen + 2)
+                continue
+                
+            bufferEnd := SubStr(buffer, -suffixLen + 1)
             
-            if (RegExMatch(buffer, pattern, &match)) {
-                baseName := match[1]
+            if (StrLower(bufferEnd) = suffix) {
+                ; Extract potential capture name (everything before suffix, after last space/punctuation)
+                beforeSuffix := SubStr(buffer, 1, StrLen(buffer) - suffixLen)
+                
+                ; Find the start of the word (after last delimiter)
+                wordStart := 1
+                Loop Parse, beforeSuffix {
+                    if (InStr(" `t`n.,;:!?()[]{}=`r", A_LoopField))
+                        wordStart := A_Index + 1
+                }
+                
+                baseName := SubStr(beforeSuffix, wordStart)
+                
+                ; Must have a base name
+                if (baseName = "")
+                    continue
                 
                 ; Verify this capture exists
                 if (this.CaptureExists(baseName)) {
-                    ; Erase the typed hotstring
-                    this.EraseTypedText(StrLen(match[0]))
+                    ; Calculate total characters to erase: baseName + suffix
+                    eraseCount := StrLen(baseName) + suffixLen
+                    
+                    ; Erase the typed text
+                    this.EraseTypedText(eraseCount)
                     
                     ; Execute action
                     this.ExecuteAction(baseName, action)
                     
+                    ; Clear buffer
                     this.inputBuffer := ""
                     return
                 }
@@ -235,8 +262,10 @@ class DynamicSuffixHandler {
     }
     
     static DoView(name, capture) {
-        ; Use the main script's view function if available
-        if (IsSet(CC_ShowReadWindow)) {
+        ; Use the main script's edit function if available
+        if (IsSet(CC_EditCapture)) {
+            CC_EditCapture(name)
+        } else if (IsSet(CC_ShowReadWindow)) {
             CC_ShowReadWindow(name)
         } else {
             this.DoRead(name, capture)
