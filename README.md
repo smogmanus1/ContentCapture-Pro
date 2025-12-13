@@ -1,176 +1,131 @@
-# ContentCapture Pro v4.2
+# ContentCapture Pro
 
-**Professional Content Capture System for AutoHotkey v2**
+![AutoHotkey](https://img.shields.io/badge/AutoHotkey-v2.0%2B-green)
+![License](https://img.shields.io/badge/License-MIT-blue)
+![Version](https://img.shields.io/badge/Version-4.2-orange)
 
-Capture webpages, save them with memorable hotstring names, and recall them instantly anywhere you can type. Share to social media with a single command.
+**Capture web content, create instant hotstrings, share anywhere.**
 
-![AutoHotkey v2](https://img.shields.io/badge/AutoHotkey-v2.0+-blue)
-![License](https://img.shields.io/badge/License-MIT-green)
-
----
+ContentCapture Pro is a powerful AutoHotkey v2 application that lets you capture webpage content (URLs, titles, text) and instantly recall it using simple hotstrings. Share to email, social media, or paste anywhere with just a few keystrokes.
 
 ## ✨ Features
 
-- **🔥 Instant Capture** - Press `Ctrl+Alt+P` on any webpage to capture URL, title, and selected text
-- **⚡ Quick Search** - Alfred/Raycast-style popup search with `Ctrl+Alt+Space`
-- **🤖 AI Integration** - Summarize, rewrite, and improve content (OpenAI, Anthropic, or local Ollama)
-- **📱 Social Sharing** - One-command sharing to Facebook, Twitter/X, Bluesky, LinkedIn, Mastodon
-- **🏷️ Tags & Organization** - Categorize captures with tags for easy filtering
-- **💾 Cloud Backup** - Automatic backup detection for Dropbox, OneDrive, Google Drive
-- **📤 HTML Export** - Export all captures to a searchable HTML file
-
----
+- **One-Click Capture** - Press `Ctrl+Alt+P` on any webpage to capture URL, title, and selected text
+- **Instant Recall** - Type your capture name to paste content anywhere
+- **Smart Suffixes** - Add `em`, `go`, `fb`, `x` to trigger actions instantly
+- **Quick Search** - `Ctrl+Alt+Space` for Alfred/Raycast-style instant search
+- **Social Sharing** - Built-in support for Facebook, Twitter/X, Bluesky, LinkedIn, Mastodon
+- **Email Integration** - Send captures directly via Outlook
+- **Backup System** - Automatic backups with cloud drive detection
+- **HTML Export** - Export your entire capture library
 
 ## 🚀 Quick Start
 
-### Requirements
-- Windows 10/11
-- [AutoHotkey v2.0+](https://www.autohotkey.com/) installed
-
 ### Installation
 
-1. **Download** and extract the zip to your preferred location
-2. **Double-click** `ContentCapture-Pro.ahk` to run
-3. **First run** will launch the Setup Wizard - choose where to save your captures
-4. **Start capturing!** Press `Ctrl+Alt+P` in your browser
+1. Install [AutoHotkey v2](https://www.autohotkey.com/download/)
+2. Download the latest release
+3. Extract to a folder
+4. Double-click `ContentCapture.ahk`
+5. Follow the first-run setup wizard
 
----
+### Basic Usage
 
-## ⌨️ Keyboard Shortcuts
+| Action | How |
+|--------|-----|
+| Capture webpage | `Ctrl+Alt+P` |
+| Browse captures | `Ctrl+Alt+B` |
+| Quick search | `Ctrl+Alt+Space` |
+| Paste capture | Type `::name::` |
+| Action menu | Type `::name?::` |
+
+## ⌨️ Hotstring Suffixes
+
+Type your capture name followed by a suffix, then press space:
+
+| Suffix | Action | Example |
+|--------|--------|---------|
+| *(none)* | Paste full content | `myrecipe` + space |
+| `em` | Email via Outlook | `myrecipeem` + space |
+| `go` | Open URL in browser | `myrecipego` + space |
+| `rd` | Read in popup | `myreciperd` + space |
+| `vi` | View/Edit capture | `myrecipevi` + space |
+| `fb` | Share to Facebook | `myrecipefb` + space |
+| `x` | Share to Twitter/X | `myrecipex` + space |
+| `bs` | Share to Bluesky | `myrecipebs` + space |
+| `li` | Share to LinkedIn | `myrecipeli` + space |
+| `mt` | Share to Mastodon | `myrecipemt` + space |
+
+## 🎹 Keyboard Shortcuts
 
 | Shortcut | Action |
 |----------|--------|
-| `Ctrl+Alt+P` | **Capture** current webpage |
-| `Ctrl+Alt+Space` | **Quick Search** popup |
-| `Ctrl+Alt+A` | **AI Assist** menu |
-| `Ctrl+Alt+B` | **Browse** all captures |
-| `Ctrl+Alt+N` | **Manual** capture (no browser) |
-| `Ctrl+Alt+M` | Show main **Menu** |
-| `Ctrl+Alt+E` | **Email** last capture |
-| `Ctrl+Alt+K` | **Backup**/Restore |
-| `Ctrl+Alt+H` | Export to **HTML** |
-| `Ctrl+Alt+F12` | Show **Help** |
-
----
-
-## 📝 Using Hotstrings
-
-After capturing a webpage with name `recipe`, you can type:
-
-| Hotstring | Action |
-|-----------|--------|
-| `::recipe::` | Paste full content |
-| `::recipe?::` | Show action menu |
-| `::recipeem::` | Email via Outlook |
-| `::recipego::` | Open URL in browser |
-| `::reciperd::` | Read in popup window |
-| `::recipevi::` | View/Edit capture |
-
-### Social Media Suffixes
-
-| Hotstring | Platform |
-|-----------|----------|
-| `::recipefb::` | Share to Facebook |
-| `::recipex::` | Share to Twitter/X |
-| `::recipebs::` | Share to Bluesky |
-| `::recipeli::` | Share to LinkedIn |
-| `::recipemt::` | Share to Mastodon |
-
-> **Tip:** If content exceeds character limits, you'll get an edit window to trim it.
-
----
+| `Ctrl+Alt+P` | Capture current webpage |
+| `Ctrl+Alt+B` | Open capture browser |
+| `Ctrl+Alt+Space` | Quick search popup |
+| `Ctrl+Alt+N` | Manual capture (no browser) |
+| `Ctrl+Alt+M` | Show main menu |
+| `Ctrl+Alt+E` | Email last capture |
+| `Ctrl+Alt+H` | Export to HTML |
+| `Ctrl+Alt+K` | Backup captures |
+| `Ctrl+Alt+S` | Settings/Setup |
+| `Ctrl+Alt+F12` | Show help |
 
 ## 📁 File Structure
 
 ```
-ContentCapture-Pro-v4.2/
-├── ContentCapture-Pro.ahk      # Main script
-├── DynamicSuffixHandler.ahk    # Suffix detection engine
-├── ContentCapture_Generated.ahk # Auto-generated hotstrings
-├── config.ini                  # Settings (created on first run)
-├── captures.dat                # Your captures database
-├── README.md                   # This file
-├── LICENSE                     # MIT License
-├── CHANGELOG.md                # Version history
-├── docs/
-│   ├── QuickReference.md       # Quick reference card
-│   └── AI-Setup-Guide.md       # AI provider setup instructions
-└── backups/                    # Backup storage
+ContentCapture-Pro/
+├── ContentCapture.ahk          # Main launcher (run this)
+├── ContentCapture-Pro.ahk      # Core application
+├── DynamicSuffixHandler.ahk    # Suffix hotstring engine
+├── ContentCapture-Setup.ahk    # First-run wizard
+├── ContentCapture_Generated.ahk # Auto-generated (created on first run)
+├── captures.dat                # Your capture data (created on first run)
+├── capture_index.txt           # Quick lookup index (created on first run)
+└── config.ini                  # Settings (created on first run)
 ```
-
----
 
 ## 🔧 Configuration
 
-### First-Time Setup
+On first run, the setup wizard will guide you through:
 
-The Setup Wizard will ask you to:
-1. Choose a save location (cloud folders auto-detected)
-2. Select which social platforms to enable
-3. (Optional) Configure AI integration
+1. **Storage Location** - Where to save your captures
+2. **Startup Option** - Run automatically with Windows
+3. **Social Media** - Enable/disable sharing platforms
 
-### AI Integration
+Settings can be changed anytime via `Ctrl+Alt+S`.
 
-ContentCapture Pro supports:
-- **OpenAI** (GPT-4, GPT-3.5)
-- **Anthropic** (Claude)
-- **Ollama** (Local, free, private)
+## 📝 Data Format
 
-📖 **See [docs/AI-Setup-Guide.md](docs/AI-Setup-Guide.md) for detailed setup instructions.**
+Captures are stored in a simple INI-style format in `captures.dat`:
 
-To enable: `Ctrl+Alt+S` → Configure AI settings
-
----
-
-## 💡 Tips & Tricks
-
-### YouTube URLs
-YouTube timestamps are automatically stripped so shared links start from the beginning, not where you stopped watching.
-
-### Duplicate Detection
-The system warns you if you try to capture a URL that's already saved.
-
-### Quick Actions
-- Type `::name?::` for a quick action menu on any capture
-- Use Quick Search (`Ctrl+Alt+Space`) for instant fuzzy finding
-
-### Backup Strategy
-- Automatic backup to detected cloud folders
-- Manual backup to USB drives supported
-- HTML export creates a standalone searchable archive
-
----
+```ini
+[mycapture]
+url=https://example.com/article
+title=Example Article Title
+tags=news,reference
+opinion=My thoughts on this article
+body=<<<BODY
+The full text content of the capture
+goes here, supporting multiple lines.
+BODY>>>
+```
 
 ## 🙏 Credits
 
-- **AutoHotkey Team** - [autohotkey.com](https://www.autohotkey.com/)
-- **Jack Dunning** - Author of "AutoHotkey Applications" - [computoredge.com](https://www.computoredge.com/AutoHotkey/)
-- **Joe Glines / The Automator** - [the-automator.com](https://www.the-automator.com/)
-- **Antonio Bueno** - Browser URL capture techniques
-- **Claude AI (Anthropic)** - Development assistance
-
----
+- [AutoHotkey Development Team](https://www.autohotkey.com/)
+- [Jack Dunning](https://www.computoredge.com/AutoHotkey/) - AutoHotkey educator & author
+- [Joe Glines & The Automator](https://www.the-automator.com/) - AHK education & community
+- Antonio Bueno (atnbueno) - Browser URL capture concepts
 
 ## 📄 License
 
-MIT License - Free to use, modify, and distribute.
+MIT License - See [LICENSE](LICENSE) for details.
+
+## 🤝 Contributing
+
+Contributions welcome! Please feel free to submit issues and pull requests.
 
 ---
 
-## 🐛 Troubleshooting
-
-### "Script not running"
-- Make sure AutoHotkey v2.0+ is installed
-- Right-click the script → Run as Administrator (if needed)
-
-### "Hotstrings not working"
-- Reload the script (`Ctrl+Alt+L`)
-- Check that the generated file exists
-
-### "Can't capture URL"
-- Make sure you're in a browser window
-- Try clicking in the address bar first
-
----
-
-**Made with ❤️ for the AutoHotkey community**
+**Made with ❤️ by Brad Schrunk**

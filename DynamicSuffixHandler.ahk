@@ -1,7 +1,7 @@
 ; ==============================================================================
 ; DynamicSuffixHandler.ahk - Dynamic Suffix Detection for ContentCapture Pro
 ; ==============================================================================
-; Version:     1.1 (Fixed pattern detection)
+; Version:     1.2 (Fixed SubStr pattern detection bug)
 ; Author:      Brad (with Claude AI assistance)
 ; License:     MIT
 ;
@@ -127,8 +127,9 @@ class DynamicSuffixHandler {
             ; Check if buffer ends with this suffix
             if (StrLen(buffer) < suffixLen + 2)
                 continue
-                
-            bufferEnd := SubStr(buffer, -suffixLen + 1)
+            
+            ; FIXED: Was -suffixLen + 1, now correctly -suffixLen
+            bufferEnd := SubStr(buffer, -suffixLen)
             
             if (StrLower(bufferEnd) = suffix) {
                 ; Extract potential capture name (everything before suffix, after last space/punctuation)
@@ -150,7 +151,7 @@ class DynamicSuffixHandler {
                 ; Verify this capture exists
                 if (this.CaptureExists(baseName)) {
                     ; Calculate total characters to erase: baseName + suffix
-                    eraseCount := StrLen(baseName) + suffixLen
+                    eraseCount := StrLen(baseName) + suffixLen + 
                     
                     ; Erase the typed text
                     this.EraseTypedText(eraseCount)

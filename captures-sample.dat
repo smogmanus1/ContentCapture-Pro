@@ -1,0 +1,36 @@
+; ContentCapture Pro - Capture Data
+; Version: 4.2
+; This is a sample file with example captures
+; Your captures will be added here when you use Ctrl+Alt+P
+
+[example1]
+url=https://www.autohotkey.com/
+title=AutoHotkey - Free Keyboard Macro Program
+tags=reference,tech
+body=<<<BODY
+AutoHotkey is a free, open-source scripting language for Windows that allows users to easily create small to complex scripts for all kinds of tasks such as: form fillers, auto-clicking, macros, etc.
+BODY>>>
+
+[samplerecipe]
+url=https://example.com/recipe
+title=Quick Pasta Recipe
+tags=personal,reference
+opinion=Great weeknight dinner option
+body=<<<BODY
+Ingredients:
+- 1 lb pasta
+- 2 cloves garlic
+- Olive oil
+- Parmesan cheese
+
+Cook pasta according to package directions. Sauté garlic in olive oil. Toss with pasta and top with cheese.
+BODY>>>
+
+[ahktutorial]
+url=https://www.autohotkey.com/docs/v2/Tutorial.htm
+title=AutoHotkey v2 Tutorial
+tags=tutorial,tech
+body=<<<BODY
+This tutorial covers the basics of AutoHotkey v2, including hotkeys, hotstrings, and scripting fundamentals. A great starting point for new users.
+BODY>>>
+
