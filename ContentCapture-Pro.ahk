@@ -2,8 +2,8 @@
 ; ContentCapture Pro - Professional Content Capture System
 ; ==============================================================================
 ; Author:      Brad
-; Version:     4.2 (AHK v2) - AI Integration, Quick Search, Favorites
-; Updated:     2025-12-10
+; Version:     4.4 (AHK v2) - AI Integration, Quick Search, Favorites, Restore Browser, Smart Social Paste
+; Updated:     2025-12-12
 ; License:     MIT
 ;
 ; NOTE: This file is designed to be #Included from a launcher script.
@@ -51,6 +51,7 @@
 ; Ctrl+Alt+P = Capture content from webpage
 ; Ctrl+Alt+N = Manual capture (add your own content)
 ; Ctrl+Alt+B = Open Capture Browser (search all captures)
+; Ctrl+Alt+Shift+B = RESTORE BROWSER (restore from backup)
 ; Ctrl+Alt+O = Open captures file in editor
 ; Ctrl+Alt+W = Toggle Recent Captures Widget
 ; Ctrl+Alt+H = Export captures to HTML
@@ -65,8 +66,7 @@
 ; ==============================================================================
 ; DETERMINE OUR OWN DIRECTORY (works when #Included)
 ; ==============================================================================
-#Requires AutoHotkey v2.0+
-#SingleInstance Force
+; NOTE: #Requires and #SingleInstance are in the launcher (ContentCapture.ahk)
 #Include DynamicSuffixHandler.ahk
 
 global ContentCaptureDir := ""
@@ -161,7 +161,7 @@ CC_CheckAutoBackup()
 CC_SetupTrayMenu()
 
 ; Show startup notification
-TrayTip("ContentCapture Pro v4.2 loaded!`n" CaptureNames.Length " captures available.`nCtrl+Alt+Space for quick search.`nCtrl+Alt+A for AI assist.", "ContentCapture Pro", "1")
+TrayTip("ContentCapture Pro v4.4 loaded!`n" CaptureNames.Length " captures available.`nSmart paste detects social media sites!", "ContentCapture Pro", "1")
 
 ; Show tutorial for first-time users
 if (CCHelp.ShouldShowTutorial()) {
@@ -178,6 +178,7 @@ if (CCHelp.ShouldShowTutorial()) {
 ^!p:: CC_CaptureContent()
 ^!n:: CC_ManualCapture()
 ^!b:: CC_OpenCaptureBrowser()
+^!+b:: CC_OpenRestoreBrowser()
 ^!o:: CC_OpenDataFileInEditor()
 ^!w:: CC_ToggleRecentWidget()
 ^!h:: CC_ExportToHTML()
@@ -268,8 +269,8 @@ CC_PopulateQuickSearch(resultList, filter) {
         ; Add favorites first
         if IsSet(Favorites) && Favorites.Length > 0 {
             for name in Favorites {
-                if CaptureData.Has(name) {
-                    title := CaptureData[name].Has("title") ? CaptureData[name]["title"] : name
+                if CaptureData.Has(StrLower(name)) {
+                    title := CaptureData[StrLower(name)].Has("title") ? CaptureData[StrLower(name)]["title"] : name
                     matches.Push({name: name, title: title, fav: true})
                 }
             }
@@ -289,7 +290,7 @@ CC_PopulateQuickSearch(resultList, filter) {
                 }
             }
             if (!alreadyAdded) {
-                title := CaptureData[name].Has("title") ? CaptureData[name]["title"] : name
+                title := CaptureData[StrLower(name)].Has("title") ? CaptureData[StrLower(name)]["title"] : name
                 matches.Push({name: name, title: title, fav: false})
                 count++
             }
@@ -298,15 +299,15 @@ CC_PopulateQuickSearch(resultList, filter) {
         ; Search by filter
         for name in CaptureNames {
             if InStr(StrLower(name), filter) {
-                title := CaptureData[name].Has("title") ? CaptureData[name]["title"] : name
+                title := CaptureData[StrLower(name)].Has("title") ? CaptureData[StrLower(name)]["title"] : name
                 isFav := IsSet(Favorites) && CC_ArrayContains(Favorites, name)
                 matches.Push({name: name, title: title, fav: isFav})
-            } else if CaptureData[name].Has("title") && InStr(StrLower(CaptureData[name]["title"]), filter) {
-                title := CaptureData[name]["title"]
+            } else if CaptureData[StrLower(name)].Has("title") && InStr(StrLower(CaptureData[StrLower(name)]["title"]), filter) {
+                title := CaptureData[StrLower(name)]["title"]
                 isFav := IsSet(Favorites) && CC_ArrayContains(Favorites, name)
                 matches.Push({name: name, title: title, fav: isFav})
-            } else if CaptureData[name].Has("tags") && InStr(StrLower(CaptureData[name]["tags"]), filter) {
-                title := CaptureData[name].Has("title") ? CaptureData[name]["title"] : name
+            } else if CaptureData[StrLower(name)].Has("tags") && InStr(StrLower(CaptureData[StrLower(name)]["tags"]), filter) {
+                title := CaptureData[StrLower(name)].Has("title") ? CaptureData[StrLower(name)]["title"] : name
                 isFav := IsSet(Favorites) && CC_ArrayContains(Favorites, name)
                 matches.Push({name: name, title: title, fav: isFav})
             }
@@ -557,7 +558,7 @@ CC_AISelectCapture() {
     for name in CaptureNames {
         if (count++ > 100)
             break
-        title := CaptureData.Has(name) && CaptureData[name].Has("title") ? CaptureData[name]["title"] : ""
+        title := CaptureData.Has(StrLower(name)) && CaptureData[StrLower(name)].Has("title") ? CaptureData[StrLower(name)]["title"] : ""
         captureList.Add([name " - " SubStr(title, 1, 40)])
     }
     
@@ -587,7 +588,7 @@ CC_AIFilterCaptures(selectGui, searchBox, captureList) {
         if (count++ > 100)
             break
         
-        title := CaptureData.Has(name) && CaptureData[name].Has("title") ? CaptureData[name]["title"] : ""
+        title := CaptureData.Has(StrLower(name)) && CaptureData[StrLower(name)].Has("title") ? CaptureData[StrLower(name)]["title"] : ""
         
         if (searchTerm = "" || InStr(name, searchTerm) || InStr(title, searchTerm))
             captureList.Add([name " - " SubStr(title, 1, 40)])
@@ -627,13 +628,13 @@ CC_AIAction(action, target) {
         captureName := ""
     } else {
         ; Use specified capture
-        if (!CaptureData.Has(target)) {
+        if (!CaptureData.Has(StrLower(target))) {
             MsgBox("Capture '" target "' not found.", "Not Found", "Icon!")
             return
         }
-        content := CaptureData[target].Has("body") ? CaptureData[target]["body"] : ""
-        title := CaptureData[target].Has("title") ? CaptureData[target]["title"] : ""
-        url := CaptureData[target].Has("url") ? CaptureData[target]["url"] : ""
+        content := CaptureData[StrLower(target)].Has("body") ? CaptureData[StrLower(target)]["body"] : ""
+        title := CaptureData[StrLower(target)].Has("title") ? CaptureData[StrLower(target)]["title"] : ""
+        url := CaptureData[StrLower(target)].Has("url") ? CaptureData[StrLower(target)]["url"] : ""
         captureName := target
     }
     
@@ -734,13 +735,13 @@ CC_AIShowResult(actionName, result, captureName, action) {
 CC_AISaveTitle(resultGui, captureName, newTitle) {
     global CaptureData, DataFile
     
-    if (!CaptureData.Has(captureName)) {
+    if (!CaptureData.Has(StrLower(captureName))) {
         MsgBox("Capture not found.", "Error", "Icon!")
         return
     }
     
     ; Update in memory
-    CaptureData[captureName]["title"] := newTitle
+    CaptureData[StrLower(captureName)]["title"] := newTitle
     
     ; Save to file
     CC_SaveCaptureData()
@@ -869,8 +870,8 @@ CC_SetupTrayMenu() {
     global CaptureNames, AIEnabled
     
     A_TrayMenu.Delete()
-    A_TrayMenu.Add("📚 ContentCapture Pro v4.2", (*) => CC_ShowMainMenu())
-    A_TrayMenu.Default := "📚 ContentCapture Pro v4.2"
+    A_TrayMenu.Add("📚 ContentCapture Pro v4.4", (*) => CC_ShowMainMenu())
+    A_TrayMenu.Default := "📚 ContentCapture Pro v4.4"
     A_TrayMenu.Add()
     
     ; Quick actions
@@ -1028,10 +1029,10 @@ CC_GenerateHotstringFile() {
 CC_ShowActionMenu(name, *) {
     global CaptureData
 
-    if !CaptureData.Has(name)
+    if !CaptureData.Has(StrLower(name))
         return
 
-    cap := CaptureData[name]
+    cap := CaptureData[StrLower(name)]
     title := cap.Has("title") ? cap["title"] : name
 
     if (StrLen(title) > 50)
@@ -1082,10 +1083,10 @@ CC_ShowActionMenu(name, *) {
 CC_GetCaptureContent(name) {
     global CaptureData
 
-    if !CaptureData.Has(name)
+    if !CaptureData.Has(StrLower(name))
         return ""
 
-    cap := CaptureData[name]
+    cap := CaptureData[StrLower(name)]
 
     content := cap.Has("url") ? cap["url"] : ""
     content .= "`n" (cap.Has("title") ? cap["title"] : "")
@@ -1099,16 +1100,89 @@ CC_GetCaptureContent(name) {
     return content
 }
 
+CC_GetCaptureShortContent(name) {
+    global CaptureData
+
+    if !CaptureData.Has(StrLower(name))
+        return ""
+
+    cap := CaptureData[StrLower(name)]
+    
+    ; If short version exists, use it with URL
+    if (cap.Has("short") && cap["short"] != "") {
+        content := cap.Has("url") ? cap["url"] "`n" : ""
+        content .= cap["short"]
+        return content
+    }
+    
+    ; Fallback to regular content
+    return ""
+}
+
+CC_DetectSocialMedia() {
+    ; Check window title for social media sites - non-invasive method
+    ; This avoids the Ctrl+L address bar issue
+    
+    static socialPatterns := [
+        {pattern: "Bluesky", name: "bsky.app"},
+        {pattern: "bsky.app", name: "bsky.app"},
+        {pattern: " / X", name: "x.com"},
+        {pattern: "x.com", name: "x.com"},
+        {pattern: "Twitter", name: "x.com"},
+        {pattern: "Facebook", name: "facebook.com"},
+        {pattern: "Mastodon", name: "mastodon"},
+        {pattern: "LinkedIn", name: "linkedin.com"},
+        {pattern: "Threads", name: "threads.net"},
+        {pattern: "Reddit", name: "reddit.com"},
+        {pattern: "Truth Social", name: "truthsocial.com"},
+        {pattern: "Gab", name: "gab.com"},
+        {pattern: "Tumblr", name: "tumblr.com"},
+        {pattern: "GETTR", name: "gettr.com"}
+    ]
+    
+    ; Get the active window title
+    try {
+        winTitle := WinGetTitle("A")
+        
+        ; Check if title matches any social media pattern
+        for item in socialPatterns {
+            if InStr(winTitle, item.pattern)
+                return item.name
+        }
+    }
+    
+    return ""
+}
+
 CC_GetCaptureURL(name) {
     global CaptureData
 
-    if !CaptureData.Has(name)
+    if !CaptureData.Has(StrLower(name))
         return ""
 
-    return CaptureData[name].Has("url") ? CaptureData[name]["url"] : ""
+    return CaptureData[StrLower(name)].Has("url") ? CaptureData[StrLower(name)]["url"] : ""
 }
 
 CC_HotstringPaste(name, *) {
+    global CaptureData
+    
+    ; Check if we're on social media
+    socialSite := CC_DetectSocialMedia()
+    
+    ; If on social media and short version exists, use it
+    if (socialSite != "") {
+        shortContent := CC_GetCaptureShortContent(name)
+        if (shortContent != "") {
+            A_Clipboard := shortContent
+            ClipWait(1)
+            SendInput("^v")
+            TrayTip("Using short version for " socialSite, name, "1")
+            CCHelp.TipAfterFirstHotstring()
+            return
+        }
+    }
+    
+    ; Otherwise use full content
     content := CC_GetCaptureContent(name)
     if (content = "")
         return
@@ -1194,10 +1268,10 @@ CC_HotstringMastodon(name, *) {
 CC_ShowReadWindow(name, *) {
     global CaptureData
 
-    if !CaptureData.Has(name)
+    if !CaptureData.Has(StrLower(name))
         return
 
-    cap := CaptureData[name]
+    cap := CaptureData[StrLower(name)]
 
     title := cap.Has("title") ? cap["title"] : name
     url := cap.Has("url") ? cap["url"] : ""
@@ -1543,7 +1617,7 @@ CC_LoadCaptureData() {
                 if (currentName != "") {
                     if (inBody && bodyLines != "")
                         currentCapture["body"] := RTrim(bodyLines, "`n")
-                    CaptureData[currentName] := currentCapture
+                    CaptureData[StrLower(currentName)] := currentCapture
                     CaptureNames.Push(currentName)
                 }
 
@@ -1586,7 +1660,7 @@ CC_LoadCaptureData() {
         if (currentName != "") {
             if (inBody && bodyLines != "")
                 currentCapture["body"] := RTrim(bodyLines, "`n")
-            CaptureData[currentName] := currentCapture
+            CaptureData[StrLower(currentName)] := currentCapture
             CaptureNames.Push(currentName)
         }
     }
@@ -1601,10 +1675,10 @@ CC_SaveCaptureData() {
     content .= "; Captures: " CaptureNames.Length "`n`n"
 
     for name in CaptureNames {
-        if !CaptureData.Has(name)
+        if !CaptureData.Has(StrLower(name))
             continue
 
-        cap := CaptureData[name]
+        cap := CaptureData[StrLower(name)]
 
         content .= "[" name "]`n"
 
@@ -1653,11 +1727,11 @@ CC_SaveCaptureData() {
 CC_SaveShortVersion(name, shortText) {
     global CaptureData
     
-    if (!CaptureData.Has(name))
+    if (!CaptureData.Has(StrLower(name)))
         return
     
     ; Update the capture with short version
-    CaptureData[name]["short"] := shortText
+    CaptureData[StrLower(name)]["short"] := shortText
     
     ; Save to disk
     CC_SaveCaptureData()
@@ -1679,7 +1753,7 @@ CC_AddCapture(name, url, title, date, tags, note, opinion, body) {
     cap["opinion"] := opinion
     cap["body"] := body
 
-    CaptureData[name] := cap
+    CaptureData[StrLower(name)] := cap
 
     found := false
     for n in CaptureNames {
@@ -1708,10 +1782,10 @@ CC_UpdateIndexFile() {
     content .= "; Captures: " CaptureNames.Length "`n`n"
 
     for name in CaptureNames {
-        if !CaptureData.Has(name)
+        if !CaptureData.Has(StrLower(name))
             continue
 
-        cap := CaptureData[name]
+        cap := CaptureData[StrLower(name)]
 
         title := cap.Has("title") ? StrReplace(cap["title"], "|", "-") : ""
         date := cap.Has("date") ? cap["date"] : ""
@@ -2062,7 +2136,7 @@ CC_ShowMainMenu() {
     menuGui.BackColor := "1a1a2e"
 
     menuGui.SetFont("s14 bold cWhite")
-    menuGui.Add("Text", "x20 y15 w360 Center", "📚 ContentCapture Pro v4.2")
+    menuGui.Add("Text", "x20 y15 w360 Center", "📚 ContentCapture Pro v4.4")
 
     menuGui.SetFont("s10 norm c888888")
     favCount := IsSet(Favorites) ? Favorites.Length : 0
@@ -2097,10 +2171,13 @@ CC_ShowMainMenu() {
     menuGui.Add("Text", "x20 y220", "━━━━━━━━━━━ BROWSE ━━━━━━━━━━━")
 
     menuGui.SetFont("s10")
-    btn3 := menuGui.Add("Button", "x20 y245 w170 h35", "🔎 Browse All")
+    btn3 := menuGui.Add("Button", "x20 y245 w110 h35", "🔎 Browse All")
     btn3.OnEvent("Click", (*) => (menuGui.Destroy(), CC_OpenCaptureBrowser()))
 
-    btn4 := menuGui.Add("Button", "x200 y245 w170 h35", "📂 Open Data File")
+    btn3b := menuGui.Add("Button", "x135 y245 w110 h35", "📦 Restore")
+    btn3b.OnEvent("Click", (*) => (menuGui.Destroy(), CC_OpenRestoreBrowser()))
+
+    btn4 := menuGui.Add("Button", "x250 y245 w120 h35", "📂 Open File")
     btn4.OnEvent("Click", (*) => (menuGui.Destroy(), CC_OpenDataFileInEditor()))
 
     menuGui.SetFont("s11 cWhite")
@@ -2161,8 +2238,8 @@ CC_CaptureContent() {
 
     ; Check for duplicate URL
     for name in CaptureNames {
-        if CaptureData.Has(name) && CaptureData[name].Has("url") {
-            if (CaptureData[name]["url"] = url) {
+        if CaptureData.Has(StrLower(name)) && CaptureData[StrLower(name)].Has("url") {
+            if (CaptureData[StrLower(name)]["url"] = url) {
                 result := MsgBox("This URL has already been captured as:`n`n" name "`n`nCapture anyway?", "Duplicate Detected", "YesNo Icon!")
                 if (result = "No") {
                     A_Clipboard := oldClip
@@ -2217,7 +2294,7 @@ CC_CaptureContent() {
         return
     }
 
-    if CaptureData.Has(captureResult.name) {
+    if CaptureData.Has(StrLower(captureResult.name)) {
         result := MsgBox("A capture named '" captureResult.name "' already exists.`n`nOverwrite it?", "Name Exists", "YesNo Icon!")
         if (result = "No") {
             A_Clipboard := oldClip
@@ -2335,7 +2412,7 @@ CC_SaveManualCapture(manualGui, nameEdit, urlEdit, titleEdit, bodyEdit, noteEdit
     }
     
     ; Check for duplicate
-    if CaptureData.Has(name) {
+    if CaptureData.Has(StrLower(name)) {
         result := MsgBox("A capture named '" name "' already exists.`n`nOverwrite it?", "Name Exists", "YesNo Icon!")
         if (result = "No")
             return
@@ -2482,9 +2559,9 @@ CC_OpenCaptureBrowser() {
 
     ; Populate with favorites indicator
     for name in CaptureNames {
-        if !CaptureData.Has(name)
+        if !CaptureData.Has(StrLower(name))
             continue
-        cap := CaptureData[name]
+        cap := CaptureData[StrLower(name)]
         isFav := CC_IsFavorite(name) ? "⭐" : ""
         listView.Add(, isFav, name,
             cap.Has("title") ? cap["title"] : "",
@@ -2581,10 +2658,10 @@ CC_FilterBrowserCaptures(browserGui) {
     matchCount := 0
 
     for name in CaptureNames {
-        if !CaptureData.Has(name)
+        if !CaptureData.Has(StrLower(name))
             continue
 
-        cap := CaptureData[name]
+        cap := CaptureData[StrLower(name)]
 
         if (tagFilter != "All Tags") {
             capTags := cap.Has("tags") ? cap["tags"] : ""
@@ -2723,7 +2800,7 @@ CC_BrowserDeleteCapture(listView, browserGui) {
 
     ; Delete all selected captures
     for name in selectedNames {
-        if CaptureData.Has(name)
+        if CaptureData.Has(StrLower(name))
             CaptureData.Delete(name)
     }
 
@@ -2755,18 +2832,1085 @@ CC_BrowserDeleteCapture(listView, browserGui) {
 }
 
 ; ==============================================================================
+; RESTORE FROM BACKUP BROWSER
+; ==============================================================================
+
+CC_OpenRestoreBrowser() {
+    global BaseDir, CaptureData, CaptureNames
+    
+    backupFile := BaseDir "\capturesbackup.dat"
+    
+    if !FileExist(backupFile) {
+        MsgBox("Backup file not found:`n" backupFile "`n`nMake sure capturesbackup.dat is in your ContentCapture folder.", "No Backup Found", "48")
+        return
+    }
+    
+    ; Load backup data into temporary maps
+    backupData := Map()
+    backupNames := []
+    
+    try {
+        content := FileRead(backupFile, "UTF-8")
+        
+        currentCapture := Map()
+        currentName := ""
+        inBody := false
+        bodyLines := ""
+        
+        Loop Parse, content, "`n", "`r" {
+            line := A_LoopField
+            
+            if RegExMatch(line, "^\[([^\]]+)\]$", &match) {
+                if (currentName != "") {
+                    if (inBody && bodyLines != "")
+                        currentCapture["body"] := RTrim(bodyLines, "`n")
+                    backupData[StrLower(currentName)] := currentCapture
+                    backupNames.Push(currentName)
+                }
+                
+                currentName := match[1]
+                currentCapture := Map()
+                currentCapture["name"] := currentName
+                inBody := false
+                bodyLines := ""
+                continue
+            }
+            
+            if (currentName = "")
+                continue
+            
+            if (SubStr(line, 1, 4) = "url=") {
+                currentCapture["url"] := SubStr(line, 5)
+            } else if (SubStr(line, 1, 6) = "title=") {
+                currentCapture["title"] := SubStr(line, 7)
+            } else if (SubStr(line, 1, 5) = "date=") {
+                currentCapture["date"] := SubStr(line, 6)
+            } else if (SubStr(line, 1, 5) = "tags=") {
+                currentCapture["tags"] := SubStr(line, 6)
+            } else if (SubStr(line, 1, 5) = "note=") {
+                currentCapture["note"] := SubStr(line, 6)
+            } else if (SubStr(line, 1, 8) = "opinion=") {
+                currentCapture["opinion"] := SubStr(line, 9)
+            } else if (SubStr(line, 1, 6) = "short=") {
+                currentCapture["short"] := SubStr(line, 7)
+            } else if (line = "body=<<<BODY") {
+                inBody := true
+            } else if (line = "BODY>>>") {
+                inBody := false
+                if (bodyLines != "")
+                    currentCapture["body"] := RTrim(bodyLines, "`n")
+            } else if (inBody) {
+                bodyLines .= line "`n"
+            }
+        }
+        
+        ; Don't forget the last entry
+        if (currentName != "") {
+            if (inBody && bodyLines != "")
+                currentCapture["body"] := RTrim(bodyLines, "`n")
+            backupData[StrLower(currentName)] := currentCapture
+            backupNames.Push(currentName)
+        }
+    } catch as err {
+        MsgBox("Error reading backup file:`n" err.Message, "Error", "16")
+        return
+    }
+    
+    if (backupNames.Length = 0) {
+        MsgBox("Backup file is empty or has no valid entries.", "Empty Backup", "48")
+        return
+    }
+    
+    ; Create the restore browser GUI
+    restoreGui := Gui("+Resize +MinSize800x550", "📦 Restore from Backup - " backupNames.Length " entries")
+    restoreGui.SetFont("s10")
+    restoreGui.BackColor := "1e1e2e"
+    
+    ; Store backup data in GUI for later access
+    restoreGui.backupData := backupData
+    restoreGui.backupNames := backupNames
+    
+    restoreGui.SetFont("s11 cWhite")
+    restoreGui.Add("Text", "x10 y10 w700", "📦 Restore entries from capturesbackup.dat to your working captures")
+    
+    restoreGui.SetFont("s10 cWhite")
+    restoreGui.Add("Text", "x10 y38", "Search:")
+    searchEdit := restoreGui.Add("Edit", "x65 y35 w300 vSearchText Background333355 cWhite")
+    
+    ; Filter to show only entries NOT already in working file
+    showNewOnly := restoreGui.Add("Checkbox", "x390 y38 cWhite vShowNewOnly", "Hide duplicates")
+    showNewOnly.OnEvent("Click", (*) => CC_FilterRestoreList(restoreGui))
+    
+    restoreGui.Add("Button", "x580 y33 w80 h26", "🔍 Filter").OnEvent("Click", (*) => CC_FilterRestoreList(restoreGui))
+    
+    ; Set up live search
+    restoreGui.filterFunc := CC_FilterRestoreList.Bind(restoreGui)
+    searchEdit.OnEvent("Change", (*) => SetTimer(restoreGui.filterFunc, -300))
+    
+    restoreGui.SetFont("s9 cAAAAAA")
+    restoreGui.Add("Text", "x10 y68", "✓ = Check items to restore | Double-click to edit | 🔴 = Already exists in working file")
+    
+    ; ListView with checkboxes
+    restoreGui.SetFont("s10 c000000")
+    listView := restoreGui.Add("ListView", "x10 y95 w520 h350 vRestoreList Checked Grid BackgroundFFFFFF", ["Status", "Name", "Title", "Date"])
+    listView.ModifyCol(1, 50)
+    listView.ModifyCol(2, 120)
+    listView.ModifyCol(3, 250)
+    listView.ModifyCol(4, 80)
+    
+    ; Populate list
+    for name in backupNames {
+        if !backupData.Has(StrLower(name))
+            continue
+        cap := backupData[StrLower(name)]
+        
+        ; Check if already exists in working file
+        exists := CaptureData.Has(StrLower(name))
+        status := exists ? "🔴" : "🟢"
+        
+        listView.Add(, status, name,
+            cap.Has("title") ? cap["title"] : "",
+            cap.Has("date") ? cap["date"] : "")
+    }
+    
+    listView.OnEvent("DoubleClick", (*) => CC_PreviewBackupEntry(restoreGui))
+    listView.OnEvent("ItemFocus", (*) => CC_UpdateRestorePreview(restoreGui))
+    
+    ; Preview pane
+    restoreGui.SetFont("s10 bold cWhite")
+    restoreGui.Add("Text", "x545 y95", "Preview:")
+    
+    restoreGui.SetFont("s9 norm c000000")
+    previewEdit := restoreGui.Add("Edit", "x545 y115 w245 h330 vPreviewText ReadOnly Multi VScroll BackgroundFFFEF5")
+    
+    ; Buttons
+    restoreGui.SetFont("s10 cWhite")
+    restoreGui.Add("Button", "x10 y455 w100 h30", "✓ Select All").OnEvent("Click", (*) => CC_RestoreSelectAll(restoreGui, true))
+    restoreGui.Add("Button", "x120 y455 w100 h30", "✗ Select None").OnEvent("Click", (*) => CC_RestoreSelectAll(restoreGui, false))
+    restoreGui.Add("Button", "x230 y455 w110 h30", "✏️ Edit Selected").OnEvent("Click", (*) => CC_PreviewBackupEntry(restoreGui))
+    restoreGui.Add("Button", "x350 y455 w100 h30", "🗑️ Delete").OnEvent("Click", (*) => CC_DeleteFromBackup(restoreGui))
+    
+    ; Archive checkbox
+    restoreGui.SetFont("s9 cFFCC00")
+    archiveCheck := restoreGui.Add("Checkbox", "x545 y420 w245 vMoveToArchive", "📁 Move to archive after restore")
+    archiveCheck.ToolTip := "Removes restored entries from backup`nand saves them to capturesarchive.dat"
+    
+    restoreBtn := restoreGui.Add("Button", "x545 y455 w120 h35 Default", "📥 RESTORE")
+    restoreBtn.OnEvent("Click", (*) => CC_RestoreSelectedEntries(restoreGui))
+    
+    restoreGui.Add("Button", "x680 y455 w110 h35", "Cancel").OnEvent("Click", (*) => restoreGui.Destroy())
+    
+    ; Status bar
+    restoreGui.SetFont("s9 cAAAAAA")
+    newCount := 0
+    for name in backupNames {
+        if !CaptureData.Has(StrLower(name))
+            newCount++
+    }
+    restoreGui.statusText := restoreGui.Add("Text", "x10 y495 w780", 
+        "Backup: " backupNames.Length " entries | New (not in working file): " newCount " | Working file: " CaptureNames.Length " captures")
+    
+    restoreGui.OnEvent("Close", (*) => restoreGui.Destroy())
+    restoreGui.OnEvent("Escape", (*) => restoreGui.Destroy())
+    
+    restoreGui.Show("w800 h520")
+    searchEdit.Focus()
+}
+
+CC_FilterRestoreList(restoreGui) {
+    global CaptureData
+    
+    listView := restoreGui["RestoreList"]
+    searchText := restoreGui["SearchText"].Value
+    showNewOnly := restoreGui["ShowNewOnly"].Value
+    
+    backupData := restoreGui.backupData
+    backupNames := restoreGui.backupNames
+    
+    listView.Delete()
+    
+    searchLower := StrLower(searchText)
+    matchCount := 0
+    newCount := 0
+    
+    for name in backupNames {
+        if !backupData.Has(StrLower(name))
+            continue
+        
+        cap := backupData[StrLower(name)]
+        exists := CaptureData.Has(StrLower(name))
+        
+        ; Filter by "show new only"
+        if (showNewOnly && exists)
+            continue
+        
+        ; Filter by search text
+        if (searchText != "") {
+            nameLower := StrLower(name)
+            titleLower := StrLower(cap.Has("title") ? cap["title"] : "")
+            bodyLower := StrLower(cap.Has("body") ? cap["body"] : "")
+            
+            if !InStr(nameLower, searchLower) && !InStr(titleLower, searchLower) && !InStr(bodyLower, searchLower)
+                continue
+        }
+        
+        status := exists ? "🔴" : "🟢"
+        if !exists
+            newCount++
+        
+        listView.Add(, status, name,
+            cap.Has("title") ? cap["title"] : "",
+            cap.Has("date") ? cap["date"] : "")
+        matchCount++
+    }
+    
+    restoreGui.statusText.Value := "Showing " matchCount " of " backupNames.Length " | New entries: " newCount
+}
+
+CC_UpdateRestorePreview(restoreGui) {
+    listView := restoreGui["RestoreList"]
+    previewEdit := restoreGui["PreviewText"]
+    
+    row := listView.GetNext(0, "F")
+    if (row = 0) {
+        previewEdit.Value := ""
+        return
+    }
+    
+    name := listView.GetText(row, 2)
+    backupData := restoreGui.backupData
+    
+    if !backupData.Has(StrLower(name)) {
+        previewEdit.Value := ""
+        return
+    }
+    
+    cap := backupData[StrLower(name)]
+    
+    preview := "📌 " name "`n"
+    preview .= "━━━━━━━━━━━━━━━━`n"
+    
+    if (cap.Has("title") && cap["title"] != "")
+        preview .= "📝 " cap["title"] "`n`n"
+    
+    if (cap.Has("url") && cap["url"] != "")
+        preview .= "🔗 " cap["url"] "`n`n"
+    
+    if (cap.Has("date") && cap["date"] != "")
+        preview .= "📅 " cap["date"] "`n"
+    
+    if (cap.Has("tags") && cap["tags"] != "")
+        preview .= "🏷️ " cap["tags"] "`n"
+    
+    if (cap.Has("short") && cap["short"] != "")
+        preview .= "`n🐦 Short: " cap["short"] "`n"
+    
+    if (cap.Has("opinion") && cap["opinion"] != "")
+        preview .= "`n💭 " cap["opinion"] "`n"
+    
+    if (cap.Has("note") && cap["note"] != "")
+        preview .= "`n📝 Note: " cap["note"] "`n"
+    
+    if (cap.Has("body") && cap["body"] != "") {
+        bodyPreview := cap["body"]
+        if (StrLen(bodyPreview) > 500)
+            bodyPreview := SubStr(bodyPreview, 1, 500) "..."
+        preview .= "`n━━━━━━━━━━━━━━━━`n" bodyPreview
+    }
+    
+    previewEdit.Value := preview
+}
+
+CC_PreviewBackupEntry(restoreGui) {
+    listView := restoreGui["RestoreList"]
+    
+    row := listView.GetNext(0, "F")
+    if (row = 0) {
+        MsgBox("Select an entry to preview.", "No Selection", "48")
+        return
+    }
+    
+    name := listView.GetText(row, 2)
+    backupData := restoreGui.backupData
+    
+    if !backupData.Has(StrLower(name))
+        return
+    
+    cap := backupData[StrLower(name)]
+    
+    ; Show EDITABLE preview in popup
+    editGui := Gui("+AlwaysOnTop", "✏️ Edit Before Restore: " name)
+    editGui.SetFont("s10")
+    editGui.BackColor := "F5F5F5"
+    
+    ; Store reference to update backupData
+    editGui.backupData := backupData
+    editGui.entryName := name
+    editGui.restoreGui := restoreGui
+    
+    ; Hotstring Name (editable for Save As New)
+    editGui.SetFont("s9 norm c666666")
+    editGui.Add("Text", "x15 y10", "📌 Hotstring Name:")
+    editGui.SetFont("s11 bold c000000")
+    editGui.Add("Edit", "x130 y7 w200 h24 vEditName BackgroundE8F5E9", name)
+    editGui.SetFont("s8 c888888")
+    editGui.Add("Text", "x340 y12", "(change to create new entry)")
+    
+    ; Title
+    editGui.SetFont("s9 norm c666666")
+    editGui.Add("Text", "x15 y40", "Title:")
+    editGui.SetFont("s10 norm c000000")
+    currentTitle := cap.Has("title") ? cap["title"] : ""
+    editGui.Add("Edit", "x15 y58 w560 h24 vEditTitle", currentTitle)
+    
+    ; URL
+    editGui.SetFont("s9 c666666")
+    editGui.Add("Text", "x15 y90", "URL:")
+    editGui.SetFont("s10 c000000")
+    currentURL := cap.Has("url") ? cap["url"] : ""
+    editGui.Add("Edit", "x15 y108 w560 h24 vEditURL", currentURL)
+    
+    ; Date (read-only display)
+    editGui.SetFont("s9 c666666")
+    currentDate := cap.Has("date") ? cap["date"] : ""
+    if (currentDate != "")
+        editGui.Add("Text", "x15 y140", "📅 " currentDate)
+    
+    yPos := (currentDate != "") ? 160 : 140
+    
+    ; Short version for social media
+    editGui.SetFont("s9 c666666")
+    editGui.Add("Text", "x15 y" yPos, "🐦 Short version (for X/Bluesky, max 280 chars):")
+    yPos += 18
+    editGui.SetFont("s10 c000000")
+    currentShort := cap.Has("short") ? cap["short"] : ""
+    editGui.Add("Edit", "x15 y" yPos " w560 h50 vEditShort Multi BackgroundFFFDD0", currentShort)
+    yPos += 58
+    
+    ; Opinion
+    editGui.SetFont("s9 c666666")
+    editGui.Add("Text", "x15 y" yPos, "💭 Opinion (optional):")
+    yPos += 18
+    editGui.SetFont("s10 c000000")
+    currentOpinion := cap.Has("opinion") ? cap["opinion"] : ""
+    editGui.Add("Edit", "x15 y" yPos " w560 h45 vEditOpinion Multi", currentOpinion)
+    yPos += 55
+    
+    ; Note
+    editGui.SetFont("s9 c666666")
+    editGui.Add("Text", "x15 y" yPos, "📝 Note (private, optional):")
+    yPos += 18
+    editGui.SetFont("s10 c000000")
+    currentNote := cap.Has("note") ? cap["note"] : ""
+    editGui.Add("Edit", "x15 y" yPos " w560 h35 vEditNote Multi", currentNote)
+    yPos += 45
+    
+    ; Body with cleanup button
+    editGui.SetFont("s9 c666666")
+    editGui.Add("Text", "x15 y" yPos, "📄 Body content:")
+    editGui.Add("Button", "x450 y" (yPos - 3) " w125 h22", "🧹 Clean URLs").OnEvent("Click", (*) => CC_CleanBodyURLs(editGui))
+    yPos += 18
+    editGui.SetFont("s10 c000000")
+    currentBody := cap.Has("body") ? cap["body"] : ""
+    editGui.Add("Edit", "x15 y" yPos " w560 h130 vEditBody Multi VScroll", currentBody)
+    yPos += 140
+    
+    ; Buttons row 1 - backup operations
+    editGui.SetFont("s10")
+    editGui.Add("Button", "x15 y" yPos " w130 h30", "💾 Save Changes").OnEvent("Click", (*) => CC_SaveBackupEdits(editGui, false))
+    editGui.Add("Button", "x155 y" yPos " w150 h30", "📋 Save As New").OnEvent("Click", (*) => CC_SaveBackupEdits(editGui, true))
+    editGui.Add("Button", "x455 y" yPos " w120 h30", "Close").OnEvent("Click", (*) => editGui.Destroy())
+    
+    yPos += 38
+    
+    ; Button row 2 - direct to working file
+    editGui.Add("Button", "x15 y" yPos " w290 h32 BackgroundC8E6C9", "⚡ Save Directly to Working File (Ready to Use!)").OnEvent("Click", (*) => CC_SaveToWorkingFile(editGui))
+    
+    editGui.SetFont("s8 c888888")
+    editGui.Add("Text", "x15 y" (yPos + 38) " w560", "💡 Top row saves to backup | Green button saves to captures.dat for immediate use")
+    
+    editGui.OnEvent("Escape", (*) => editGui.Destroy())
+    editGui.Show("w590 h" (yPos + 65))
+}
+
+CC_CleanBodyURLs(editGui) {
+    ; Get current URL and body
+    urlField := editGui["EditURL"]
+    bodyField := editGui["EditBody"]
+    
+    url := urlField.Value
+    body := bodyField.Value
+    
+    if (url = "") {
+        MsgBox("No URL to match against.", "Clean URLs", "48")
+        return
+    }
+    
+    originalBody := body
+    
+    ; Remove the exact URL (with and without trailing slash)
+    urlNoSlash := RTrim(url, "/")
+    urlWithSlash := urlNoSlash "/"
+    
+    body := StrReplace(body, urlWithSlash, "")
+    body := StrReplace(body, urlNoSlash, "")
+    
+    ; Also find and remove any URLs that share the same domain
+    ; Extract domain from URL
+    if RegExMatch(url, "https?://([^/]+)", &domainMatch) {
+        domain := domainMatch[1]
+        ; Remove any URL containing this domain
+        body := RegExReplace(body, "https?://" domain "[^\s]*", "")
+    }
+    
+    ; Clean up double spaces, double newlines left behind
+    body := RegExReplace(body, " {2,}", " ")
+    body := RegExReplace(body, "(\r?\n){3,}", "`n`n")
+    body := Trim(body)
+    
+    if (body = originalBody) {
+        MsgBox("No matching URLs found in body.", "Clean URLs", "i")
+        return
+    }
+    
+    bodyField.Value := body
+    TrayTip("URLs cleaned from body text!", "Clean URLs", "1")
+}
+
+CC_SaveBackupEdits(editGui, saveAsNew := false) {
+    global BaseDir
+    
+    ; Get the edited values
+    saved := editGui.Submit(false)
+    
+    backupData := editGui.backupData
+    originalName := editGui.entryName
+    newName := Trim(saved.EditName)
+    restoreGui := editGui.restoreGui
+    
+    ; Validate new name
+    if (newName = "") {
+        MsgBox("Hotstring name cannot be empty.", "Error", "48")
+        return
+    }
+    
+    ; Check for invalid characters in name
+    if RegExMatch(newName, "[^\w\-]") {
+        MsgBox("Hotstring name can only contain letters, numbers, underscores, and hyphens.", "Invalid Name", "48")
+        return
+    }
+    
+    ; Check name length (AHK hotstring limit)
+    if (StrLen(newName) > 40) {
+        MsgBox("Hotstring name must be 40 characters or less.", "Name Too Long", "48")
+        return
+    }
+    
+    if !backupData.Has(StrLower(originalName))
+        return
+    
+    ; Get original cap data
+    originalCap := backupData[StrLower(originalName)]
+    
+    ; Create new cap with edited values
+    newCap := Map()
+    newCap["name"] := newName
+    newCap["title"] := saved.EditTitle
+    newCap["url"] := saved.EditURL
+    newCap["short"] := saved.EditShort
+    newCap["opinion"] := saved.EditOpinion
+    newCap["note"] := saved.EditNote
+    newCap["body"] := saved.EditBody
+    
+    ; Preserve date and tags from original
+    if (originalCap.Has("date"))
+        newCap["date"] := originalCap["date"]
+    if (originalCap.Has("tags"))
+        newCap["tags"] := originalCap["tags"]
+    
+    if (saveAsNew) {
+        ; Save As New - create a new entry
+        
+        ; Check if name already exists
+        if (backupData.Has(StrLower(newName)) && StrLower(newName) != StrLower(originalName)) {
+            result := MsgBox("'" newName "' already exists in backup.`n`nOverwrite it?", "Name Exists", "YesNo Icon!")
+            if (result = "No")
+                return
+        }
+        
+        ; If name is same as original, warn user
+        if (StrLower(newName) = StrLower(originalName)) {
+            MsgBox("To save as new entry, change the hotstring name first.`n`nCurrent name: " originalName, "Same Name", "48")
+            return
+        }
+        
+        ; Add new entry
+        backupData[StrLower(newName)] := newCap
+        restoreGui.backupNames.Push(newName)
+        
+        ; Save and refresh
+        CC_SaveBackupFile(restoreGui.backupData, restoreGui.backupNames)
+        CC_FilterRestoreList(restoreGui)
+        
+        editGui.Destroy()
+        TrayTip("New entry created: " newName, "Save As New", "1")
+        
+    } else {
+        ; Regular Save - update existing entry
+        
+        ; If name changed, handle rename
+        if (StrLower(newName) != StrLower(originalName)) {
+            ; Check if new name already exists
+            if (backupData.Has(StrLower(newName))) {
+                result := MsgBox("'" newName "' already exists.`n`nUse 'Save As New' to create a copy, or change the name.", "Name Exists", "OK Icon!")
+                return
+            }
+            
+            ; Remove old entry
+            backupData.Delete(StrLower(originalName))
+            
+            ; Update the name in backupNames array
+            for i, n in restoreGui.backupNames {
+                if (StrLower(n) = StrLower(originalName)) {
+                    restoreGui.backupNames[i] := newName
+                    break
+                }
+            }
+        }
+        
+        ; Save the entry
+        backupData[StrLower(newName)] := newCap
+        
+        ; Also update the backup file on disk so changes persist
+        CC_SaveBackupFile(restoreGui.backupData, restoreGui.backupNames)
+        
+        ; Refresh the list and preview
+        CC_FilterRestoreList(restoreGui)
+        CC_UpdateRestorePreview(restoreGui)
+        
+        editGui.Destroy()
+        TrayTip("Changes saved to backup!", newName, "1")
+    }
+}
+
+CC_SaveToWorkingFile(editGui) {
+    global CaptureData, CaptureNames, BaseDir
+    
+    ; Get the edited values
+    saved := editGui.Submit(false)
+    
+    originalName := editGui.entryName
+    newName := Trim(saved.EditName)
+    restoreGui := editGui.restoreGui
+    backupData := editGui.backupData
+    
+    ; Validate new name
+    if (newName = "") {
+        MsgBox("Hotstring name cannot be empty.", "Error", "48")
+        return
+    }
+    
+    ; Check for invalid characters in name
+    if RegExMatch(newName, "[^\w\-]") {
+        MsgBox("Hotstring name can only contain letters, numbers, underscores, and hyphens.", "Invalid Name", "48")
+        return
+    }
+    
+    ; Check name length (AHK hotstring limit)
+    if (StrLen(newName) > 40) {
+        MsgBox("Hotstring name must be 40 characters or less.", "Name Too Long", "48")
+        return
+    }
+    
+    ; Check if name already exists in working file
+    if (CaptureData.Has(StrLower(newName))) {
+        result := MsgBox("'" newName "' already exists in your working file.`n`nOverwrite it?", "Name Exists", "YesNo Icon!")
+        if (result = "No")
+            return
+        
+        ; Remove from CaptureNames to avoid duplicate
+        newNames := []
+        for n in CaptureNames {
+            if (StrLower(n) != StrLower(newName))
+                newNames.Push(n)
+        }
+        CaptureNames := newNames
+    }
+    
+    ; Get original cap data for date/tags
+    originalCap := backupData.Has(StrLower(originalName)) ? backupData[StrLower(originalName)] : Map()
+    
+    ; Create new cap with edited values
+    newCap := Map()
+    newCap["name"] := newName
+    newCap["title"] := saved.EditTitle
+    newCap["url"] := saved.EditURL
+    newCap["short"] := saved.EditShort
+    newCap["opinion"] := saved.EditOpinion
+    newCap["note"] := saved.EditNote
+    newCap["body"] := saved.EditBody
+    
+    ; Set date - use today if new entry, preserve original if editing
+    if (originalCap.Has("date") && originalCap["date"] != "")
+        newCap["date"] := originalCap["date"]
+    else
+        newCap["date"] := FormatTime(, "yyyy-MM-dd")
+    
+    ; Preserve tags from original if they exist
+    if (originalCap.Has("tags"))
+        newCap["tags"] := originalCap["tags"]
+    
+    ; Add to CaptureData and CaptureNames
+    CaptureData[StrLower(newName)] := newCap
+    CaptureNames.Push(newName)
+    
+    ; Save to captures.dat
+    CC_SaveCaptureData()
+    
+    ; Regenerate hotstrings
+    CC_GenerateHotstringFile()
+    
+    ; Update DynamicSuffixHandler
+    DynamicSuffixHandler.Initialize(CaptureData, CaptureNames)
+    
+    ; Close the edit window
+    editGui.Destroy()
+    
+    ; Refresh the restore browser list (mark this as now existing)
+    try {
+        CC_FilterRestoreList(restoreGui)
+    }
+    
+    TrayTip("Saved to working file!`nHotstring ::" newName ":: ready to use.", "Saved", "1")
+    
+    ; Ask about reload
+    result := MsgBox("'" newName "' saved to captures.dat!`n`nReload script now to activate the hotstring?", "Saved to Working File", "YesNo Iconi")
+    if (result = "Yes")
+        Reload()
+}
+
+CC_SaveBackupFile(backupData, backupNames) {
+    global BaseDir
+    
+    backupFile := BaseDir "\capturesbackup.dat"
+    
+    content := "; ContentCapture Pro - Backup`n"
+    content .= "; Updated: " FormatTime(, "yyyy-MM-dd HH:mm:ss") "`n"
+    content .= "; Entries: " backupNames.Length "`n`n"
+    
+    for name in backupNames {
+        if !backupData.Has(StrLower(name))
+            continue
+        
+        cap := backupData[StrLower(name)]
+        
+        content .= "[" name "]`n"
+        
+        if (cap.Has("url") && cap["url"] != "")
+            content .= "url=" cap["url"] "`n"
+        
+        if (cap.Has("title") && cap["title"] != "")
+            content .= "title=" cap["title"] "`n"
+        
+        if (cap.Has("date") && cap["date"] != "")
+            content .= "date=" cap["date"] "`n"
+        
+        if (cap.Has("tags") && cap["tags"] != "")
+            content .= "tags=" cap["tags"] "`n"
+        
+        if (cap.Has("note") && cap["note"] != "")
+            content .= "note=" cap["note"] "`n"
+        
+        if (cap.Has("opinion") && cap["opinion"] != "")
+            content .= "opinion=" cap["opinion"] "`n"
+        
+        if (cap.Has("short") && cap["short"] != "")
+            content .= "short=" cap["short"] "`n"
+        
+        if (cap.Has("body") && cap["body"] != "") {
+            content .= "body=<<<BODY`n"
+            content .= cap["body"] "`n"
+            content .= "BODY>>>`n"
+        }
+        
+        content .= "`n"
+    }
+    
+    try {
+        if FileExist(backupFile)
+            FileDelete(backupFile)
+        FileAppend(content, backupFile, "UTF-8")
+    } catch as err {
+        MsgBox("Could not save backup file:`n" err.Message, "Error", "16")
+    }
+}
+
+CC_RestoreSelectAll(restoreGui, selectAll) {
+    listView := restoreGui["RestoreList"]
+    
+    row := 0
+    Loop {
+        row := listView.GetNext(row)
+        if (row = 0)
+            break
+        
+        if (selectAll)
+            listView.Modify(row, "Check")
+        else
+            listView.Modify(row, "-Check")
+    }
+}
+
+CC_DeleteFromBackup(restoreGui) {
+    listView := restoreGui["RestoreList"]
+    backupData := restoreGui.backupData
+    backupNames := restoreGui.backupNames
+    
+    ; Collect checked items
+    selectedNames := []
+    
+    row := 0
+    Loop {
+        row := listView.GetNext(row, "C")  ; C = Checked
+        if (row = 0)
+            break
+        
+        name := listView.GetText(row, 2)
+        selectedNames.Push(name)
+    }
+    
+    if (selectedNames.Length = 0) {
+        MsgBox("No entries selected.`n`nCheck the boxes next to entries you want to delete.", "Nothing Selected", "48")
+        return
+    }
+    
+    ; Confirmation message
+    if (selectedNames.Length = 1) {
+        confirmMsg := "Delete '" selectedNames[1] "' from backup?`n`nThis cannot be undone."
+    } else {
+        confirmMsg := "Delete " selectedNames.Length " entries from backup?`n`n"
+        showCount := Min(selectedNames.Length, 8)
+        Loop showCount {
+            confirmMsg .= "• " selectedNames[A_Index] "`n"
+        }
+        if (selectedNames.Length > 8)
+            confirmMsg .= "• ... and " (selectedNames.Length - 8) " more`n"
+        confirmMsg .= "`nThis cannot be undone."
+    }
+    
+    result := MsgBox(confirmMsg, "Confirm Delete from Backup", "YesNo Icon!")
+    if (result = "No")
+        return
+    
+    ; Build set of names to delete
+    deleteSet := Map()
+    for name in selectedNames {
+        deleteSet[StrLower(name)] := true
+    }
+    
+    ; Remove from backupData
+    for name in selectedNames {
+        if backupData.Has(StrLower(name))
+            backupData.Delete(StrLower(name))
+    }
+    
+    ; Rebuild backupNames without deleted items
+    newNames := []
+    for n in backupNames {
+        if !deleteSet.Has(StrLower(n))
+            newNames.Push(n)
+    }
+    
+    ; Update the restoreGui's backupNames reference
+    restoreGui.backupNames := newNames
+    
+    ; Save the updated backup file
+    CC_SaveBackupFile(backupData, newNames)
+    
+    ; Refresh the list
+    CC_FilterRestoreList(restoreGui)
+    
+    ; Update status bar
+    global CaptureData, CaptureNames
+    newCount := 0
+    for name in newNames {
+        if !CaptureData.Has(StrLower(name))
+            newCount++
+    }
+    restoreGui.statusText.Value := "Backup: " newNames.Length " entries | New (not in working file): " newCount " | Working file: " CaptureNames.Length " captures"
+    
+    if (selectedNames.Length = 1)
+        TrayTip("Deleted from backup.", selectedNames[1], "1")
+    else
+        TrayTip(selectedNames.Length " entries deleted from backup.", "Deleted", "1")
+}
+
+CC_RestoreSelectedEntries(restoreGui) {
+    global CaptureData, CaptureNames, DataFile, BaseDir
+    
+    listView := restoreGui["RestoreList"]
+    backupData := restoreGui.backupData
+    backupNames := restoreGui.backupNames
+    moveToArchive := restoreGui["MoveToArchive"].Value
+    
+    ; Collect checked items
+    selectedNames := []
+    duplicates := []
+    
+    row := 0
+    Loop {
+        row := listView.GetNext(row, "C")  ; C = Checked
+        if (row = 0)
+            break
+        
+        name := listView.GetText(row, 2)
+        
+        ; Check for duplicate
+        if CaptureData.Has(StrLower(name))
+            duplicates.Push(name)
+        else
+            selectedNames.Push(name)
+    }
+    
+    if (selectedNames.Length = 0 && duplicates.Length = 0) {
+        MsgBox("No entries selected.`n`nCheck the boxes next to entries you want to restore.", "Nothing Selected", "48")
+        return
+    }
+    
+    ; Handle duplicates
+    if (duplicates.Length > 0) {
+        dupMsg := duplicates.Length " selected entries already exist in working file:`n`n"
+        showCount := Min(duplicates.Length, 5)
+        Loop showCount {
+            dupMsg .= "• " duplicates[A_Index] "`n"
+        }
+        if (duplicates.Length > 5)
+            dupMsg .= "• ... and " (duplicates.Length - 5) " more`n"
+        
+        dupMsg .= "`nSkip these and restore only new entries?"
+        
+        if (selectedNames.Length > 0) {
+            dupMsg .= "`n`n(" selectedNames.Length " new entries will be restored)"
+        } else {
+            MsgBox("All selected entries already exist in your working file.`n`nUncheck existing entries or select different ones.", "All Duplicates", "48")
+            return
+        }
+        
+        result := MsgBox(dupMsg, "Duplicates Found", "YesNoCancel Icon!")
+        if (result = "Cancel")
+            return
+        if (result = "No")
+            return
+    }
+    
+    ; Confirm restore
+    confirmMsg := "Restore " selectedNames.Length " entries to your working file?`n`n"
+    showCount := Min(selectedNames.Length, 8)
+    Loop showCount {
+        confirmMsg .= "• " selectedNames[A_Index] "`n"
+    }
+    if (selectedNames.Length > 8)
+        confirmMsg .= "• ... and " (selectedNames.Length - 8) " more`n"
+    
+    if (moveToArchive)
+        confirmMsg .= "`n📁 These will be moved to archive after restore."
+    
+    result := MsgBox(confirmMsg, "Confirm Restore", "YesNo Iconi")
+    if (result = "No")
+        return
+    
+    ; Collect entries to restore (for archive)
+    restoredEntries := []
+    
+    ; Restore entries
+    restoredCount := 0
+    for name in selectedNames {
+        if !backupData.Has(StrLower(name))
+            continue
+        
+        cap := backupData[StrLower(name)]
+        
+        ; Add to CaptureData
+        CaptureData[StrLower(name)] := cap
+        CaptureNames.Push(name)
+        restoredCount++
+        
+        ; Save for archive
+        if (moveToArchive)
+            restoredEntries.Push({name: name, data: cap})
+    }
+    
+    ; Save and regenerate
+    CC_SaveCaptureData()
+    CC_GenerateHotstringFile()
+    
+    ; Update DynamicSuffixHandler
+    DynamicSuffixHandler.Initialize(CaptureData, CaptureNames)
+    
+    ; Handle archive if checkbox was checked
+    if (moveToArchive && restoredEntries.Length > 0) {
+        CC_MoveToArchive(restoredEntries, backupData, backupNames)
+    }
+    
+    restoreGui.Destroy()
+    
+    archiveMsg := moveToArchive ? "`nMoved to archive." : ""
+    TrayTip("Restored " restoredCount " entries!" archiveMsg "`nHotstrings are ready to use.", "Restore Complete", "1")
+    
+    ; Ask about reload
+    result := MsgBox("Restored " restoredCount " entries!" archiveMsg "`n`nReload script now to activate new hotstrings?", "Restore Complete", "YesNo Iconi")
+    if (result = "Yes")
+        Reload()
+}
+
+CC_MoveToArchive(restoredEntries, backupData, backupNames) {
+    global BaseDir
+    
+    backupFile := BaseDir "\capturesbackup.dat"
+    archiveFile := BaseDir "\capturesarchive.dat"
+    
+    ; Build a set of restored names for quick lookup
+    restoredSet := Map()
+    for entry in restoredEntries {
+        restoredSet[StrLower(entry.name)] := true
+    }
+    
+    ; === APPEND TO ARCHIVE ===
+    archiveContent := ""
+    
+    ; Add header if archive doesn't exist
+    if !FileExist(archiveFile) {
+        archiveContent := "; ContentCapture Pro - Archive`n"
+        archiveContent .= "; Entries moved from backup after restore`n"
+        archiveContent .= "; Created: " FormatTime(, "yyyy-MM-dd HH:mm:ss") "`n`n"
+    }
+    
+    ; Add timestamp for this batch
+    archiveContent .= "; --- Archived: " FormatTime(, "yyyy-MM-dd HH:mm:ss") " ---`n`n"
+    
+    ; Write each restored entry to archive
+    for entry in restoredEntries {
+        cap := entry.data
+        name := entry.name
+        
+        archiveContent .= "[" name "]`n"
+        
+        if (cap.Has("url") && cap["url"] != "")
+            archiveContent .= "url=" cap["url"] "`n"
+        
+        if (cap.Has("title") && cap["title"] != "")
+            archiveContent .= "title=" cap["title"] "`n"
+        
+        if (cap.Has("date") && cap["date"] != "")
+            archiveContent .= "date=" cap["date"] "`n"
+        
+        if (cap.Has("tags") && cap["tags"] != "")
+            archiveContent .= "tags=" cap["tags"] "`n"
+        
+        if (cap.Has("note") && cap["note"] != "")
+            archiveContent .= "note=" cap["note"] "`n"
+        
+        if (cap.Has("opinion") && cap["opinion"] != "")
+            archiveContent .= "opinion=" cap["opinion"] "`n"
+        
+        if (cap.Has("short") && cap["short"] != "")
+            archiveContent .= "short=" cap["short"] "`n"
+        
+        if (cap.Has("body") && cap["body"] != "") {
+            archiveContent .= "body=<<<BODY`n"
+            archiveContent .= cap["body"] "`n"
+            archiveContent .= "BODY>>>`n"
+        }
+        
+        archiveContent .= "`n"
+    }
+    
+    ; Append to archive file
+    try {
+        FileAppend(archiveContent, archiveFile, "UTF-8")
+    } catch as err {
+        MsgBox("Could not write to archive file:`n" err.Message, "Archive Error", "48")
+        return
+    }
+    
+    ; === REWRITE BACKUP WITHOUT RESTORED ENTRIES ===
+    newBackupContent := "; ContentCapture Pro - Backup`n"
+    newBackupContent .= "; Updated: " FormatTime(, "yyyy-MM-dd HH:mm:ss") "`n"
+    
+    ; Count remaining entries
+    remainingCount := 0
+    for name in backupNames {
+        if !restoredSet.Has(StrLower(name))
+            remainingCount++
+    }
+    newBackupContent .= "; Entries: " remainingCount "`n`n"
+    
+    ; Write entries that were NOT restored
+    for name in backupNames {
+        ; Skip if this was restored
+        if restoredSet.Has(StrLower(name))
+            continue
+        
+        if !backupData.Has(StrLower(name))
+            continue
+        
+        cap := backupData[StrLower(name)]
+        
+        newBackupContent .= "[" name "]`n"
+        
+        if (cap.Has("url") && cap["url"] != "")
+            newBackupContent .= "url=" cap["url"] "`n"
+        
+        if (cap.Has("title") && cap["title"] != "")
+            newBackupContent .= "title=" cap["title"] "`n"
+        
+        if (cap.Has("date") && cap["date"] != "")
+            newBackupContent .= "date=" cap["date"] "`n"
+        
+        if (cap.Has("tags") && cap["tags"] != "")
+            newBackupContent .= "tags=" cap["tags"] "`n"
+        
+        if (cap.Has("note") && cap["note"] != "")
+            newBackupContent .= "note=" cap["note"] "`n"
+        
+        if (cap.Has("opinion") && cap["opinion"] != "")
+            newBackupContent .= "opinion=" cap["opinion"] "`n"
+        
+        if (cap.Has("short") && cap["short"] != "")
+            newBackupContent .= "short=" cap["short"] "`n"
+        
+        if (cap.Has("body") && cap["body"] != "") {
+            newBackupContent .= "body=<<<BODY`n"
+            newBackupContent .= cap["body"] "`n"
+            newBackupContent .= "BODY>>>`n"
+        }
+        
+        newBackupContent .= "`n"
+    }
+    
+    ; Rewrite backup file
+    try {
+        if FileExist(backupFile)
+            FileDelete(backupFile)
+        FileAppend(newBackupContent, backupFile, "UTF-8")
+    } catch as err {
+        MsgBox("Could not update backup file:`n" err.Message, "Backup Error", "48")
+    }
+}
+
+; ==============================================================================
 ; EDIT CAPTURE
 ; ==============================================================================
 
 CC_EditCapture(name) {
     global CaptureData, AvailableTags
 
-    if !CaptureData.Has(name) {
+    if !CaptureData.Has(StrLower(name)) {
         MsgBox("Capture '" name "' not found.", "Error", "16")
         return
     }
 
-    cap := CaptureData[name]
+    cap := CaptureData[StrLower(name)]
 
     currentURL := cap.Has("url") ? cap["url"] : ""
     currentTitle := cap.Has("title") ? cap["title"] : ""
@@ -2825,12 +3969,12 @@ CC_SaveEditedCapture(editGui, name) {
 
     saved := editGui.Submit(false)
 
-    if CaptureData.Has(name) {
-        CaptureData[name]["url"] := saved.EditURL
-        CaptureData[name]["title"] := saved.EditTitle
-        CaptureData[name]["tags"] := saved.EditTags
-        CaptureData[name]["opinion"] := saved.EditOpinion
-        CaptureData[name]["body"] := saved.EditBody
+    if CaptureData.Has(StrLower(name)) {
+        CaptureData[StrLower(name)]["url"] := saved.EditURL
+        CaptureData[StrLower(name)]["title"] := saved.EditTitle
+        CaptureData[StrLower(name)]["tags"] := saved.EditTags
+        CaptureData[StrLower(name)]["opinion"] := saved.EditOpinion
+        CaptureData[StrLower(name)]["body"] := saved.EditBody
     }
 
     CC_SaveCaptureData()
@@ -2875,8 +4019,8 @@ CC_ShowRecentWidget() {
     i := CaptureNames.Length
     while (i >= 1 && count < 5) {
         name := CaptureNames[i]
-        if CaptureData.Has(name) {
-            cap := CaptureData[name]
+        if CaptureData.Has(StrLower(name)) {
+            cap := CaptureData[StrLower(name)]
             title := cap.Has("title") ? SubStr(cap["title"], 1, 25) : name
             if (StrLen(title) > 25)
                 title .= "..."
@@ -2947,9 +4091,9 @@ CC_ExportToHTML() {
     html .= "<h1>My Captures (" CaptureNames.Length ")</h1>"
 
     for name in CaptureNames {
-        if !CaptureData.Has(name)
+        if !CaptureData.Has(StrLower(name))
             continue
-        cap := CaptureData[name]
+        cap := CaptureData[StrLower(name)]
         url := cap.Has("url") ? cap["url"] : ""
         title := cap.Has("title") ? cap["title"] : name
         
@@ -3460,6 +4604,7 @@ class CCHelp {
         shortcuts := [
             ["Ctrl+Alt+P", "Capture current webpage"],
             ["Ctrl+Alt+B", "Browse all captures"],
+            ["Ctrl+Alt+Shift+B", "Restore from backup"],
             ["Ctrl+Alt+Space", "Quick search"],
             ["Ctrl+Alt+N", "Manual capture (no browser)"],
             ["Ctrl+Alt+M", "Show main menu"],
