@@ -2,103 +2,98 @@
 
 All notable changes to ContentCapture Pro will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
-
----
-
-## [4.2] - 2025-12-10
+## [4.5] - 2025-12-16
 
 ### Added
-- **YouTube URL Cleanup** - Automatically strips timestamp parameters (`t=`, `start=`, `time_continue=`) so shared videos start from the beginning
-- Portable installation - No hardcoded paths, works from any folder
-- GitHub-ready distribution with LICENSE, .gitignore, CHANGELOG
+- **Smart Social Media Character Limits** — Auto-detects platform and warns when over limit
+- **Platform-Accurate Character Counting** — URLs count as 23 chars on Twitter/Bluesky
+- **Auto-Clean Titles** — Removes "- YouTube", "| CNN", "- The New York Times", etc.
+- **Social Edit Window** — Live character counter, edit content before posting
+- **Save Short Versions** — Save trimmed content for one-click future sharing
+- **YouTube Timestamp Support** — Option to save videos starting at specific time
+- **Installation Location Warnings** — Warns if installed in Program Files
+- **First-Run Welcome Message** — Guides new users on data backup importance
+- **Alphabetical Sorting** — Browser and Quick Search display captures A-Z
+- **Comprehensive Code Documentation** — Inline comments explaining all functions
 
 ### Fixed
-- Tag checkbox syntax error in capture dialog (AHK v2 compatibility)
-- URL cleanup now properly handles YouTube-specific parameters
+- Bluesky paste button now works correctly (fixed GUI scope issue)
+- YouTube title suffix variants now properly cleaned (including em dash patterns)
 
 ### Changed
-- `CC_CleanURL()` now intelligently detects YouTube URLs and removes time parameters while preserving other important params (playlist IDs, video IDs)
+- Titles now cleaned at capture time, not just when pasting
+- Enhanced suffix patterns for more title variations
 
----
-
-## [4.1] - 2025-12-08
+## [4.4] - 2025-12-15
 
 ### Added
-- **AI Integration** - Support for OpenAI, Anthropic (Claude), and local Ollama
-- AI actions: Summarize, Generate Title, Rewrite, Improve, Custom Prompt
-- **Quick Search** - Alfred/Raycast-style popup with `Ctrl+Alt+Space`
-- **Favorites System** - Star captures for quick access from tray menu
-- First-run tutorial for new users
-- Contextual tips system
+- **Smart Social Paste** — Detects when you're on social media
+- **Restore Browser** — Recover captures from any backup
+- **AI Integration** — Support for OpenAI, Anthropic Claude, and Ollama
+- **Quick Search** — Alfred/Raycast-style popup search (`Ctrl+Alt+Space`)
+- **Favorites System** — Star frequently-used captures
 
 ### Changed
-- Improved tray menu organization
-- Enhanced GUI styling throughout
+- Improved tray menu with favorites section
+- Better error handling throughout
 
----
-
-## [4.0] - 2025-12-01
+## [4.3] - 2025-12-14
 
 ### Added
-- **Dynamic Suffix Handler** - Reduced generated hotstrings file from ~2MB to ~200KB
-- Social media sharing: Facebook, Twitter/X, Bluesky, LinkedIn, Mastodon
-- Character limit detection with edit windows for social platforms
-- Multi-select deletion in Capture Browser
-- HTML export with search functionality
+- **Recent Captures Widget** — Desktop overlay showing latest captures
+- **Tag Filtering** — Filter by tag in browser
+- **Export to HTML** — Export all captures to viewable HTML file
+
+## [4.2] - 2025-12-12
+
+### Added
+- **Auto-Backup System** — Configurable automatic backups
+- **Manual Backup/Restore** — One-click backup and restore browser
+- **Cloud Folder Detection** — Auto-detects Dropbox, OneDrive, Google Drive
+
+### Fixed
+- Various AHK v2 syntax improvements
+- Better clipboard handling
+
+## [4.1] - 2025-12-10
+
+### Added
+- **AI Assist Menu** — Summarize, rewrite, improve content
+- **Multiple AI Providers** — OpenAI, Anthropic, Ollama support
+- **AI Settings Panel** — Configure API keys and models
+
+## [4.0] - 2025-12-08
 
 ### Changed
-- Complete rewrite for AutoHotkey v2
-- Data-driven architecture with INI-style storage
-- Modular code organization
-
----
-
-## [3.0] - 2025-11-15
+- **Complete AHK v2 Rewrite** — Modern AutoHotkey v2 syntax throughout
+- **New GUI Framework** — Dark-themed, resizable windows
+- **Improved Performance** — Faster startup and search
 
 ### Added
-- Capture Browser GUI with search and filtering
-- Tag system for organizing captures
-- Opinion field (included in output) vs Note field (private)
-- Duplicate URL detection
-- Cloud folder auto-detection (Dropbox, OneDrive, Google Drive)
-- Automatic backup system
+- **DynamicSuffixHandler** — Handles all suffix variants automatically
+- **Setup Wizard** — First-run configuration
+- **Better Browser Support** — Chrome, Firefox, Edge, Brave
 
-### Changed
-- Migrated from flat file to structured data format
-- Improved URL cleaning (tracking parameters removed)
+## [3.x and Earlier]
+
+Legacy versions using AutoHotkey v1 syntax. Not documented here.
 
 ---
 
-## [2.0] - 2025-10-01
+## Version Numbering
 
-### Added
-- Manual capture mode (`Ctrl+Alt+N`)
-- Email integration via Outlook
-- Action menu with `?` suffix
-- Read window for viewing captures
+- **Major.Minor** format (e.g., 4.5)
+- Major: Significant new features or breaking changes
+- Minor: New features, improvements, and bug fixes
 
-### Changed
-- Restructured hotstring generation
-- Better title extraction from browser windows
+## Upgrade Notes
 
----
+### From 4.x to 4.5
+- Just replace the .ahk files
+- Your `captures.dat` and `config.ini` are compatible
+- Reload script with `Ctrl+Alt+L`
 
-## [1.0] - 2025-09-01
-
-### Added
-- Initial release
-- Basic webpage capture with `Ctrl+Alt+P`
-- Hotstring generation for instant recall
-- URL and title capture from browsers
-- Body text selection support
-
----
-
-## Legend
-
-- **Added** - New features
-- **Changed** - Changes to existing functionality
-- **Fixed** - Bug fixes
-- **Removed** - Removed features
-- **Security** - Security improvements
+### From 3.x to 4.x
+- Requires AutoHotkey v2.0 (not v1.x)
+- Data files are compatible
+- Review new hotkey shortcuts

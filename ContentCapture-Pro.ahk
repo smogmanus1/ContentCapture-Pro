@@ -1,13 +1,124 @@
 ; ==============================================================================
-; ContentCapture Pro - Professional Content Capture System
+; ContentCapture Pro - Professional Content Capture & Sharing System
 ; ==============================================================================
 ; Author:      Brad
-; Version:     4.4 (AHK v2) - AI Integration, Quick Search, Favorites, Restore Browser, Smart Social Paste
-; Updated:     2025-12-12
+; Version:     4.5 (AHK v2)
+; Updated:     2025-12-16
 ; License:     MIT
 ;
 ; NOTE: This file is designed to be #Included from a launcher script.
 ;       Do NOT add #Requires or #SingleInstance here!
+;
+; ==============================================================================
+; WHAT IS CONTENTCAPTURE PRO?
+; ==============================================================================
+;
+; ContentCapture Pro transforms how you save, organize, and share web content.
+; Instead of bookmarks you never revisit or scattered notes, capture any webpage
+; with a simple hotkey and recall it instantly by typing a short name.
+;
+; Think of it as a personal knowledge base that lives at your fingertips —
+; accessible from ANY application with just a few keystrokes.
+;
+; ==============================================================================
+; KEY FEATURES AT A GLANCE
+; ==============================================================================
+;
+; 🚀 INSTANT CAPTURE
+;    • Press Ctrl+Alt+P on any webpage to capture URL, title, and content
+;    • Highlight text before capturing to save specific excerpts
+;    • Add tags, notes, and your personal opinion/commentary
+;    • Works with Chrome, Firefox, Edge, Brave, and most browsers
+;
+; ⚡ LIGHTNING-FAST RECALL
+;    • Type ::recipe:: anywhere to instantly paste your saved "recipe" capture
+;    • No app switching, no searching — just type and it appears
+;    • Works in Word, email, social media, chat apps — everywhere you can type
+;
+; 🔍 POWERFUL SEARCH
+;    • Quick Search (Ctrl+Alt+Space): Alfred/Raycast-style instant popup
+;    • Full Browser (Ctrl+Alt+B): Search by name, tags, URL, date, or content
+;    • Filter by favorites, date range, or specific tags
+;
+; 📱 SMART SOCIAL SHARING
+;    • Auto-detects when you're on Facebook, Twitter/X, Bluesky, LinkedIn, etc.
+;    • Warns you when content exceeds platform character limits
+;    • Counts characters the way platforms do (URLs = 23 chars on Twitter/Bluesky)
+;    • Auto-cleans titles (removes "- YouTube", "| CNN", etc.) to save space
+;    • Save shortened versions for future one-click sharing
+;
+; 🎯 SUFFIX SYSTEM — The Magic Behind the Scenes
+;    Every capture gets automatic hotstring variants:
+;    • ::name::     → Paste full content
+;    • ::name?::    → Show action menu with all options
+;    • ::namego::   → Open the original URL in browser
+;    • ::nameem::   → Create Outlook email with content
+;    • ::namerd::   → Read content in popup window
+;    • ::namevi::   → View/Edit the capture
+;    • ::namefb::   → Share to Facebook
+;    • ::namex::    → Share to Twitter/X
+;    • ::namebs::   → Share to Bluesky
+;    • ::nameli::   → Share to LinkedIn
+;    • ::namemt::   → Share to Mastodon
+;
+; 🤖 AI INTEGRATION (Optional)
+;    • Summarize long articles into key points
+;    • Rewrite content for different platforms (Twitter, LinkedIn, etc.)
+;    • Improve writing style and clarity
+;    • Supports OpenAI, Anthropic Claude, or local Ollama models
+;
+; ⭐ FAVORITES & ORGANIZATION
+;    • Star frequently-used captures for quick access
+;    • Tag system for categorization (news, tutorial, reference, etc.)
+;    • Tray menu shows your favorites for one-click pasting
+;
+; 💾 BACKUP & RESTORE
+;    • Automatic backups (configurable interval)
+;    • Manual backup with one click
+;    • Full restore browser to recover from any backup
+;    • Plain-text data files you can edit manually if needed
+;
+; 🎨 BEAUTIFUL INTERFACE
+;    • Dark-themed GUIs that are easy on the eyes
+;    • Resizable windows with keyboard navigation
+;    • Preview pane shows content before pasting
+;    • Live character counters for social sharing
+;
+; 📊 EXPORT OPTIONS
+;    • Export all captures to HTML for web viewing
+;    • Open data file directly in any text editor
+;    • Portable — runs from USB drive, Dropbox, anywhere
+;
+; ==============================================================================
+; WHY USE CONTENTCAPTURE PRO?
+; ==============================================================================
+;
+; PROBLEM: You find great content online but lose track of it
+; SOLUTION: Capture it in seconds, recall it forever with a short name
+;
+; PROBLEM: Copy-pasting to social media is tedious and error-prone
+; SOLUTION: Type ::articlebs:: and your content appears, properly formatted
+;
+; PROBLEM: You hit character limits and have to manually edit every time
+; SOLUTION: Smart limits warn you AND remember your shortened versions
+;
+; PROBLEM: Bookmarks pile up and become useless
+; SOLUTION: Searchable captures with tags, notes, and instant recall
+;
+; PROBLEM: Sharing the same content to multiple platforms is repetitive
+; SOLUTION: One capture, multiple sharing suffixes (fb, x, bs, li, mt)
+;
+; ==============================================================================
+; GETTING STARTED (2 MINUTES)
+; ==============================================================================
+;
+; 1. Run the script — first launch opens Setup wizard
+; 2. Go to any webpage you want to save
+; 3. Press Ctrl+Alt+P
+; 4. Give it a short name like "recipe" or "article"
+; 5. Now type ::recipe:: anywhere to paste it!
+;
+; That's it. You're capturing and recalling content like a pro.
 ;
 ; ==============================================================================
 ; CREDITS & ACKNOWLEDGMENTS
@@ -43,24 +154,143 @@
 ;   AI-assisted development for code optimization and feature implementation.
 ;
 ; ==============================================================================
-; HOTKEY COMMANDS:
+; HOTKEY QUICK REFERENCE
 ; ==============================================================================
-; Ctrl+Alt+Space = QUICK SEARCH (fast popup search)
-; Ctrl+Alt+A = AI ASSIST (summarize, rewrite, improve)
-; Ctrl+Alt+M = Show MENU of all commands
-; Ctrl+Alt+P = Capture content from webpage
-; Ctrl+Alt+N = Manual capture (add your own content)
-; Ctrl+Alt+B = Open Capture Browser (search all captures)
-; Ctrl+Alt+Shift+B = RESTORE BROWSER (restore from backup)
-; Ctrl+Alt+O = Open captures file in editor
-; Ctrl+Alt+W = Toggle Recent Captures Widget
-; Ctrl+Alt+H = Export captures to HTML
-; Ctrl+Alt+K = Backup/Restore captures
-; Ctrl+Alt+L = Reload script
-; Ctrl+Alt+F12 = Show quick help popup
+;
+; CAPTURE & CREATE
+;   Ctrl+Alt+P         Capture current webpage (highlight text first for excerpt)
+;   Ctrl+Alt+N         Manual capture (no browser needed)
+;   Ctrl+Alt+F         Format selected text into a new capture
+;
+; SEARCH & BROWSE
+;   Ctrl+Alt+Space     Quick Search — fast popup, type to find, Enter to paste
+;   Ctrl+Alt+B         Full Browser — search, filter, edit, delete captures
+;   Ctrl+Alt+Shift+B   Restore Browser — recover captures from backups
+;
+; UTILITIES
+;   Ctrl+Alt+M         Show main menu with all options
+;   Ctrl+Alt+A         AI Assist menu (summarize, rewrite, improve)
+;   Ctrl+Alt+E         Email last capture via Outlook
+;   Ctrl+Alt+W         Toggle recent captures widget (desktop overlay)
+;   Ctrl+Alt+O         Open captures file in text editor
+;   Ctrl+Alt+H         Export all captures to HTML file
+;   Ctrl+Alt+K         Backup/Restore captures
+;   Ctrl+Alt+S         Re-run Setup wizard
+;   Ctrl+Alt+R         Reset data file (caution!)
+;   Ctrl+Alt+L         Reload script
+;   Ctrl+Alt+F12       Show help popup
 ;
 ; ==============================================================================
-; HOTSTRING USAGE: name, namego, namerd, namevi, nameem, name?
+; HOTSTRING SUFFIX REFERENCE
+; ==============================================================================
+;
+; Base hotstring: ::name:: where "name" is your capture's name
+;
+; SUFFIX    ACTION                      EXAMPLE
+; -------   --------------------------  ------------------
+; (none)    Paste full content          ::recipe::
+; ?         Show action menu            ::recipe?::
+; go        Open URL in browser         ::recipego::
+; em        Email via Outlook           ::recipeem::
+; rd        Read in popup window        ::reciperd::
+; vi        View/Edit capture           ::recipevi::
+; fb        Share to Facebook           ::recipefb::
+; x         Share to Twitter/X          ::recipex::
+; bs        Share to Bluesky            ::recipebs::
+; li        Share to LinkedIn           ::recipeli::
+; mt        Share to Mastodon           ::recipemt::
+;
+; ==============================================================================
+; FILE STRUCTURE
+; ==============================================================================
+;
+; ContentCapture-Pro.ahk      This file — main application logic
+; ContentCapture.ahk          Launcher script (add #Requires, #SingleInstance)
+; DynamicSuffixHandler.ahk    Handles suffix detection for hotstrings
+; ContentCapture_Generated.ahk Auto-generated hotstrings (don't edit manually)
+; config.ini                  User settings and preferences
+; captures.dat                Your saved captures (plain text, editable)
+; captures.idx                Search index for fast lookups
+; favorites.txt               List of starred captures
+; backups/                    Automatic and manual backups folder
+;
+; ==============================================================================
+; CODE ARCHITECTURE OVERVIEW
+; ==============================================================================
+;
+; This script is organized into logical sections:
+;
+; 1. CONFIGURATION (lines ~300-380)
+;    Global variables, file paths, settings loaded from config.ini
+;
+; 2. INITIALIZATION (lines ~380-420)
+;    Setup wizard, load captures, generate hotstrings, tray menu
+;
+; 3. HOTKEYS (lines ~420-450)
+;    All Ctrl+Alt+X keyboard shortcuts defined here
+;
+; 4. QUICK SEARCH (lines ~450-650)
+;    Alfred/Raycast-style popup search with live filtering
+;
+; 5. AI INTEGRATION (lines ~650-1100)
+;    OpenAI/Anthropic/Ollama API calls for summarize/rewrite
+;
+; 6. TRAY MENU & FAVORITES (lines ~1100-1300)
+;    System tray menu setup, favorites management
+;
+; 7. SOCIAL MEDIA DETECTION (lines ~1300-1700)
+;    Platform detection, character counting, title cleaning
+;
+; 8. HOTSTRING HANDLERS (lines ~1700-1900)
+;    Functions called when user types ::name:: variants
+;
+; 9. SETUP WIZARD (lines ~1900-2200)
+;    First-run configuration, settings UI
+;
+; 10. DATA STORAGE & INDEXING (lines ~2200-2600)
+;     ★ THE SPEED SECRET ★
+;     - CaptureData: Hash Map for O(1) instant lookup
+;     - CaptureNames: Sorted array for alphabetical browsing
+;     - Full-text search across ALL fields (name, title, URL, tags, body)
+;     - Handles 10,000+ captures without slowing down
+;     - Plain-text storage: human-readable, portable, recoverable
+;
+; 11. CAPTURE BROWSER (lines ~2600-3600)
+;     Full-featured search/browse interface with preview pane
+;
+; 12. RESTORE BROWSER (lines ~3600-4000)
+;     Backup recovery interface
+;
+; 13. CAPTURE DIALOG (lines ~4000-4600)
+;     UI for capturing new content from webpages
+;
+; 14. SHARING FUNCTIONS (lines ~4600-5000)
+;     Email, Facebook, Twitter, Bluesky, etc.
+;
+; 15. HELP SYSTEM (lines ~5000-5400)
+;     Tutorial, tips, quick help popup
+;
+; ==============================================================================
+; UNDERSTANDING THE DATA FORMAT
+; ==============================================================================
+;
+; Captures are stored in captures.dat as INI-style sections:
+;
+; [recipename]
+; url=https://example.com/recipe
+; title=Delicious Pasta Recipe
+; date=2025-12-16 14:30:00
+; tags=food,italian,dinner
+; note=Mom's favorite
+; opinion=Best pasta I've ever made
+; body=<<<BODY
+; Full recipe content goes here...
+; Multiple lines are supported...
+; BODY>>>
+; short=Shortened version for social media (optional)
+;
+; The <<<BODY ... BODY>>> syntax allows multi-line content.
+;
 ; ==============================================================================
 
 ; ==============================================================================
@@ -134,7 +364,7 @@ global AIOllamaURL := "http://localhost:11434"  ; For local Ollama
 global ShowHelpOnStartup := false  ; Disabled by default now
 
 ; Available tags
-global AvailableTags := ["music", "politics", "tutorial", "news", "reference", "funny", "documentary", "tech", "personal", "work"]
+global AvailableTags := ["music", "politics", "tutorial", "news", "reference", "funny", "documentary", "tech", "personal", "work", "AI", "programming", "health", "science", "history", "education", "travel", "surveillance", "privacy", "automation", "autohotkey"]
 
 ; ==============================================================================
 ; INITIALIZATION
@@ -161,7 +391,7 @@ CC_CheckAutoBackup()
 CC_SetupTrayMenu()
 
 ; Show startup notification
-TrayTip("ContentCapture Pro v4.4 loaded!`n" CaptureNames.Length " captures available.`nSmart paste detects social media sites!", "ContentCapture Pro", "1")
+TrayTip("ContentCapture Pro v4.5 loaded!`n" CaptureNames.Length " captures available.`nSmart paste detects social media limits!", "ContentCapture Pro", "1")
 
 ; Show tutorial for first-time users
 if (CCHelp.ShouldShowTutorial()) {
@@ -197,7 +427,34 @@ if (CCHelp.ShouldShowTutorial()) {
 ; ==============================================================================
 ; QUICK SEARCH POPUP - Alfred/Raycast style instant search
 ; ==============================================================================
+; This is the fastest way to find and paste captures. Press Ctrl+Alt+Space
+; and a minimal popup appears. Start typing and results filter in real-time.
+;
+; KEYBOARD NAVIGATION:
+;   Type          Filter results as you type
+;   Up/Down       Navigate through results
+;   Enter         Paste selected capture
+;   Ctrl+Enter    Open URL in browser
+;   Escape        Close popup
+;
+; DESIGN PHILOSOPHY:
+;   - Minimal UI: No buttons, no clutter, just search and results
+;   - Instant: Results appear as you type (150ms debounce)
+;   - Keyboard-first: Never need to touch the mouse
+;   - Always on top: Won't lose focus to other windows
+;
+; WHY IT'S FAST:
+;   Unlike the full browser, Quick Search doesn't load previews or extra UI.
+;   It's designed for the 80% use case: "I know roughly what I want, 
+;   let me find it and paste it in 2 seconds."
+; ==============================================================================
 
+; ------------------------------------------------------------------------------
+; CC_QuickSearch()
+; ------------------------------------------------------------------------------
+; PURPOSE: Show the Quick Search popup
+; HOTKEY: Ctrl+Alt+Space
+; ------------------------------------------------------------------------------
 CC_QuickSearch() {
     global CaptureData, CaptureNames
     
@@ -392,7 +649,42 @@ CC_ArrayContains(arr, value) {
 ; ==============================================================================
 ; AI INTEGRATION - Summarize, Rewrite, Improve content with AI
 ; ==============================================================================
+; ContentCapture Pro can optionally use AI to help with your content.
+; This is completely optional — the script works perfectly without it.
+;
+; SUPPORTED AI PROVIDERS:
+;   • OpenAI (GPT-4, GPT-4o-mini, etc.) — requires API key from openai.com
+;   • Anthropic (Claude) — requires API key from anthropic.com
+;   • Ollama (Local AI) — free, runs on your computer, no API key needed
+;
+; AI FEATURES:
+;   • Summarize: Turn long articles into key bullet points
+;   • Rewrite for Twitter: Condense to 280 chars with hashtags
+;   • Rewrite for LinkedIn: Professional tone, call to action
+;   • Improve Writing: Fix grammar, clarity, flow
+;   • Custom Prompt: Ask AI anything about your content
+;
+; SETUP:
+;   1. Press Ctrl+Alt+A (AI Assist)
+;   2. If not configured, you'll be prompted to set up
+;   3. Enter your API key or Ollama URL
+;   4. Choose your preferred model
+;
+; PRIVACY NOTE:
+;   When using OpenAI or Anthropic, your content is sent to their servers.
+;   If privacy is a concern, use Ollama for 100% local processing.
+;
+; COST:
+;   OpenAI/Anthropic charge per token (word). A typical summarize request
+;   costs fractions of a penny. Ollama is completely free.
+; ==============================================================================
 
+; ------------------------------------------------------------------------------
+; CC_AIAssistMenu()
+; ------------------------------------------------------------------------------
+; PURPOSE: Show the AI Assist menu with options to process content
+; HOTKEY: Ctrl+Alt+A
+; ------------------------------------------------------------------------------
 CC_AIAssistMenu() {
     global AIEnabled, AIProvider, AIApiKey
     
@@ -870,8 +1162,8 @@ CC_SetupTrayMenu() {
     global CaptureNames, AIEnabled
     
     A_TrayMenu.Delete()
-    A_TrayMenu.Add("📚 ContentCapture Pro v4.4", (*) => CC_ShowMainMenu())
-    A_TrayMenu.Default := "📚 ContentCapture Pro v4.4"
+    A_TrayMenu.Add("📚 ContentCapture Pro v4.5", (*) => CC_ShowMainMenu())
+    A_TrayMenu.Default := "📚 ContentCapture Pro v4.5"
     A_TrayMenu.Add()
     
     ; Quick actions
@@ -1119,6 +1411,34 @@ CC_GetCaptureShortContent(name) {
     return ""
 }
 
+; ==============================================================================
+; SOCIAL MEDIA DETECTION & CHARACTER COUNTING
+; ==============================================================================
+; These functions handle smart social media integration:
+; 1. Detect when user is on a social platform (by window title)
+; 2. Count characters the way platforms actually count them
+; 3. Clean titles to save precious characters
+; 4. Show edit window when content exceeds limits
+; ==============================================================================
+
+; ------------------------------------------------------------------------------
+; CC_DetectSocialMedia()
+; ------------------------------------------------------------------------------
+; PURPOSE: Detect if the active window is a social media site
+; 
+; HOW IT WORKS:
+;   - Reads the active window's title bar text
+;   - Checks against known patterns for social platforms
+;   - Returns the platform identifier (e.g., "bsky.app", "x.com")
+;   - Returns empty string "" if not on social media
+;
+; WHY WINDOW TITLE?
+;   Using WinGetTitle() is non-invasive and fast. The alternative would be
+;   to focus the address bar (Ctrl+L), copy the URL, then restore focus —
+;   but that's slow, visible to the user, and can cause issues.
+;
+; RETURNS: Platform identifier string or ""
+; ------------------------------------------------------------------------------
 CC_DetectSocialMedia() {
     ; Check window title for social media sites - non-invasive method
     ; This avoids the Ctrl+L address bar issue
@@ -1154,6 +1474,213 @@ CC_DetectSocialMedia() {
     return ""
 }
 
+; ------------------------------------------------------------------------------
+; CC_GetSocialMediaLimit(site)
+; ------------------------------------------------------------------------------
+; PURPOSE: Get the character limit for a social media platform
+;
+; PARAMETERS:
+;   site - Platform identifier (e.g., "bsky.app", "x.com")
+;
+; RETURNS: Integer character limit, or 0 if unknown platform
+;
+; NOTE: These limits are current as of 2025. Platforms may change them.
+; ------------------------------------------------------------------------------
+; Get character limit for detected social media platform
+CC_GetSocialMediaLimit(site) {
+    static limits := Map(
+        "bsky.app", 300,         ; Bluesky: 300 characters
+        "x.com", 280,            ; Twitter/X: 280 characters
+        "twitter.com", 280,      ; Twitter legacy
+        "facebook.com", 63206,   ; Facebook: 63,206 characters (rarely an issue)
+        "mastodon", 500,         ; Mastodon: typically 500 (varies by instance)
+        "linkedin.com", 3000,    ; LinkedIn posts: 3,000 characters
+        "threads.net", 500,      ; Threads: 500 characters
+        "reddit.com", 40000,     ; Reddit posts: 40,000 characters
+        "truthsocial.com", 500,  ; Truth Social: 500 characters
+        "gab.com", 3000,         ; Gab: 3,000 characters
+        "tumblr.com", 4096,      ; Tumblr: 4,096 characters
+        "gettr.com", 750         ; GETTR: 750 characters
+    )
+    
+    return limits.Has(site) ? limits[site] : 0
+}
+
+; ------------------------------------------------------------------------------
+; CC_CountSocialChars(text, site)
+; ------------------------------------------------------------------------------
+; PURPOSE: Count characters the way social media platforms actually count them
+;
+; THE PROBLEM:
+;   Twitter and Bluesky don't count URLs by their actual length. A 100-character
+;   URL counts as only 23 characters. If we used StrLen(), we'd show the wrong
+;   count and confuse users.
+;
+; THE SOLUTION:
+;   1. Find all URLs in the text using regex
+;   2. Calculate the difference between actual length and platform length (23)
+;   3. Subtract the difference from total length
+;
+; PARAMETERS:
+;   text - The content to count
+;   site - Platform identifier (for platform-specific counting rules)
+;
+; RETURNS: Integer character count as the platform would count it
+;
+; EXAMPLE:
+;   text = "Check this out https://www.youtube.com/watch?v=abc123def456"
+;   Actual length: 60 characters
+;   URL actual: 47 chars, but Twitter counts as 23
+;   Platform count: 60 - (47 - 23) = 36 characters
+; ------------------------------------------------------------------------------
+; Count characters the way social media platforms do (URLs count as fixed length)
+CC_CountSocialChars(text, site) {
+    ; URL length as counted by platforms (Bluesky/Twitter treat URLs as ~23 chars)
+    ; This is called "t.co wrapping" on Twitter — all URLs become t.co links
+    static urlLength := Map(
+        "bsky.app", 23,
+        "x.com", 23,
+        "twitter.com", 23
+    )
+    
+    ; If platform doesn't shorten URLs, return actual length
+    if !urlLength.Has(site)
+        return StrLen(text)
+    
+    ; Find and replace URLs with placeholder of correct length
+    tempText := text
+    urlPattern := "https?://[^\s\]\)]+"  ; Match http:// or https:// until whitespace
+    
+    ; Count URLs and adjust
+    charCount := StrLen(text)
+    pos := 1
+    while (pos := RegExMatch(text, urlPattern, &match, pos)) {
+        actualUrlLen := StrLen(match[0])
+        platformUrlLen := urlLength[site]
+        charCount -= (actualUrlLen - platformUrlLen)  ; Subtract the difference
+        pos += actualUrlLen
+    }
+    
+    return charCount
+}
+
+; ------------------------------------------------------------------------------
+; CC_CleanTitleForSocial(title)
+; ------------------------------------------------------------------------------
+; PURPOSE: Remove source website suffixes from titles to save characters
+;
+; THE PROBLEM:
+;   Webpage titles often include the site name at the end:
+;   "How to Make Pasta - YouTube"
+;   "Breaking News | CNN"
+;   "Great Article - The New York Times"
+;   
+;   These suffixes waste 10-25 characters that could be your actual message!
+;
+; THE SOLUTION:
+;   Automatically strip common suffixes when preparing content for social media.
+;   "How to Make Pasta - YouTube" becomes "How to Make Pasta"
+;   That's 10 characters saved.
+;
+; PARAMETERS:
+;   title - The original webpage title
+;
+; RETURNS: Cleaned title with source suffix removed
+;
+; NOTE: Only removes ONE suffix (the last one found). Suffixes are checked
+;       from most specific to least specific to avoid partial matches.
+; ------------------------------------------------------------------------------
+; Clean title by removing source site suffixes (saves characters for social sharing)
+CC_CleanTitleForSocial(title) {
+    ; Common suffixes to remove (most specific first)
+    ; Order matters! Check longer/more specific patterns before shorter ones
+    static suffixes := [
+        " - YouTube —",
+        " - YouTube—",
+        " - YouTube",
+        " | YouTube",
+        " — YouTube —",
+        " — YouTube",
+        " - Facebook",
+        " | Facebook",
+        " - Twitter",
+        " | Twitter",
+        " / X",
+        " on X",
+        " - X",
+        " | X",
+        " - Reddit",
+        " | Reddit",
+        " - Wikipedia",
+        " | Wikipedia",
+        " - The New York Times",
+        " | The New York Times",
+        " - NYT",
+        " - CNN",
+        " | CNN",
+        " - BBC",
+        " | BBC",
+        " - Fox News",
+        " | Fox News",
+        " - MSNBC",
+        " | MSNBC",
+        " - NBC News",
+        " - CBS News",
+        " - ABC News",
+        " - The Washington Post",
+        " - The Guardian",
+        " | The Guardian",
+        " - Forbes",
+        " | Forbes",
+        " - Reuters",
+        " | Reuters",
+        " - AP News",
+        " - Vimeo",
+        " | Vimeo",
+        " - TikTok",
+        " | TikTok",
+        " - Instagram",
+        " | Instagram",
+        " - LinkedIn",
+        " | LinkedIn",
+        " - Medium",
+        " | Medium",
+        " - Substack"
+    ]
+    
+    cleanTitle := title
+    for suffix in suffixes {
+        ; Check if title ends with this suffix (case-sensitive)
+        if (SubStr(cleanTitle, -StrLen(suffix)) = suffix) {
+            ; Remove the suffix
+            cleanTitle := SubStr(cleanTitle, 1, StrLen(cleanTitle) - StrLen(suffix))
+            break  ; Only remove one suffix
+        }
+    }
+    
+    return Trim(cleanTitle)
+}
+
+; Get friendly name for social media site
+CC_GetSocialMediaName(site) {
+    static names := Map(
+        "bsky.app", "Bluesky",
+        "x.com", "X/Twitter",
+        "twitter.com", "Twitter",
+        "facebook.com", "Facebook",
+        "mastodon", "Mastodon",
+        "linkedin.com", "LinkedIn",
+        "threads.net", "Threads",
+        "reddit.com", "Reddit",
+        "truthsocial.com", "Truth Social",
+        "gab.com", "Gab",
+        "tumblr.com", "Tumblr",
+        "gettr.com", "GETTR"
+    )
+    
+    return names.Has(site) ? names[site] : site
+}
+
 CC_GetCaptureURL(name) {
     global CaptureData
 
@@ -1163,6 +1690,35 @@ CC_GetCaptureURL(name) {
     return CaptureData[StrLower(name)].Has("url") ? CaptureData[StrLower(name)]["url"] : ""
 }
 
+; ==============================================================================
+; HOTSTRING HANDLER FUNCTIONS
+; ==============================================================================
+; These functions are called when users type ::name:: hotstrings.
+; Each suffix (go, em, rd, vi, fb, x, bs, etc.) calls a different function.
+; ==============================================================================
+
+; ------------------------------------------------------------------------------
+; CC_HotstringPaste(name)
+; ------------------------------------------------------------------------------
+; PURPOSE: The main paste function — called when user types ::name::
+;
+; SMART BEHAVIOR:
+;   1. Detect if user is on a social media site
+;   2. If yes, check if a "short" version exists — use it (faster sharing)
+;   3. If no short version, check if content exceeds platform limit
+;   4. If over limit, show edit window so user can trim content
+;   5. If under limit (or not on social media), just paste the content
+;
+; THIS IS THE MAGIC:
+;   The user just types ::article:: and we figure out:
+;   - Where they are (Bluesky? Facebook? Word doc?)
+;   - What version to use (short? full?)
+;   - Whether to warn about limits
+;   All automatically, invisibly, instantly.
+;
+; PARAMETERS:
+;   name - The capture name (e.g., "recipe", "article")
+; ------------------------------------------------------------------------------
 CC_HotstringPaste(name, *) {
     global CaptureData
     
@@ -1176,16 +1732,27 @@ CC_HotstringPaste(name, *) {
             A_Clipboard := shortContent
             ClipWait(1)
             SendInput("^v")
-            TrayTip("Using short version for " socialSite, name, "1")
+            TrayTip("Using short version for " CC_GetSocialMediaName(socialSite), name, "1")
             CCHelp.TipAfterFirstHotstring()
             return
         }
     }
     
-    ; Otherwise use full content
+    ; Get full content
     content := CC_GetCaptureContent(name)
     if (content = "")
         return
+    
+    ; If on social media, check character limit
+    if (socialSite != "") {
+        charLimit := CC_GetSocialMediaLimit(socialSite)
+        socialCharCount := CC_CountSocialChars(content, socialSite)
+        if (charLimit > 0 && socialCharCount > charLimit) {
+            ; Show edit window for content that exceeds limit
+            CC_ShowSocialEditWindow(name, content, socialSite, charLimit)
+            return
+        }
+    }
 
     A_Clipboard := content
     ClipWait(1)
@@ -1193,6 +1760,136 @@ CC_HotstringPaste(name, *) {
     
     ; Show tip for new users
     CCHelp.TipAfterFirstHotstring()
+}
+
+; Show edit window when content exceeds social media character limit
+CC_ShowSocialEditWindow(name, content, socialSite, charLimit) {
+    siteName := CC_GetSocialMediaName(socialSite)
+    
+    ; Auto-clean the content for social sharing
+    cleanedContent := CC_CleanContentForSocial(content)
+    
+    currentLen := CC_CountSocialChars(cleanedContent, socialSite)
+    overBy := currentLen - charLimit
+    
+    editGui := Gui("+AlwaysOnTop", "✂️ Edit for " siteName " - " name)
+    editGui.SetFont("s10")
+    editGui.BackColor := "1a1a2e"
+    
+    ; Store data in GUI object for access in event handlers
+    editGui.captureName := name
+    editGui.socialSite := socialSite
+    editGui.charLimit := charLimit
+    
+    ; Header with limit info
+    editGui.SetFont("s11 cWhite")
+    editGui.Add("Text", "x15 y10 w550", "📝 Content exceeds " siteName " limit (" charLimit " chars)")
+    
+    if (overBy > 0)
+        editGui.Add("Text", "x15 y32 cFF6B6B", "Current: " currentLen " chars | Over by: " overBy " chars (URLs=23, titles cleaned)")
+    else
+        editGui.Add("Text", "x15 y32 c00FF00", "Current: " currentLen " chars | Under limit! (URLs=23, titles cleaned)")
+    
+    ; Edit box - use cleaned content (store reference in GUI)
+    editGui.SetFont("s10")
+    editGui.contentEdit := editGui.Add("Edit", "x15 y60 w550 h280 vEditedContent Background2d2d44 cWhite", cleanedContent)
+    
+    ; Character counter (store reference in GUI)
+    editGui.SetFont("s10")
+    editGui.charCounter := editGui.Add("Text", "x15 y350 w250 cWhite", "Characters: " currentLen "/" charLimit)
+    
+    ; Update counter on edit - use standalone function
+    editGui.contentEdit.OnEvent("Change", CC_SocialEditUpdateCounter)
+    
+    ; Save as short version checkbox (store reference in GUI)
+    editGui.SetFont("s10 cWhite")
+    editGui.saveShortChk := editGui.Add("Checkbox", "x15 y375 vSaveShort", "💾 Save as short version for future use")
+    
+    ; Buttons - use standalone functions
+    editGui.SetFont("s10")
+    editGui.Add("Button", "x300 y372 w130 h30 Default", "📋 Paste").OnEvent("Click", CC_SocialEditDoPaste)
+    editGui.Add("Button", "x440 y372 w120 h30", "Cancel").OnEvent("Click", (*) => editGui.Destroy())
+    
+    editGui.Show("w580 h415")
+}
+
+; Update character counter in social edit window (standalone function)
+CC_SocialEditUpdateCounter(ctrl, *) {
+    editGui := ctrl.Gui
+    len := CC_CountSocialChars(editGui.contentEdit.Value, editGui.socialSite)
+    
+    if (len > editGui.charLimit)
+        editGui.charCounter.Opt("cFF6B6B")  ; Red when over
+    else
+        editGui.charCounter.Opt("c00FF00")  ; Green when under
+    
+    editGui.charCounter.Value := "Characters: " len "/" editGui.charLimit
+}
+
+; Handle paste button click in social edit window (standalone function)
+CC_SocialEditDoPaste(ctrl, *) {
+    editGui := ctrl.Gui
+    
+    ; Get values BEFORE destroying GUI
+    editedContent := editGui.contentEdit.Value
+    saveName := editGui.captureName
+    socialSite := editGui.socialSite
+    charLimit := editGui.charLimit
+    saveShort := editGui.saveShortChk.Value
+    
+    editedLen := CC_CountSocialChars(editedContent, socialSite)
+    siteName := CC_GetSocialMediaName(socialSite)
+    
+    ; Check if still over limit
+    if (editedLen > charLimit) {
+        result := MsgBox("Content still exceeds " siteName " limit by " (editedLen - charLimit) " chars.`n`nPaste anyway?", "Over Limit", "YesNo 48")
+        if (result = "No")
+            return
+    }
+    
+    ; Save short version if checked (before destroying GUI)
+    if (saveShort)
+        CC_SaveShortVersion(saveName, editedContent)
+    
+    ; Destroy GUI
+    editGui.Destroy()
+    
+    ; Small delay to let GUI close and focus return
+    Sleep(150)
+    
+    ; Paste the content
+    A_Clipboard := editedContent
+    ClipWait(1)
+    SendInput("^v")
+    
+    ; Show confirmation if saved
+    if (saveShort)
+        TrayTip("Short version saved for future use!", saveName, "1")
+}
+
+; Clean entire content for social sharing (clean titles in each line)
+CC_CleanContentForSocial(content) {
+    lines := StrSplit(content, "`n")
+    cleanedLines := []
+    
+    for line in lines {
+        ; Clean title suffixes from lines that look like titles
+        cleanedLine := CC_CleanTitleForSocial(line)
+        cleanedLines.Push(cleanedLine)
+    }
+    
+    return CC_ArrayJoin(cleanedLines, "`n")
+}
+
+; Helper to join array with delimiter
+CC_ArrayJoin(arr, delimiter) {
+    result := ""
+    for i, item in arr {
+        if (i > 1)
+            result .= delimiter
+        result .= item
+    }
+    return result
 }
 
 CC_HotstringCopy(name, *) {
@@ -1590,9 +2287,113 @@ CC_LoadConfig() {
 }
 
 ; ==============================================================================
-; DATA STORAGE
+; DATA STORAGE & INDEXING SYSTEM
+; ==============================================================================
+; This section handles the core data management that makes ContentCapture Pro
+; able to handle thousands of captures with instant lookup and search.
+;
+; DATA STRUCTURES:
+;
+;   CaptureData (Map)
+;   ─────────────────
+;   A hash table mapping lowercase names to capture data.
+;   
+;   Key: "recipe" (lowercase, for case-insensitive lookup)
+;   Value: Map containing:
+;     - name     : "Recipe" (original case preserved)
+;     - url      : "https://example.com/recipe"
+;     - title    : "Best Pasta Recipe Ever"
+;     - date     : "2025-12-16 14:30:00"
+;     - tags     : "food,italian,dinner"
+;     - note     : "Mom's favorite"
+;     - opinion  : "Best pasta I've made"
+;     - body     : "Full recipe content..."
+;     - short    : "Shortened version for social media"
+;
+;   WHY A MAP?
+;   Hash table lookup is O(1) — constant time regardless of size.
+;   Whether you have 10 or 10,000 captures, finding ::recipe:: takes
+;   the same amount of time (microseconds).
+;
+;   CaptureNames (Array)
+;   ────────────────────
+;   An ordered array of all capture names, maintained in alphabetical order.
+;   Used for:
+;     - Displaying sorted lists in browsers
+;     - Iterating through captures in order
+;     - Generating hotstrings file
+;
+; PERFORMANCE:
+;
+;   Operation             | Time Complexity | 10,000 Captures
+;   ──────────────────────|─────────────────|────────────────
+;   Hotstring lookup      | O(1)            | ~0.001ms
+;   Full-text search      | O(n)            | ~50ms (still instant)
+;   Add new capture       | O(n)            | ~10ms (re-sort)
+;   Load from disk        | O(n)            | ~100ms at startup
+;   Save to disk          | O(n)            | ~100ms
+;
+; SEARCH STRATEGY:
+;
+;   When user types in Quick Search or Browser, we search ALL fields:
+;   
+;   for name in CaptureNames {
+;       capture := CaptureData[name]
+;       if (InStr(capture["name"], query) ||
+;           InStr(capture["title"], query) ||
+;           InStr(capture["url"], query) ||
+;           InStr(capture["tags"], query) ||
+;           InStr(capture["note"], query) ||
+;           InStr(capture["opinion"], query) ||
+;           InStr(capture["body"], query)) {
+;           ; Match found!
+;       }
+;   }
+;
+;   This "search everything" approach means users don't need to remember
+;   exactly what they named something — any word from any field works.
+;
+; FILE FORMAT:
+;
+;   captures.dat uses a simple INI-style format:
+;
+;   [recipename]
+;   url=https://example.com
+;   title=My Recipe
+;   date=2025-12-16 14:30:00
+;   tags=food,cooking
+;   note=Family favorite
+;   opinion=Delicious!
+;   body=<<<BODY
+;   Full content here...
+;   Can be multiple lines...
+;   BODY>>>
+;   short=Short version for social
+;
+;   WHY PLAIN TEXT?
+;   - Human-readable and editable
+;   - No database dependencies
+;   - Easy to backup/sync with Dropbox, Git, etc.
+;   - Survives AutoHotkey version changes
+;   - Can be recovered even if script breaks
+;
 ; ==============================================================================
 
+; ------------------------------------------------------------------------------
+; CC_LoadCaptureData()
+; ------------------------------------------------------------------------------
+; PURPOSE: Load all captures from disk into memory at startup
+;
+; PROCESS:
+;   1. Read entire file into memory (faster than line-by-line disk reads)
+;   2. Parse INI-style sections into Map entries
+;   3. Handle multi-line body content with <<<BODY ... BODY>>> markers
+;   4. Store in CaptureData Map for O(1) lookup
+;   5. Build CaptureNames array for ordered iteration
+;
+; CALLED: Once at script startup
+; PERFORMANCE: ~10ms per 1,000 captures
+; ------------------------------------------------------------------------------
 CC_LoadCaptureData() {
     global DataFile, CaptureData, CaptureNames
 
@@ -1663,6 +2464,9 @@ CC_LoadCaptureData() {
             CaptureData[StrLower(currentName)] := currentCapture
             CaptureNames.Push(currentName)
         }
+        
+        ; Sort names alphabetically (case-insensitive)
+        CC_SortCaptureNames()
     }
 }
 
@@ -1762,8 +2566,10 @@ CC_AddCapture(name, url, title, date, tags, note, opinion, body) {
             break
         }
     }
-    if (!found)
+    if (!found) {
         CaptureNames.Push(name)
+        CC_SortCaptureNames()  ; Keep alphabetical order
+    }
 
     CC_SaveCaptureData()
     CC_GenerateHotstringFile()
@@ -1799,6 +2605,44 @@ CC_UpdateIndexFile() {
         if FileExist(IndexFile)
             FileDelete(IndexFile)
         FileAppend(content, IndexFile, "UTF-8")
+    }
+}
+
+; ------------------------------------------------------------------------------
+; CC_SortCaptureNames()
+; ------------------------------------------------------------------------------
+; PURPOSE: Sort CaptureNames array alphabetically (case-insensitive)
+;
+; WHY SORT?
+;   - Browser displays in logical order (A-Z)
+;   - Quick Search results are consistent
+;   - Easier to find captures visually
+;   - Generated hotstrings file is organized
+;
+; ALGORITHM: Simple bubble sort (fast enough for <10,000 items)
+; ------------------------------------------------------------------------------
+CC_SortCaptureNames() {
+    global CaptureNames
+    
+    n := CaptureNames.Length
+    if (n < 2)
+        return
+    
+    ; Bubble sort with case-insensitive comparison
+    Loop n - 1 {
+        swapped := false
+        Loop n - A_Index {
+            i := A_Index
+            if (StrCompare(CaptureNames[i], CaptureNames[i + 1], true) > 0) {
+                ; Swap
+                temp := CaptureNames[i]
+                CaptureNames[i] := CaptureNames[i + 1]
+                CaptureNames[i + 1] := temp
+                swapped := true
+            }
+        }
+        if (!swapped)
+            break  ; Already sorted
     }
 }
 
@@ -2256,6 +3100,30 @@ CC_CaptureContent() {
         title := "Untitled Page"
 
     title := CC_CleanContent(title)
+    title := CC_CleanTitleForSocial(title)  ; Remove " - YouTube", " | CNN", etc.
+
+    ; Check if YouTube video - offer timestamp option
+    if (RegExMatch(url, "i)youtube\.com/watch|youtu\.be/")) {
+        ; Remove any existing timestamp from URL first
+        url := RegExReplace(url, "[?&]t=\d+", "")
+        
+        tsResult := MsgBox("This is a YouTube video.`n`nStart from the BEGINNING (recommended)`nor enter a specific start time?`n`nYes = Beginning`nNo = Enter timestamp", "YouTube Timestamp", "YesNo")
+        
+        if (tsResult = "No") {
+            timestamp := InputBox("Enter start time:`n`nExamples: 1:30 (1m 30s) or 1:15:30 (1h 15m 30s)`n`nLeave blank for beginning.", "Start Time", "w300 h150").Value
+            
+            if (timestamp != "") {
+                seconds := CC_ParseTimestamp(timestamp)
+                if (seconds > 0) {
+                    ; Add timestamp to URL
+                    if InStr(url, "?")
+                        url .= "&t=" seconds
+                    else
+                        url .= "?t=" seconds
+                }
+            }
+        }
+    }
 
     result := MsgBox("URL: " url "`n`nTitle: " title "`n`nCapture body text?`n`nYes = Highlight text and press Ctrl+C`nNo = URL + title only", "Ready to Capture", "YesNoCancel")
 
@@ -2521,9 +3389,52 @@ CC_GetCaptureDetailsWithTags() {
 }
 
 ; ==============================================================================
-; CAPTURE BROWSER
+; CAPTURE BROWSER - Full-Featured Search & Management Interface
+; ==============================================================================
+; The Capture Browser is the "home base" for managing all your captures.
+; It's more powerful than Quick Search but takes a bit more screen space.
+;
+; FEATURES:
+;   • Full-text search across names, titles, URLs, tags, and content
+;   • Filter by tag using dropdown
+;   • Sort by name, date, or title
+;   • Preview pane shows full content before pasting
+;   • Edit, delete, copy, or open any capture
+;   • Add/remove favorites with one click
+;   • Resizable window that remembers your layout
+;
+; KEYBOARD SHORTCUTS (while browser is open):
+;   Ctrl+F        Focus search box
+;   Up/Down       Navigate list
+;   Enter         Paste selected capture
+;   Delete        Delete selected capture (with confirmation)
+;   Escape        Close browser
+;
+; SEARCH TIPS:
+;   • Type multiple words to AND search (all must match)
+;   • Search matches: name, title, URL, tags, note, opinion, body
+;   • Use tag filter dropdown for tag-specific filtering
+;
+; GUI STRUCTURE:
+;   ┌──────────────────────────────────────────────────────────────┐
+;   │ Search: [___________] Tag: [dropdown] Sort: [dropdown]       │
+;   ├──────────────────────────────────────────────────────────────┤
+;   │ Results List          │ Preview Pane                         │
+;   │ ○ capture1            │ [Title]                              │
+;   │ ● capture2 (selected) │ [URL]                                │
+;   │ ○ capture3            │ [Content preview...]                 │
+;   │                       │                                      │
+;   ├──────────────────────────────────────────────────────────────┤
+;   │ [Paste] [Copy] [Edit] [Delete] [Open URL] [⭐ Favorite]      │
+;   └──────────────────────────────────────────────────────────────┘
 ; ==============================================================================
 
+; ------------------------------------------------------------------------------
+; CC_OpenCaptureBrowser()
+; ------------------------------------------------------------------------------
+; PURPOSE: Open the full Capture Browser window
+; HOTKEY: Ctrl+Alt+B
+; ------------------------------------------------------------------------------
 CC_OpenCaptureBrowser() {
     global CaptureData, CaptureNames, AvailableTags
 
@@ -2568,6 +3479,8 @@ CC_OpenCaptureBrowser() {
             cap.Has("tags") ? cap["tags"] : "",
             cap.Has("date") ? cap["date"] : "")
     }
+    
+    listView.ModifyCol(2, "Sort")  ; Sort alphabetically by Name
 
     listView.OnEvent("DoubleClick", (*) => CC_BrowserOpenURL(listView))
     
@@ -2684,7 +3597,8 @@ CC_FilterBrowserCaptures(browserGui) {
             cap.Has("date") ? cap["date"] : "")
         matchCount++
     }
-
+    
+    listView.ModifyCol(2, "Sort")  ; Sort alphabetically by Name
     browserGui.statusText.Value := "Showing " matchCount " of " CaptureNames.Length " captures"
 }
 
@@ -2998,7 +3912,7 @@ CC_OpenRestoreBrowser() {
     restoreBtn := restoreGui.Add("Button", "x545 y455 w120 h35 Default", "📥 RESTORE")
     restoreBtn.OnEvent("Click", (*) => CC_RestoreSelectedEntries(restoreGui))
     
-    restoreGui.Add("Button", "x680 y455 w110 h35", "Cancel").OnEvent("Click", (*) => restoreGui.Destroy())
+    restoreGui.Add("Button", "x680 y455 w110 h35", "Cancel").OnEvent("Click", (*) => CC_CloseRestoreGui(restoreGui))
     
     ; Status bar
     restoreGui.SetFont("s9 cAAAAAA")
@@ -3010,8 +3924,8 @@ CC_OpenRestoreBrowser() {
     restoreGui.statusText := restoreGui.Add("Text", "x10 y495 w780", 
         "Backup: " backupNames.Length " entries | New (not in working file): " newCount " | Working file: " CaptureNames.Length " captures")
     
-    restoreGui.OnEvent("Close", (*) => restoreGui.Destroy())
-    restoreGui.OnEvent("Escape", (*) => restoreGui.Destroy())
+    restoreGui.OnEvent("Close", (*) => CC_CloseRestoreGui(restoreGui))
+    restoreGui.OnEvent("Escape", (*) => CC_CloseRestoreGui(restoreGui))
     
     restoreGui.Show("w800 h520")
     searchEdit.Focus()
@@ -3019,6 +3933,13 @@ CC_OpenRestoreBrowser() {
 
 CC_FilterRestoreList(restoreGui) {
     global CaptureData
+    
+    ; Guard against destroyed GUI (timer may fire after close)
+    try {
+        if !WinExist("ahk_id " restoreGui.Hwnd)
+            return
+    } catch
+        return
     
     listView := restoreGui["RestoreList"]
     searchText := restoreGui["SearchText"].Value
@@ -3033,6 +3954,10 @@ CC_FilterRestoreList(restoreGui) {
     matchCount := 0
     newCount := 0
     
+    ; Collect matches in two groups: name matches first, then body/title matches
+    nameMatches := []
+    bodyMatches := []
+    
     for name in backupNames {
         if !backupData.Has(StrLower(name))
             continue
@@ -3044,27 +3969,62 @@ CC_FilterRestoreList(restoreGui) {
         if (showNewOnly && exists)
             continue
         
-        ; Filter by search text
+        ; Filter by search text - prioritize name matches
         if (searchText != "") {
             nameLower := StrLower(name)
             titleLower := StrLower(cap.Has("title") ? cap["title"] : "")
             bodyLower := StrLower(cap.Has("body") ? cap["body"] : "")
             
-            if !InStr(nameLower, searchLower) && !InStr(titleLower, searchLower) && !InStr(bodyLower, searchLower)
+            isNameMatch := InStr(nameLower, searchLower)
+            isTitleMatch := InStr(titleLower, searchLower)
+            isBodyMatch := InStr(bodyLower, searchLower)
+            
+            if !isNameMatch && !isTitleMatch && !isBodyMatch
                 continue
+            
+            ; Prioritize: name matches go to front, body/title matches go to back
+            entry := {name: name, cap: cap, exists: exists}
+            if isNameMatch
+                nameMatches.Push(entry)
+            else
+                bodyMatches.Push(entry)
+        } else {
+            ; No search - add all
+            entry := {name: name, cap: cap, exists: exists}
+            nameMatches.Push(entry)
         }
-        
-        status := exists ? "🔴" : "🟢"
-        if !exists
+    }
+    
+    ; Add name matches first (exact/partial script name hits)
+    for entry in nameMatches {
+        status := entry.exists ? "🔴" : "🟢"
+        if !entry.exists
             newCount++
-        
-        listView.Add(, status, name,
-            cap.Has("title") ? cap["title"] : "",
-            cap.Has("date") ? cap["date"] : "")
+        listView.Add(, status, entry.name,
+            entry.cap.Has("title") ? entry.cap["title"] : "",
+            entry.cap.Has("date") ? entry.cap["date"] : "")
         matchCount++
     }
     
-    restoreGui.statusText.Value := "Showing " matchCount " of " backupNames.Length " | New entries: " newCount
+    ; Then add body/title matches
+    for entry in bodyMatches {
+        status := entry.exists ? "🔴" : "🟢"
+        if !entry.exists
+            newCount++
+        listView.Add(, status, entry.name,
+            entry.cap.Has("title") ? entry.cap["title"] : "",
+            entry.cap.Has("date") ? entry.cap["date"] : "")
+        matchCount++
+    }
+    
+    restoreGui.statusText.Value := "Showing " matchCount " of " backupNames.Length " | New entries: " newCount " | Name matches: " nameMatches.Length
+}
+
+CC_CloseRestoreGui(restoreGui) {
+    ; Stop the filter timer before destroying to prevent "control is destroyed" error
+    if restoreGui.HasOwnProp("filterFunc")
+        SetTimer(restoreGui.filterFunc, 0)
+    restoreGui.Destroy()
 }
 
 CC_UpdateRestorePreview(restoreGui) {
@@ -3752,7 +4712,7 @@ CC_RestoreSelectedEntries(restoreGui) {
         CC_MoveToArchive(restoredEntries, backupData, backupNames)
     }
     
-    restoreGui.Destroy()
+    CC_CloseRestoreGui(restoreGui)
     
     archiveMsg := moveToArchive ? "`nMoved to archive." : ""
     TrayTip("Restored " restoredCount " entries!" archiveMsg "`nHotstrings are ready to use.", "Restore Complete", "1")
@@ -4315,6 +5275,46 @@ CC_CleanURL(url) {
     return baseUrl (cleanParams ? "?" cleanParams : "")
 }
 
+; ------------------------------------------------------------------------------
+; CC_ParseTimestamp(timestamp)
+; ------------------------------------------------------------------------------
+; PURPOSE: Convert a timestamp string to seconds for YouTube URLs
+;
+; FORMATS SUPPORTED:
+;   "1:30"     → 90 seconds (1 min 30 sec)
+;   "1:15:30"  → 4530 seconds (1 hr 15 min 30 sec)
+;   "90"       → 90 seconds (just seconds)
+;   "2:05"     → 125 seconds
+;
+; RETURNS: Integer seconds, or 0 if invalid format
+; ------------------------------------------------------------------------------
+CC_ParseTimestamp(timestamp) {
+    timestamp := Trim(timestamp)
+    
+    ; If just a number, assume seconds
+    if RegExMatch(timestamp, "^\d+$")
+        return Integer(timestamp)
+    
+    ; Parse MM:SS or HH:MM:SS format
+    parts := StrSplit(timestamp, ":")
+    
+    if (parts.Length = 2) {
+        ; MM:SS format
+        minutes := Integer(parts[1])
+        seconds := Integer(parts[2])
+        return (minutes * 60) + seconds
+    }
+    else if (parts.Length = 3) {
+        ; HH:MM:SS format
+        hours := Integer(parts[1])
+        minutes := Integer(parts[2])
+        seconds := Integer(parts[3])
+        return (hours * 3600) + (minutes * 60) + seconds
+    }
+    
+    return 0  ; Invalid format
+}
+
 CC_GetPageTitle(title := "") {
     if (title = "")
         title := WinGetTitle("A")
@@ -4702,6 +5702,74 @@ class CCHelp {
         helpGui.Show("w540 h490")
     }
 }
+
+; ==============================================================================
+; DEVELOPER NOTES - For Those Who Want to Modify This Code
+; ==============================================================================
+;
+; NAMING CONVENTIONS:
+;   All functions start with "CC_" (ContentCapture) to avoid conflicts
+;   when this file is #Included into other scripts.
+;
+; GUI PATTERNS:
+;   Most GUIs follow this pattern:
+;   1. Create Gui with options (+AlwaysOnTop, +Resize, etc.)
+;   2. Set font and background color
+;   3. Add controls with event handlers
+;   4. Define nested functions for button actions
+;   5. Show the GUI
+;
+; EVENT HANDLING:
+;   We use fat arrow syntax for simple handlers:
+;     button.OnEvent("Click", (*) => DoSomething())
+;   
+;   And named functions for complex handlers:
+;     button.OnEvent("Click", HandleButtonClick)
+;     HandleButtonClick(*) { ... complex logic ... }
+;
+; DATA STORAGE:
+;   CaptureData is a Map where:
+;     Key = lowercase capture name
+;     Value = Map with keys: name, url, title, date, tags, note, opinion, body, short
+;   
+;   CaptureNames is an Array of all capture names (for ordered iteration)
+;
+; ADDING A NEW SUFFIX:
+;   1. Add pattern in DynamicSuffixHandler.ahk
+;   2. Create CC_HotstringXXX(name) function in this file
+;   3. Update the help documentation
+;
+; ADDING A NEW SOCIAL PLATFORM:
+;   1. Add pattern to socialPatterns in CC_DetectSocialMedia()
+;   2. Add character limit to CC_GetSocialMediaLimit()
+;   3. Add friendly name to CC_GetSocialMediaName()
+;   4. If platform shortens URLs, add to urlLength map in CC_CountSocialChars()
+;   5. If platform has title suffix (e.g., " - NewPlatform"), add to CC_CleanTitleForSocial()
+;
+; DEBUGGING TIPS:
+;   • Use ToolTip("debug message") for quick debugging
+;   • Use OutputDebug("message") for console output (view with DebugView)
+;   • Add MsgBox() calls to trace execution flow
+;   • Check A_LastError after WinHttp calls for API issues
+;
+; COMMON ISSUES:
+;   Q: Hotstrings not triggering?
+;   A: Check that ContentCapture_Generated.ahk was created and #Included
+;
+;   Q: Social media not detected?
+;   A: Window title might not contain expected pattern — add new pattern
+;
+;   Q: Character count wrong?
+;   A: Platform may have changed URL counting rules — check their docs
+;
+;   Q: Capture data not saving?
+;   A: Check file permissions on captures.dat, ensure UTF-8 encoding
+;
+; TESTING CHANGES:
+;   Press Ctrl+Alt+L to reload the script after making changes.
+;   This reloads from disk and re-generates hotstrings.
+;
+; ==============================================================================
 
 ; ==============================================================================
 ; INCLUDE GENERATED HOTSTRINGS

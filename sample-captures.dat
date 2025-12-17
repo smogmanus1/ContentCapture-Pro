@@ -1,0 +1,68 @@
+; ==============================================================================
+; ContentCapture Pro - Sample Captures
+; ==============================================================================
+; These are example captures to help you get started.
+; Feel free to delete them once you've created your own!
+;
+; To use: Type ::welcome:: or ::ahkdocs:: anywhere
+; ==============================================================================
+
+[welcome]
+url=https://github.com/yourusername/ContentCapture-Pro
+title=Welcome to ContentCapture Pro!
+date=2025-12-16 12:00:00
+tags=tutorial,reference
+note=Your first capture - delete this when ready!
+opinion=This is where you'd add your personal thoughts about the content.
+body=<<<BODY
+🎉 Congratulations! ContentCapture Pro is working!
+
+Try these commands:
+• Type ::welcome:: anywhere to paste this content
+• Type ::welcome?:: to see all options
+• Type ::welcomego:: to open the URL
+• Press Ctrl+Alt+B to browse all captures
+• Press Ctrl+Alt+Space for quick search
+
+Now go capture your first webpage with Ctrl+Alt+P!
+BODY>>>
+
+[ahkdocs]
+url=https://www.autohotkey.com/docs/v2/
+title=AutoHotkey v2 Documentation
+date=2025-12-16 12:00:00
+tags=reference,tutorial,programming
+note=Official AHK v2 documentation
+opinion=Essential reference for AutoHotkey scripting
+body=<<<BODY
+AutoHotkey v2 is a powerful scripting language for Windows automation.
+
+Key resources:
+• Documentation: https://www.autohotkey.com/docs/v2/
+• Forums: https://www.autohotkey.com/boards/
+• Tutorial: https://www.autohotkey.com/docs/v2/Tutorial.htm
+
+ContentCapture Pro is built entirely with AHK v2!
+BODY>>>
+
+[sample]
+url=https://example.com/sample-article
+title=Sample Article for Testing
+date=2025-12-16 12:00:00
+tags=tutorial
+note=This is just a sample to show the capture format
+opinion=Delete this and create your own captures!
+short=Check out this sample article! https://example.com/sample-article
+body=<<<BODY
+This is a sample capture demonstrating the body content area.
+
+You can store:
+• Full article text
+• Recipe instructions  
+• Code snippets
+• Notes and research
+• Anything you want to recall later!
+
+The "short" field above contains a pre-made short version for social media.
+When you paste on Bluesky or Twitter, it will use this shorter text automatically.
+BODY>>>
