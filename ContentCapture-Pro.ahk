@@ -4906,22 +4906,28 @@ CC_EditCapture(name) {
     editGui.SetFont("s10 c000000")
     editOpinion := editGui.Add("Edit", "x15 y203 w670 h60 Multi vEditOpinion", currentOpinion)
 
+    ; Private Note field (NEW)
     editGui.SetFont("s9 c666666")
-    editGui.Add("Text", "x15 y270", "Body:")
+    editGui.Add("Text", "x15 y270", "📝 Private Note (only you see this):")
+    editGui.SetFont("s10 c000000")
+    editNote := editGui.Add("Edit", "x15 y288 w670 h45 Multi vEditNote", currentNote)
+
+    editGui.SetFont("s9 c666666")
+    editGui.Add("Text", "x15 y340", "Body:")
     editGui.SetFont("s10 c000000", "Consolas")
-    editBody := editGui.Add("Edit", "x15 y288 w670 h150 Multi VScroll vEditBody", currentBody)
+    editBody := editGui.Add("Edit", "x15 y358 w670 h135 Multi VScroll vEditBody", currentBody)
 
     editGui.SetFont("s10", "Segoe UI")
-    saveBtn := editGui.Add("Button", "x15 y450 w120 h35", "💾 Save")
+    saveBtn := editGui.Add("Button", "x15 y505 w120 h35", "💾 Save")
     saveBtn.OnEvent("Click", (*) => CC_SaveEditedCapture(editGui, name))
 
-    cancelBtn := editGui.Add("Button", "x145 y450 w100 h35", "Cancel")
+    cancelBtn := editGui.Add("Button", "x145 y505 w100 h35", "Cancel")
     cancelBtn.OnEvent("Click", (*) => editGui.Destroy())
 
     editGui.OnEvent("Close", (*) => editGui.Destroy())
     editGui.OnEvent("Escape", (*) => editGui.Destroy())
 
-    editGui.Show("w700 h500")
+    editGui.Show("w700 h555")
 }
 
 CC_SaveEditedCapture(editGui, name) {
@@ -4934,6 +4940,7 @@ CC_SaveEditedCapture(editGui, name) {
         CaptureData[StrLower(name)]["title"] := saved.EditTitle
         CaptureData[StrLower(name)]["tags"] := saved.EditTags
         CaptureData[StrLower(name)]["opinion"] := saved.EditOpinion
+        CaptureData[StrLower(name)]["note"] := saved.EditNote  ; NOW SAVES THE NOTE!
         CaptureData[StrLower(name)]["body"] := saved.EditBody
     }
 
