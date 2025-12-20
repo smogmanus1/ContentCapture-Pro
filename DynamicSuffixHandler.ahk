@@ -1,151 +1,367 @@
+#Requires AutoHotkey v2.0+
+
 ; ==============================================================================
-; DynamicSuffixHandler - Dynamic Hotstring Suffix Processing
+; DynamicSuffixHandler.ahk - Dynamic Suffix Detection for ContentCapture Pro
 ; ==============================================================================
-; Version: 2.0 (for ContentCapture Pro 4.5)
-; 
-; This class handles the magic of suffix hotstrings. When you type ::name::,
-; ::namego::, ::namevi::, etc., this handler routes to the correct function.
+; Monitors typing and intercepts suffix patterns dynamically instead of
+; generating thousands of separate hotstring entries.
 ;
-; SUPPORTED SUFFIXES:
-;   (none)  - Paste content          → CC_HotstringPaste(name)
-;   ?       - Show action menu       → CC_HotstringMenu(name)
-;   go      - Open URL in browser    → CC_HotstringGo(name)
-;   em      - Email via Outlook      → CC_HotstringEmail(name)
-;   rd      - Read in popup          → CC_ShowReadWindow(name)
-;   vi      - View/Edit capture      → CC_HotstringView(name)
-;   fb      - Share to Facebook      → CC_HotstringFacebook(name)
-;   x       - Share to Twitter/X     → CC_HotstringTwitter(name)
-;   bs      - Share to Bluesky       → CC_HotstringBluesky(name)
-;   li      - Share to LinkedIn      → CC_HotstringLinkedIn(name)
-;   mt      - Share to Mastodon      → CC_HotstringMastodon(name)
+; Supported Suffixes (type scriptnameSUFFIX then space/enter):
+;   em  → Email via Outlook
+;   vi  → View/Edit in GUI
+;   go  → Open URL in browser
+;   rd  → Read content in MsgBox
+;   fb  → Share to Facebook
+;   x   → Share to Twitter/X
+;   bs  → Share to Bluesky
+;   li  → Share to LinkedIn
+;   mt  → Share to Mastodon
 ;
-; HOW IT WORKS:
-;   1. Initialize() creates an InputHook that listens for :: triggers
-;   2. When :: is typed, it starts buffering keystrokes
-;   3. When :: is typed again, it checks if the buffer matches a capture name
-;   4. If matched, it calls the appropriate CC_Hotstring* function
-;   5. Suffixes are stripped and routed to their handlers
-;
+; Usage: #Include this file and call DynamicSuffixHandler.Initialize(CaptureData, CaptureNames)
 ; ==============================================================================
 
 class DynamicSuffixHandler {
-    ; Store references to capture data
-    static CaptureData := Map()
-    static CaptureNames := []
-    static inputHook := ""
-    static isActive := false
+    ; ==== CONFIGURATION ====
+    static SUFFIX_MAP := Map(
+        "em", "email",       ; Email via Outlook
+        "vi", "view",        ; View/Edit in GUI
+        "go", "openurl",     ; Open URL in browser
+        "rd", "read",        ; Read in MsgBox
+        "fb", "facebook",    ; Share to Facebook
+        "x",  "twitter",     ; Share to Twitter/X
+        "bs", "bluesky",     ; Share to Bluesky
+        "li", "linkedin",    ; Share to LinkedIn
+        "mt", "mastodon"     ; Share to Mastodon
+    )
     
-    ; ===========================================================================
-    ; Initialize(captureData, captureNames)
-    ; ===========================================================================
-    ; PURPOSE: Set up the dynamic hotstring listener
-    ; PARAMETERS:
-    ;   captureData - Map of capture name → capture data
-    ;   captureNames - Array of all capture names
-    ; ===========================================================================
-    static Initialize(captureData, captureNames) {
-        this.CaptureData := captureData
-        this.CaptureNames := captureNames
+    ; Internal state
+    static inputHook := ""
+    static inputBuffer := ""
+    static isEnabled := false
+    static maxBufferLen := 80
+    
+    ; Reference to capture database
+    static captureDataRef := ""
+    static captureNamesRef := ""
+    
+    ; ==== INITIALIZATION ====
+    static Initialize(captureDataMap := "", captureNamesArray := "") {
+        if (this.isEnabled)
+            return true
         
-        ; Only create hook once
-        if (!this.isActive) {
-            this.SetupInputHook()
-            this.isActive := true
+        ; Store references
+        if (captureDataMap != "")
+            this.captureDataRef := captureDataMap
+        if (captureNamesArray != "")
+            this.captureNamesRef := captureNamesArray
+        
+        ; Create InputHook to monitor typing
+        this.inputHook := InputHook("V I1")
+        this.inputHook.KeyOpt("{All}", "N")
+        this.inputHook.OnChar := ObjBindMethod(this, "OnCharTyped")
+        this.inputHook.OnKeyDown := ObjBindMethod(this, "OnKeyDown")
+        this.inputHook.Start()
+        
+        this.isEnabled := true
+        return true
+    }
+    
+    static Stop() {
+        if (this.inputHook && this.isEnabled) {
+            this.inputHook.Stop()
+            this.isEnabled := false
         }
     }
     
-    ; ===========================================================================
-    ; SetupInputHook()
-    ; ===========================================================================
-    ; PURPOSE: Create the input hook that listens for hotstring triggers
-    ; ===========================================================================
-    static SetupInputHook() {
-        ; Create hotstring for the :: trigger
-        ; Using EndChars to detect when user completes a hotstring
-        
-        ; We use a Hotstring approach - create hotstrings for all known names
-        ; This is more reliable than InputHook for this use case
-        
-        ; The hotstrings are generated in ContentCapture_Generated.ahk
-        ; This handler provides the routing logic
+    static SetCaptureData(dataMap, namesArray := "") {
+        this.captureDataRef := dataMap
+        if (namesArray != "")
+            this.captureNamesRef := namesArray
     }
     
-    ; ===========================================================================
-    ; ProcessHotstring(input)
-    ; ===========================================================================
-    ; PURPOSE: Route a hotstring to the appropriate handler
-    ; PARAMETERS:
-    ;   input - The typed text between :: markers (e.g., "recipego")
-    ; ===========================================================================
-    static ProcessHotstring(input) {
-        input := StrLower(Trim(input))
+    ; ==== INPUT MONITORING ====
+    static OnCharTyped(ih, char) {
+        ; Check if this is an ending character (triggers hotstring check)
+        endingChars := " `t`n.,;:!?)]-"
         
-        ; Check for suffix patterns (order matters - check longer suffixes first)
-        suffixes := [
-            {suffix: "go", handler: "CC_HotstringGo"},
-            {suffix: "em", handler: "CC_HotstringEmail"},
-            {suffix: "rd", handler: "CC_ShowReadWindow"},
-            {suffix: "vi", handler: "CC_HotstringView"},
-            {suffix: "fb", handler: "CC_HotstringFacebook"},
-            {suffix: "bs", handler: "CC_HotstringBluesky"},
-            {suffix: "li", handler: "CC_HotstringLinkedIn"},
-            {suffix: "mt", handler: "CC_HotstringMastodon"},
-            {suffix: "x", handler: "CC_HotstringTwitter"},
-            {suffix: "?", handler: "CC_HotstringMenu"}
-        ]
+        if InStr(endingChars, char) {
+            ; Check buffer for suffix match BEFORE adding the ending char
+            this.CheckForSuffixMatch()
+            this.inputBuffer := ""  ; Reset after trigger
+        } else {
+            ; Add character to buffer
+            this.inputBuffer .= char
+            
+            ; Trim buffer if too long
+            if (StrLen(this.inputBuffer) > this.maxBufferLen)
+                this.inputBuffer := SubStr(this.inputBuffer, -this.maxBufferLen)
+        }
+    }
+    
+    static OnKeyDown(ih, vk, sc) {
+        ; Handle special keys that should reset buffer
+        resetKeys := [8, 27, 13, 9]  ; Backspace, Escape, Enter, Tab
         
-        ; Check each suffix
-        for item in suffixes {
-            if (SubStr(input, -StrLen(item.suffix)) = item.suffix) {
-                baseName := SubStr(input, 1, StrLen(input) - StrLen(item.suffix))
-                if (this.CaptureData.Has(baseName)) {
-                    ; Get original case name
-                    originalName := this.CaptureData[baseName]["name"]
-                    ; Call the handler
-                    %item.handler%(originalName)
-                    return true
+        if (vk = 8) {  ; Backspace
+            if (StrLen(this.inputBuffer) > 0)
+                this.inputBuffer := SubStr(this.inputBuffer, 1, -1)
+        } else if (vk = 27) {  ; Escape
+            this.inputBuffer := ""
+        } else if (vk = 13 || vk = 9) {  ; Enter or Tab
+            this.CheckForSuffixMatch()
+            this.inputBuffer := ""
+        }
+    }
+    
+    ; ==== SUFFIX DETECTION ====
+    static CheckForSuffixMatch() {
+        if (this.inputBuffer = "" || !this.captureDataRef)
+            return
+        
+        buffer := StrLower(this.inputBuffer)
+        
+        ; Check each suffix (longest first for specificity)
+        for suffix, action in this.SUFFIX_MAP {
+            suffixLen := StrLen(suffix)
+            
+            ; Check if buffer ends with this suffix
+            if (StrLen(buffer) > suffixLen && SubStr(buffer, -suffixLen) = suffix) {
+                ; Extract potential capture name (everything before suffix)
+                potentialName := SubStr(buffer, 1, StrLen(buffer) - suffixLen)
+                
+                ; Check if this is a valid capture name
+                if (this.captureDataRef.Has(potentialName)) {
+                    ; Found a match! Execute the action
+                    this.ExecuteAction(potentialName, action)
+                    return
                 }
             }
         }
+    }
+    
+    ; ==== ACTION EXECUTION ====
+    static ExecuteAction(name, action) {
+        ; Calculate how many characters to delete (name + suffix + ending char)
+        ; The ending character was already typed, so we need to remove it too
         
-        ; No suffix - check for base name (plain paste)
-        if (this.CaptureData.Has(input)) {
-            originalName := this.CaptureData[input]["name"]
-            CC_HotstringPaste(originalName)
-            return true
+        capture := this.captureDataRef[name]
+        
+        ; Get the suffix length that matched
+        for suffix, act in this.SUFFIX_MAP {
+            if (act = action) {
+                deleteLen := StrLen(name) + StrLen(suffix) + 1  ; +1 for ending char
+                break
+            }
         }
         
-        return false
+        ; Delete the typed text
+        Send("{BS " deleteLen "}")
+        Sleep(50)
+        
+        ; Execute the appropriate action
+        switch action {
+            case "email":
+                this.ActionEmail(name, capture)
+            case "view":
+                this.ActionView(name, capture)
+            case "openurl":
+                this.ActionOpenURL(name, capture)
+            case "read":
+                this.ActionRead(name, capture)
+            case "facebook":
+                this.ActionFacebook(name, capture)
+            case "twitter":
+                this.ActionTwitter(name, capture)
+            case "bluesky":
+                this.ActionBluesky(name, capture)
+            case "linkedin":
+                this.ActionLinkedIn(name, capture)
+            case "mastodon":
+                this.ActionMastodon(name, capture)
+        }
     }
     
-    ; ===========================================================================
-    ; HasCapture(name)
-    ; ===========================================================================
-    ; PURPOSE: Check if a capture exists
-    ; ===========================================================================
-    static HasCapture(name) {
-        return this.CaptureData.Has(StrLower(name))
+    ; ==== INDIVIDUAL ACTIONS ====
+    
+    static ActionEmail(name, capture) {
+        ; Build email content
+        content := ""
+        
+        if (capture.Has("title") && capture["title"] != "")
+            content .= capture["title"] . "`r`n`r`n"
+        
+        if (capture.Has("url") && capture["url"] != "")
+            content .= capture["url"] . "`r`n`r`n"
+        
+        if (capture.Has("body") && capture["body"] != "")
+            content .= capture["body"]
+        
+        ; Get subject line
+        subject := capture.Has("title") ? capture["title"] : name
+        if (StrLen(subject) > 100)
+            subject := SubStr(subject, 1, 97) . "..."
+        
+        ; Send via Outlook
+        this.SendOutlookEmail(subject, content)
     }
     
-    ; ===========================================================================
-    ; GetCapture(name)
-    ; ===========================================================================
-    ; PURPOSE: Get capture data by name
-    ; ===========================================================================
-    static GetCapture(name) {
-        name := StrLower(name)
-        if (this.CaptureData.Has(name))
-            return this.CaptureData[name]
-        return ""
+    static SendOutlookEmail(subject, body) {
+        try {
+            outlook := ComObject("Outlook.Application")
+            mail := outlook.CreateItem(0)  ; 0 = olMailItem
+            mail.Subject := subject
+            mail.Body := body
+            mail.Display()  ; Show email for review before sending
+        } catch as err {
+            MsgBox("Failed to create email:`n" . err.Message, "Email Error", 16)
+        }
     }
     
-    ; ===========================================================================
-    ; RefreshNames()
-    ; ===========================================================================
-    ; PURPOSE: Update the names list (called after adding/removing captures)
-    ; ===========================================================================
-    static RefreshNames(captureData, captureNames) {
-        this.CaptureData := captureData
-        this.CaptureNames := captureNames
+    static ActionView(name, capture) {
+        ; Call the main ContentCapture Pro edit function
+        if IsSet(CC_EditCapture)
+            CC_EditCapture(name)
+        else
+            MsgBox("View/Edit function not available", "Error", 16)
+    }
+    
+    static ActionOpenURL(name, capture) {
+        if (capture.Has("url") && capture["url"] != "") {
+            try {
+                Run(capture["url"])
+            } catch as err {
+                MsgBox("Failed to open URL:`n" . err.Message, "Error", 16)
+            }
+        } else {
+            MsgBox("No URL saved for '" . name . "'", "No URL", 48)
+        }
+    }
+    
+    static ActionRead(name, capture) {
+        ; Call the main ContentCapture Pro read function
+        if IsSet(CC_ShowReadWindow)
+            CC_ShowReadWindow(name)
+        else {
+            ; Fallback: simple MsgBox
+            content := "=== " . name . " ===`n`n"
+            
+            if (capture.Has("title") && capture["title"] != "")
+                content .= "Title: " . capture["title"] . "`n`n"
+            
+            if (capture.Has("url") && capture["url"] != "")
+                content .= "URL: " . capture["url"] . "`n`n"
+            
+            if (capture.Has("body") && capture["body"] != "")
+                content .= capture["body"]
+            
+            MsgBox(content, name, 0)
+        }
+    }
+    
+    static ActionFacebook(name, capture) {
+        url := capture.Has("url") ? capture["url"] : ""
+        if (url != "") {
+            Run("https://www.facebook.com/sharer/sharer.php?u=" . this.UrlEncode(url))
+            
+            ; Also copy full content to clipboard
+            content := this.BuildShareContent(capture)
+            A_Clipboard := content
+            TrayTip("Content copied! Paste into Facebook.", "Facebook Share", "1")
+        } else {
+            MsgBox("No URL to share for '" . name . "'", "No URL", 48)
+        }
+    }
+    
+    static ActionTwitter(name, capture) {
+        title := capture.Has("title") ? capture["title"] : ""
+        url := capture.Has("url") ? capture["url"] : ""
+        
+        ; Twitter has 280 char limit, so keep it short
+        tweetText := title
+        if (StrLen(tweetText) > 200)
+            tweetText := SubStr(tweetText, 1, 197) . "..."
+        
+        if (url != "")
+            tweetText .= " " . url
+        
+        Run("https://twitter.com/intent/tweet?text=" . this.UrlEncode(tweetText))
+    }
+    
+    static ActionBluesky(name, capture) {
+        title := capture.Has("title") ? capture["title"] : ""
+        url := capture.Has("url") ? capture["url"] : ""
+        
+        postText := title
+        if (StrLen(postText) > 250)
+            postText := SubStr(postText, 1, 247) . "..."
+        
+        if (url != "")
+            postText .= " " . url
+        
+        Run("https://bsky.app/intent/compose?text=" . this.UrlEncode(postText))
+    }
+    
+    static ActionLinkedIn(name, capture) {
+        url := capture.Has("url") ? capture["url"] : ""
+        if (url != "") {
+            Run("https://www.linkedin.com/sharing/share-offsite/?url=" . this.UrlEncode(url))
+        } else {
+            MsgBox("No URL to share for '" . name . "'", "No URL", 48)
+        }
+    }
+    
+    static ActionMastodon(name, capture) {
+        title := capture.Has("title") ? capture["title"] : ""
+        url := capture.Has("url") ? capture["url"] : ""
+        
+        postText := title
+        if (url != "")
+            postText .= " " . url
+        
+        ; Mastodon doesn't have a universal share URL, so copy to clipboard
+        A_Clipboard := postText
+        TrayTip("Content copied! Paste into Mastodon.", "Mastodon Share", "1")
+    }
+    
+    ; ==== HELPER FUNCTIONS ====
+    
+    static BuildShareContent(capture) {
+        content := ""
+        
+        if (capture.Has("title") && capture["title"] != "")
+            content .= capture["title"] . "`r`n`r`n"
+        
+        if (capture.Has("url") && capture["url"] != "")
+            content .= capture["url"] . "`r`n`r`n"
+        
+        if (capture.Has("opinion") && capture["opinion"] != "")
+            content .= capture["opinion"] . "`r`n`r`n"
+        
+        if (capture.Has("body") && capture["body"] != "")
+            content .= capture["body"]
+        
+        return RTrim(content, "`r`n")
+    }
+    
+    static UrlEncode(str) {
+        encoded := ""
+        for char in StrSplit(str) {
+            code := Ord(char)
+            if (code >= 48 && code <= 57)       ; 0-9
+                || (code >= 65 && code <= 90)   ; A-Z
+                || (code >= 97 && code <= 122)  ; a-z
+                || InStr("-_.~", char)
+                encoded .= char
+            else if (code <= 127)
+                encoded .= Format("%{:02X}", code)
+            else {
+                ; Handle UTF-8 multi-byte
+                buf := Buffer(4)
+                len := StrPut(char, buf, "UTF-8") - 1
+                loop len
+                    encoded .= Format("%{:02X}", NumGet(buf, A_Index - 1, "UChar"))
+            }
+        }
+        return encoded
     }
 }
