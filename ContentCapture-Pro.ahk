@@ -3221,7 +3221,11 @@ CC_ManualCapture() {
     }
     
     ; Body text (the main content)
-    manualGui.Add("Text", "x20 y" (yPos + 35), "Content (paste or type your text here):")
+    manualGui.Add("Text", "x20 y" (yPos + 35), "Content:")
+    manualGui.SetFont("s8")
+    formatBtn := manualGui.Add("Button", "x80 y" (yPos + 32) " w90 h22", "🔧 Auto-Format")
+    formatBtn.OnEvent("Click", (*) => CC_AutoFormatBody(bodyEdit))
+    manualGui.SetFont("s10")
     bodyEdit := manualGui.Add("Edit", "x20 y" (yPos + 55) " w550 h150 vBody Multi WantReturn")
     
     ; Private note
