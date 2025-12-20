@@ -4914,6 +4914,9 @@ CC_EditCapture(name) {
 
     editGui.SetFont("s9 c666666")
     editGui.Add("Text", "x15 y340", "Body:")
+    editGui.SetFont("s8", "Segoe UI")
+    formatBtn := editGui.Add("Button", "x60 y337 w90 h22", "🔧 Auto-Format")
+    formatBtn.OnEvent("Click", (*) => CC_AutoFormatBody(editBody))
     editGui.SetFont("s10 c000000", "Consolas")
     editBody := editGui.Add("Edit", "x15 y358 w670 h135 Multi VScroll vEditBody", currentBody)
 
@@ -4948,6 +4951,69 @@ CC_SaveEditedCapture(editGui, name) {
     editGui.Destroy()
     TrayTip("Capture '" name "' saved!", "ContentCapture Pro", "1")
     CC_ShowReadWindow(name)
+}
+
+; ==============================================================================
+; AUTO-FORMAT BODY TEXT
+; ==============================================================================
+; Intelligently adds paragraph breaks to text that lost formatting during copy
+
+CC_AutoFormatBody(editControl) {
+    text := editControl.Value
+    
+    if (text = "") {
+        TrayTip("No text to format", "Auto-Format", "2")
+        return
+    }
+    
+    ; First normalize existing line breaks
+    text := StrReplace(text, "`r`n", "`n")
+    text := StrReplace(text, "`r", "`n")
+    
+    ; If text already has line breaks, just clean it up
+    if InStr(text, "`n`n") {
+        text := CC_CleanContent(text)
+        editControl.Value := text
+        TrayTip("Text cleaned up!", "Auto-Format", "1")
+        return
+    }
+    
+    ; Common paragraph starters (after a period)
+    starters := "I |You |We |They |He |She |It |The |This |That |These |Those |"
+    starters .= "My |Your |Our |Their |His |Her |Its |"
+    starters .= "In |On |At |By |For |From |With |To |"
+    starters .= "However|But |And |So |Yet |Or |"
+    starters .= "First|Second|Third|Finally|"
+    starters .= "When |Where |What |Why |How |Who |"
+    starters .= "If |Although |Because |Since |While |"
+    starters .= "After |Before |During |Until |"
+    starters .= "One |Two |Three |Four |Five |"
+    starters .= "According |Additionally |Also |"
+    starters .= "For example|For instance|In fact|"
+    starters .= "Moreover|Furthermore|Therefore|Thus|Hence|"
+    starters .= "As |Like |Unlike |"
+    starters .= "[0-9]+\. |[0-9]+\) |• |- "
+    
+    ; Build regex pattern for paragraph detection
+    ; Look for: period/!/? + space + capital letter that starts common patterns
+    pattern := "([.!?])\s+(" starters ")"
+    
+    ; Replace with period + double newline + starter
+    formatted := RegExReplace(text, pattern, "$1`n`n$2")
+    
+    ; Also break on clear topic shifts (sentences starting with "I " after any sentence)
+    formatted := RegExReplace(formatted, "([.!?])\s+(I [a-z])", "$1`n`n$2")
+    
+    ; Clean up any triple+ newlines
+    formatted := RegExReplace(formatted, "`n`n`n+", "`n`n")
+    
+    ; Convert to Windows line endings
+    formatted := StrReplace(formatted, "`n", "`r`n")
+    
+    ; Update the edit control
+    editControl.Value := Trim(formatted)
+    
+    TrayTip("Text reformatted!", "Auto-Format", "1")
 }
 
 ; ==============================================================================
@@ -5340,8 +5406,23 @@ CC_GetPageTitle(title := "") {
 }
 
 CC_CleanContent(text) {
+    ; First, normalize all line break styles to `n
+    text := StrReplace(text, "`r`n", "`n")      ; Windows CRLF → LF
+    text := StrReplace(text, "`r", "`n")        ; Old Mac CR → LF
+    
+    ; Replace multiple spaces/tabs (but NOT line breaks) with single space
     text := RegExReplace(text, "[ \t]+", " ")
-    text := RegExReplace(text, "\r?\n\r?\n+", "`r`n`r`n")
+    
+    ; Clean up lines: trim trailing spaces from each line
+    text := RegExReplace(text, " +`n", "`n")
+    text := RegExReplace(text, "`n +", "`n")
+    
+    ; Normalize multiple blank lines to max 2 line breaks (one blank line)
+    text := RegExReplace(text, "`n`n`n+", "`n`n")
+    
+    ; Convert back to Windows line endings for Edit controls
+    text := StrReplace(text, "`n", "`r`n")
+    
     return Trim(text)
 }
 
