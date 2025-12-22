@@ -2,8 +2,8 @@
 ; ContentCapture Pro - Professional Content Capture & Sharing System
 ; ==============================================================================
 ; Author:      Brad
-; Version:     4.5 (AHK v2)
-; Updated:     2025-12-16
+; Version:     4.6 (AHK v2)
+; Updated:     2025-12-22
 ; License:     MIT
 ;
 ; NOTE: This file is designed to be #Included from a launcher script.
@@ -4887,74 +4887,116 @@ CC_EditCapture(name) {
     editGui.SetFont("s10")
     editGui.BackColor := "F5F5F5"
 
-    editGui.SetFont("s11 bold c333333")
-    editGui.Add("Text", "x15 y10 w200", "::" name "::")
+    ; Editable script name field
+    editGui.SetFont("s9 c666666")
+    editGui.Add("Text", "x15 y10", "Script Name:")
+    editGui.SetFont("s10 norm c000000")
+    editName := editGui.Add("Edit", "x15 y28 w200 h24 vEditName", name)
+    editGui.SetFont("s8 c888888")
+    editGui.Add("Text", "x220 y32", "(letters/numbers only, no spaces)")
 
     editGui.SetFont("s9 norm c666666")
-    editGui.Add("Text", "x15 y35", "URL:")
+    editGui.Add("Text", "x15 y60", "URL:")
     editGui.SetFont("s10 norm c000000")
-    editUrl := editGui.Add("Edit", "x15 y53 w670 h24 vEditURL", currentURL)
+    editUrl := editGui.Add("Edit", "x15 y78 w670 h24 vEditURL", currentURL)
 
     editGui.SetFont("s9 c666666")
-    editGui.Add("Text", "x15 y85", "Title:")
+    editGui.Add("Text", "x15 y110", "Title:")
     editGui.SetFont("s10 c000000")
-    editTitle := editGui.Add("Edit", "x15 y103 w670 h24 vEditTitle", currentTitle)
+    editTitle := editGui.Add("Edit", "x15 y128 w670 h24 vEditTitle", currentTitle)
 
     editGui.SetFont("s9 c666666")
-    editGui.Add("Text", "x15 y135", "Tags:")
+    editGui.Add("Text", "x15 y160", "Tags:")
     editGui.SetFont("s10 c000000")
-    editTags := editGui.Add("Edit", "x15 y153 w400 h24 vEditTags", currentTags)
+    editTags := editGui.Add("Edit", "x15 y178 w400 h24 vEditTags", currentTags)
 
     editGui.SetFont("s9 c666666")
-    editGui.Add("Text", "x15 y185", "Opinion:")
+    editGui.Add("Text", "x15 y210", "Opinion:")
     editGui.SetFont("s10 c000000")
-    editOpinion := editGui.Add("Edit", "x15 y203 w670 h60 Multi vEditOpinion", currentOpinion)
+    editOpinion := editGui.Add("Edit", "x15 y228 w670 h60 Multi vEditOpinion", currentOpinion)
 
     ; Private Note field (NEW)
     editGui.SetFont("s9 c666666")
-    editGui.Add("Text", "x15 y270", "📝 Private Note (only you see this):")
+    editGui.Add("Text", "x15 y295", "📝 Private Note (only you see this):")
     editGui.SetFont("s10 c000000")
-    editNote := editGui.Add("Edit", "x15 y288 w670 h45 Multi vEditNote", currentNote)
+    editNote := editGui.Add("Edit", "x15 y313 w670 h45 Multi vEditNote", currentNote)
 
     editGui.SetFont("s9 c666666")
-    editGui.Add("Text", "x15 y340", "Body:")
+    editGui.Add("Text", "x15 y365", "Body:")
     editGui.SetFont("s8", "Segoe UI")
-    formatBtn := editGui.Add("Button", "x60 y337 w90 h22", "🔧 Auto-Format")
+    formatBtn := editGui.Add("Button", "x60 y362 w90 h22", "🔧 Auto-Format")
     formatBtn.OnEvent("Click", (*) => CC_AutoFormatBody(editBody))
     editGui.SetFont("s10 c000000", "Consolas")
-    editBody := editGui.Add("Edit", "x15 y358 w670 h135 Multi VScroll vEditBody", currentBody)
+    editBody := editGui.Add("Edit", "x15 y383 w670 h130 Multi VScroll vEditBody", currentBody)
 
     editGui.SetFont("s10", "Segoe UI")
-    saveBtn := editGui.Add("Button", "x15 y505 w120 h35", "💾 Save")
+    saveBtn := editGui.Add("Button", "x15 y525 w120 h35", "💾 Save")
     saveBtn.OnEvent("Click", (*) => CC_SaveEditedCapture(editGui, name))
 
-    cancelBtn := editGui.Add("Button", "x145 y505 w100 h35", "Cancel")
+    cancelBtn := editGui.Add("Button", "x145 y525 w100 h35", "Cancel")
     cancelBtn.OnEvent("Click", (*) => editGui.Destroy())
 
     editGui.OnEvent("Close", (*) => editGui.Destroy())
     editGui.OnEvent("Escape", (*) => editGui.Destroy())
 
-    editGui.Show("w700 h555")
+    editGui.Show("w700 h575")
 }
 
-CC_SaveEditedCapture(editGui, name) {
+CC_SaveEditedCapture(editGui, originalName) {
     global CaptureData
 
     saved := editGui.Submit(false)
-
-    if CaptureData.Has(StrLower(name)) {
-        CaptureData[StrLower(name)]["url"] := saved.EditURL
-        CaptureData[StrLower(name)]["title"] := saved.EditTitle
-        CaptureData[StrLower(name)]["tags"] := saved.EditTags
-        CaptureData[StrLower(name)]["opinion"] := saved.EditOpinion
-        CaptureData[StrLower(name)]["note"] := saved.EditNote  ; NOW SAVES THE NOTE!
-        CaptureData[StrLower(name)]["body"] := saved.EditBody
+    newName := Trim(saved.EditName)
+    newNameLower := StrLower(newName)
+    originalNameLower := StrLower(originalName)
+    
+    ; Validate new name - only letters and numbers allowed
+    if !RegExMatch(newName, "^[a-zA-Z0-9]+$") {
+        MsgBox("Invalid name. Use only letters and numbers (no spaces or special characters).", "Validation Error", "48")
+        return
+    }
+    
+    ; Check if name changed and if new name already exists
+    if (newNameLower != originalNameLower) {
+        if CaptureData.Has(newNameLower) {
+            MsgBox("A capture with the name '" newName "' already exists.`nChoose a different name.", "Duplicate Name", "48")
+            return
+        }
     }
 
-    CC_SaveCaptureData()
-    editGui.Destroy()
-    TrayTip("Capture '" name "' saved!", "ContentCapture Pro", "1")
-    CC_ShowReadWindow(name)
+    ; Build updated capture data
+    if CaptureData.Has(originalNameLower) {
+        updatedCapture := Map()
+        updatedCapture["name"] := newName
+        updatedCapture["url"] := saved.EditURL
+        updatedCapture["title"] := saved.EditTitle
+        updatedCapture["tags"] := saved.EditTags
+        updatedCapture["opinion"] := saved.EditOpinion
+        updatedCapture["note"] := saved.EditNote
+        updatedCapture["body"] := saved.EditBody
+        
+        ; Preserve original date and any short versions
+        if CaptureData[originalNameLower].Has("date")
+            updatedCapture["date"] := CaptureData[originalNameLower]["date"]
+        if CaptureData[originalNameLower].Has("short")
+            updatedCapture["short"] := CaptureData[originalNameLower]["short"]
+        
+        ; If name changed: copy to new, then delete old
+        if (newNameLower != originalNameLower) {
+            CaptureData[newNameLower] := updatedCapture  ; Create new FIRST
+            CaptureData.Delete(originalNameLower)         ; Delete old AFTER
+            CC_SaveCaptureData()
+            editGui.Destroy()
+            TrayTip("Renamed '" originalName "' → '" newName "' and saved!", "ContentCapture Pro", "1")
+            CC_ShowReadWindow(newName)
+        } else {
+            CaptureData[originalNameLower] := updatedCapture
+            CC_SaveCaptureData()
+            editGui.Destroy()
+            TrayTip("Capture '" newName "' saved!", "ContentCapture Pro", "1")
+            CC_ShowReadWindow(newName)
+        }
+    }
 }
 
 ; ==============================================================================
