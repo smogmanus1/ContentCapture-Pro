@@ -4943,7 +4943,7 @@ CC_EditCapture(name) {
 }
 
 CC_SaveEditedCapture(editGui, originalName) {
-    global CaptureData
+    global CaptureData, CaptureNames
 
     saved := editGui.Submit(false)
     newName := Trim(saved.EditName)
@@ -4985,13 +4985,31 @@ CC_SaveEditedCapture(editGui, originalName) {
         if (newNameLower != originalNameLower) {
             CaptureData[newNameLower] := updatedCapture  ; Create new FIRST
             CaptureData.Delete(originalNameLower)         ; Delete old AFTER
+            
+            ; Update CaptureNames array - remove old, add new
+            for i, n in CaptureNames {
+                if (StrLower(n) = originalNameLower) {
+                    CaptureNames.RemoveAt(i)
+                    break
+                }
+            }
+            CaptureNames.Push(newName)
+            
             CC_SaveCaptureData()
+            
+            ; Re-initialize DynamicSuffixHandler with updated data
+            DynamicSuffixHandler.Initialize(CaptureData, CaptureNames)
+            
             editGui.Destroy()
             TrayTip("Renamed '" originalName "' → '" newName "' and saved!", "ContentCapture Pro", "1")
             CC_ShowReadWindow(newName)
         } else {
             CaptureData[originalNameLower] := updatedCapture
             CC_SaveCaptureData()
+            
+            ; Re-initialize DynamicSuffixHandler with updated data
+            DynamicSuffixHandler.Initialize(CaptureData, CaptureNames)
+            
             editGui.Destroy()
             TrayTip("Capture '" newName "' saved!", "ContentCapture Pro", "1")
             CC_ShowReadWindow(newName)
