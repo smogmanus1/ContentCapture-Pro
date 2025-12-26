@@ -3587,10 +3587,24 @@ CC_FilterBrowserCaptures(browserGui) {
         }
 
         if (searchText != "") {
+            ; Search ALL fields - name, title, body, opinion, tags, URL, note
             nameLower := StrLower(name)
             titleLower := StrLower(cap.Has("title") ? cap["title"] : "")
+            bodyLower := StrLower(cap.Has("body") ? cap["body"] : "")
+            opinionLower := StrLower(cap.Has("opinion") ? cap["opinion"] : "")
+            tagsLower := StrLower(cap.Has("tags") ? cap["tags"] : "")
+            urlLower := StrLower(cap.Has("url") ? cap["url"] : "")
+            noteLower := StrLower(cap.Has("note") ? cap["note"] : "")
             
-            if !InStr(nameLower, searchLower) && !InStr(titleLower, searchLower)
+            found := InStr(nameLower, searchLower)
+                  || InStr(titleLower, searchLower)
+                  || InStr(bodyLower, searchLower)
+                  || InStr(opinionLower, searchLower)
+                  || InStr(tagsLower, searchLower)
+                  || InStr(urlLower, searchLower)
+                  || InStr(noteLower, searchLower)
+            
+            if !found
                 continue
         }
 
@@ -3603,7 +3617,7 @@ CC_FilterBrowserCaptures(browserGui) {
     }
     
     listView.ModifyCol(2, "Sort")  ; Sort alphabetically by Name
-    browserGui.statusText.Value := "Showing " matchCount " of " CaptureNames.Length " captures"
+    browserGui.statusText.Value := "Showing " matchCount " of " CaptureNames.Length " captures (searching all fields)"
 }
 
 CC_BrowserOpenURL(listView) {
@@ -4998,20 +5012,28 @@ CC_SaveEditedCapture(editGui, originalName) {
             CC_SaveCaptureData()
             
             ; Re-initialize DynamicSuffixHandler with updated data
-            DynamicSuffixHandler.Initialize(CaptureData, CaptureNames)
+            try {
+                DynamicSuffixHandler.Initialize(CaptureData, CaptureNames)
+            } catch as err {
+                MsgBox("Error reinitializing hotstrings: " err.Message, "Error", "16")
+            }
             
             editGui.Destroy()
-            TrayTip("Renamed '" originalName "' → '" newName "' and saved!", "ContentCapture Pro", "1")
+            TrayTip("Renamed '" originalName "' → '" newName "' - Hotstrings updated!", "ContentCapture Pro", "1")
             CC_ShowReadWindow(newName)
         } else {
             CaptureData[originalNameLower] := updatedCapture
             CC_SaveCaptureData()
             
             ; Re-initialize DynamicSuffixHandler with updated data
-            DynamicSuffixHandler.Initialize(CaptureData, CaptureNames)
+            try {
+                DynamicSuffixHandler.Initialize(CaptureData, CaptureNames)
+            } catch as err {
+                MsgBox("Error reinitializing hotstrings: " err.Message, "Error", "16")
+            }
             
             editGui.Destroy()
-            TrayTip("Capture '" newName "' saved!", "ContentCapture Pro", "1")
+            TrayTip("Capture '" newName "' saved - Hotstrings updated!", "ContentCapture Pro", "1")
             CC_ShowReadWindow(newName)
         }
     }
