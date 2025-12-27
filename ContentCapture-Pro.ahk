@@ -2,8 +2,8 @@
 ; ContentCapture Pro - Professional Content Capture & Sharing System
 ; ==============================================================================
 ; Author:      Brad
-; Version:     4.6 (AHK v2)
-; Updated:     2025-12-22
+; Version:     4.8 (AHK v2)
+; Updated:     2025-12-27
 ; License:     MIT
 ;
 ; NOTE: This file is designed to be #Included from a launcher script.
@@ -200,6 +200,14 @@
 ; li        Share to LinkedIn           ::recipeli::
 ; mt        Share to Mastodon           ::recipemt::
 ;
+; IMAGE SUFFIXES (when image is attached):
+; img       Copy image to clipboard     ::recipeimg::
+; imgo      Open image in viewer        ::recipeimgo::
+; fbi       Facebook + image            ::recipefbi::
+; xi        Twitter/X + image           ::recipexi::
+; bsi       Bluesky + image             ::recipebsi::
+; emi       Email with image attached   ::recipeemi::
+;
 ; ==============================================================================
 ; FILE STRUCTURE
 ; ==============================================================================
@@ -207,9 +215,13 @@
 ; ContentCapture-Pro.ahk      This file — main application logic
 ; ContentCapture.ahk          Launcher script (add #Requires, #SingleInstance)
 ; DynamicSuffixHandler.ahk    Handles suffix detection for hotstrings
+; ImageCapture.ahk            Image attachment and sharing module
+; SocialMediaDetector.ahk     Auto-detect social media platforms
 ; ContentCapture_Generated.ahk Auto-generated hotstrings (don't edit manually)
 ; config.ini                  User settings and preferences
 ; captures.dat                Your saved captures (plain text, editable)
+; images.dat                  Image attachments database
+; images/                     Folder containing attached images
 ; captures.idx                Search index for fast lookups
 ; favorites.txt               List of starred captures
 ; backups/                    Automatic and manual backups folder
@@ -298,6 +310,8 @@
 ; ==============================================================================
 ; NOTE: #Requires and #SingleInstance are in the launcher (ContentCapture.ahk)
 #Include DynamicSuffixHandler.ahk
+#Include ImageCapture.ahk
+#Include SocialMediaDetector.ahk
 
 global ContentCaptureDir := ""
 
@@ -3368,7 +3382,10 @@ CC_GetCaptureDetailsWithTags() {
     captureGui.Add("Text", "y+10", "Opinion (included in output):")
     opinionEdit := captureGui.Add("Edit", "vOpinion w450 h60")
 
-    captureGui.Add("Button", "y+15 w100 Default", "Save").OnEvent("Click", (*) => captureGui.Submit())
+    ; Image attachment option
+    captureGui.Add("Text", "x10 y+15 c666666", "📷 Attach image after saving via Edit (Ctrl+Alt+B → Edit)")
+
+    captureGui.Add("Button", "x10 y+15 w100 Default", "Save").OnEvent("Click", (*) => captureGui.Submit())
     captureGui.Add("Button", "x+10 w100", "Cancel").OnEvent("Click", (*) => captureGui.Destroy())
     captureGui.OnEvent("Close", (*) => captureGui.Destroy())
     captureGui.OnEvent("Escape", (*) => captureGui.Destroy())
@@ -3463,28 +3480,30 @@ CC_OpenCaptureBrowser() {
     searchEdit.OnEvent("Change", (*) => SetTimer(browserGui.filterFunc, -300))
     tagDropdown.OnEvent("Change", (*) => CC_FilterBrowserCaptures(browserGui))
 
-    browserGui.Add("Text", "x10 y40", "Double-click to open URL | Enter=Paste | ⭐=Toggle favorite")
+    browserGui.Add("Text", "x10 y40", "Double-click to open URL | Enter=Paste | ⭐=Toggle favorite | 📷=Has image")
 
-    listView := browserGui.Add("ListView", "x10 y65 w680 h330 vCaptureList Grid", ["⭐", "Name", "Title", "Tags", "Date"])
+    listView := browserGui.Add("ListView", "x10 y65 w680 h330 vCaptureList Grid", ["⭐", "📷", "Name", "Title", "Tags", "Date"])
     listView.ModifyCol(1, 30)
-    listView.ModifyCol(2, 110)
-    listView.ModifyCol(3, 310)
-    listView.ModifyCol(4, 110)
-    listView.ModifyCol(5, 100)
+    listView.ModifyCol(2, 25)
+    listView.ModifyCol(3, 100)
+    listView.ModifyCol(4, 300)
+    listView.ModifyCol(5, 105)
+    listView.ModifyCol(6, 95)
 
-    ; Populate with favorites indicator
+    ; Populate with favorites and image indicators
     for name in CaptureNames {
         if !CaptureData.Has(StrLower(name))
             continue
         cap := CaptureData[StrLower(name)]
         isFav := CC_IsFavorite(name) ? "⭐" : ""
-        listView.Add(, isFav, name,
+        hasImg := (IsSet(IC_HasImage) && IC_HasImage(name)) ? "📷" : ""
+        listView.Add(, isFav, hasImg, name,
             cap.Has("title") ? cap["title"] : "",
             cap.Has("tags") ? cap["tags"] : "",
             cap.Has("date") ? cap["date"] : "")
     }
     
-    listView.ModifyCol(2, "Sort")  ; Sort alphabetically by Name
+    listView.ModifyCol(3, "Sort")  ; Sort alphabetically by Name
 
     listView.OnEvent("DoubleClick", (*) => CC_BrowserOpenURL(listView))
     
@@ -3500,6 +3519,7 @@ CC_OpenCaptureBrowser() {
     browserGui.Add("Button", "x340 y405 w60", "📖 Read").OnEvent("Click", (*) => CC_BrowserReadContent(listView))
     browserGui.Add("Button", "x405 y405 w60", "✏️ Edit").OnEvent("Click", (*) => CC_BrowserEditCapture(listView))
     browserGui.Add("Button", "x470 y405 w55", "🗑️ Del").OnEvent("Click", (*) => CC_BrowserDeleteCapture(listView, browserGui))
+    browserGui.Add("Button", "x530 y405 w55", "📷 Img").OnEvent("Click", (*) => CC_BrowserAttachImage(listView, browserGui))
     browserGui.Add("Button", "x605 y405 w90", "Close").OnEvent("Click", (*) => browserGui.Destroy())
 
     browserGui.statusText := browserGui.Add("Text", "x10 y440 w680", "Showing " CaptureNames.Length " captures | Enter=Paste selected | Arrows to navigate")
@@ -3531,7 +3551,7 @@ CC_BrowserToggleFavorite(listView, browserGui) {
         return
     }
     
-    name := listView.GetText(row, 2)  ; Column 2 is name now
+    name := listView.GetText(row, 3)  ; Column 2 is name now
     isFav := CC_ToggleFavorite(name)
     
     ; Update the star column
@@ -3545,8 +3565,28 @@ CC_BrowserEditCapture(listView) {
         return
     }
     
-    name := listView.GetText(row, 2)
+    name := listView.GetText(row, 3)
     CC_EditCapture(name)
+}
+
+CC_BrowserAttachImage(listView, browserGui) {
+    row := listView.GetNext(0, "F")
+    if (row = 0) {
+        MsgBox("Select a capture first.", "No Selection", "48")
+        return
+    }
+    
+    name := listView.GetText(row, 3)
+    
+    if IsSet(IC_AttachImage) {
+        if IC_AttachImage(name) {
+            ; Update the image column indicator
+            hasImg := (IsSet(IC_HasImage) && IC_HasImage(name)) ? "📷" : ""
+            listView.Modify(row, , , hasImg)
+        }
+    } else {
+        MsgBox("Image feature not available.", "Error", "16")
+    }
 }
 
 CC_BrowserPasteSelected(listView, browserGui) {
@@ -3554,7 +3594,7 @@ CC_BrowserPasteSelected(listView, browserGui) {
     if (row = 0)
         return
     
-    name := listView.GetText(row, 2)
+    name := listView.GetText(row, 3)
     browserGui.Destroy()
     
     ; Small delay to let window close
@@ -3609,14 +3649,15 @@ CC_FilterBrowserCaptures(browserGui) {
         }
 
         isFav := CC_IsFavorite(name) ? "⭐" : ""
-        listView.Add(, isFav, name,
+        hasImg := (IsSet(IC_HasImage) && IC_HasImage(name)) ? "📷" : ""
+        listView.Add(, isFav, hasImg, name,
             cap.Has("title") ? cap["title"] : "",
             cap.Has("tags") ? cap["tags"] : "",
             cap.Has("date") ? cap["date"] : "")
         matchCount++
     }
     
-    listView.ModifyCol(2, "Sort")  ; Sort alphabetically by Name
+    listView.ModifyCol(3, "Sort")  ; Sort alphabetically by Name
     browserGui.statusText.Value := "Showing " matchCount " of " CaptureNames.Length " captures (searching all fields)"
 }
 
@@ -3627,7 +3668,7 @@ CC_BrowserOpenURL(listView) {
         return
     }
 
-    name := listView.GetText(row, 2)
+    name := listView.GetText(row, 3)
     url := CC_GetCaptureURL(name)
     if (url != "")
         try Run(url)
@@ -3640,7 +3681,7 @@ CC_BrowserCopyContent(listView) {
         return
     }
 
-    name := listView.GetText(row, 2)
+    name := listView.GetText(row, 3)
     content := CC_GetCaptureContent(name)
     A_Clipboard := content
     ClipWait(1)
@@ -3654,7 +3695,7 @@ CC_BrowserReadContent(listView) {
         return
     }
 
-    name := listView.GetText(row, 2)
+    name := listView.GetText(row, 3)
     CC_ShowReadWindow(name)
 }
 
@@ -3665,7 +3706,7 @@ CC_BrowserEmailContent(listView) {
         return
     }
 
-    name := listView.GetText(row, 2)
+    name := listView.GetText(row, 3)
     CC_HotstringEmail(name)
 }
 
@@ -3676,7 +3717,7 @@ CC_BrowserShowHotstring(listView) {
         return
     }
 
-    name := listView.GetText(row, 2)
+    name := listView.GetText(row, 3)
     title := listView.GetText(row, 3)
 
     msg := "HOTSTRING COMMANDS for '" name "'`n"
@@ -3702,7 +3743,7 @@ CC_BrowserDeleteCapture(listView, browserGui) {
         row := listView.GetNext(row)
         if (row = 0)
             break
-        name := listView.GetText(row, 2)  ; Column 2 is the name
+        name := listView.GetText(row, 3)  ; Column 2 is the name
         selectedNames.Push(name)
     }
     
@@ -4055,7 +4096,7 @@ CC_UpdateRestorePreview(restoreGui) {
         return
     }
     
-    name := listView.GetText(row, 2)
+    name := listView.GetText(row, 2)  ; Column 2 is Name in Restore Browser
     backupData := restoreGui.backupData
     
     if !backupData.Has(StrLower(name)) {
@@ -4108,7 +4149,7 @@ CC_PreviewBackupEntry(restoreGui) {
         return
     }
     
-    name := listView.GetText(row, 2)
+    name := listView.GetText(row, 2)  ; Column 2 is Name in Restore Browser
     backupData := restoreGui.backupData
     
     if !backupData.Has(StrLower(name))
@@ -4553,7 +4594,7 @@ CC_DeleteFromBackup(restoreGui) {
         if (row = 0)
             break
         
-        name := listView.GetText(row, 2)
+        name := listView.GetText(row, 2)  ; Column 2 is Name in Restore Browser
         selectedNames.Push(name)
     }
     
@@ -4641,7 +4682,7 @@ CC_RestoreSelectedEntries(restoreGui) {
         if (row = 0)
             break
         
-        name := listView.GetText(row, 2)
+        name := listView.GetText(row, 2)  ; Column 2 is Name in Restore Browser
         
         ; Check for duplicate
         if CaptureData.Has(StrLower(name))
@@ -4943,17 +4984,33 @@ CC_EditCapture(name) {
     editGui.SetFont("s10 c000000", "Consolas")
     editBody := editGui.Add("Edit", "x15 y383 w670 h130 Multi VScroll vEditBody", currentBody)
 
+    ; Image attachment section
+    editGui.SetFont("s9 c666666")
+    editGui.Add("Text", "x15 y520", "📷 Image (optional):")
+    editGui.SetFont("s9", "Segoe UI")
+    
+    hasImage := IsSet(IC_HasImage) && IC_HasImage(name)
+    if hasImage {
+        editGui.Add("Text", "x120 y520 c0066CC", "✓ Image attached")
+        editGui.Add("Button", "x230 y517 w70 h24", "View").OnEvent("Click", (*) => IC_OpenImage(name))
+        editGui.Add("Button", "x305 y517 w70 h24", "Change").OnEvent("Click", (*) => IC_AttachImage(name))
+        editGui.Add("Button", "x380 y517 w70 h24", "Remove").OnEvent("Click", (*) => IC_RemoveImage(name))
+    } else {
+        attachBtn := editGui.Add("Button", "x120 y517 w120 h24", "Attach Image...")
+        attachBtn.OnEvent("Click", (*) => IC_AttachImage(name))
+    }
+
     editGui.SetFont("s10", "Segoe UI")
-    saveBtn := editGui.Add("Button", "x15 y525 w120 h35", "💾 Save")
+    saveBtn := editGui.Add("Button", "x15 y555 w120 h35", "💾 Save")
     saveBtn.OnEvent("Click", (*) => CC_SaveEditedCapture(editGui, name))
 
-    cancelBtn := editGui.Add("Button", "x145 y525 w100 h35", "Cancel")
+    cancelBtn := editGui.Add("Button", "x145 y555 w100 h35", "Cancel")
     cancelBtn.OnEvent("Click", (*) => editGui.Destroy())
 
     editGui.OnEvent("Close", (*) => editGui.Destroy())
     editGui.OnEvent("Escape", (*) => editGui.Destroy())
 
-    editGui.Show("w700 h575")
+    editGui.Show("w700 h605")
 }
 
 CC_SaveEditedCapture(editGui, originalName) {

@@ -17,6 +17,14 @@
 ;   li  → Share to LinkedIn
 ;   mt  → Share to Mastodon
 ;
+; Image Suffixes (when image is attached):
+;   img  → Copy image to clipboard
+;   imgo → Open image in viewer
+;   fbi  → Facebook with image on clipboard
+;   xi   → Twitter/X with image on clipboard
+;   bsi  → Bluesky with image on clipboard
+;   emi  → Email with image attached (Outlook)
+;
 ; Usage: #Include this file and call DynamicSuffixHandler.Initialize(CaptureData, CaptureNames)
 ; ==============================================================================
 
@@ -31,7 +39,13 @@ class DynamicSuffixHandler {
         "x",  "twitter",     ; Share to Twitter/X
         "bs", "bluesky",     ; Share to Bluesky
         "li", "linkedin",    ; Share to LinkedIn
-        "mt", "mastodon"     ; Share to Mastodon
+        "mt", "mastodon",    ; Share to Mastodon
+        "img", "imagecopy",  ; Copy image to clipboard
+        "imgo", "imageopen", ; Open image in viewer
+        "fbi", "facebookimg", ; Facebook with image
+        "xi", "twitterimg",   ; Twitter with image
+        "bsi", "blueskyimg",  ; Bluesky with image
+        "emi", "emailimg"     ; Email with image attached
     )
     
     ; Internal state
@@ -158,6 +172,10 @@ class DynamicSuffixHandler {
         Send("{BS " deleteLen "}")
         Sleep(50)
         
+        ; Remember this capture for quick sharing
+        if IsSet(SMD_SetActiveCapture)
+            SMD_SetActiveCapture(name)
+        
         ; Execute the appropriate action
         switch action {
             case "email":
@@ -178,6 +196,18 @@ class DynamicSuffixHandler {
                 this.ActionLinkedIn(name, capture)
             case "mastodon":
                 this.ActionMastodon(name, capture)
+            case "imagecopy":
+                this.ActionImageCopy(name, capture)
+            case "imageopen":
+                this.ActionImageOpen(name, capture)
+            case "facebookimg":
+                this.ActionFacebookWithImage(name, capture)
+            case "twitterimg":
+                this.ActionTwitterWithImage(name, capture)
+            case "blueskyimg":
+                this.ActionBlueskyWithImage(name, capture)
+            case "emailimg":
+                this.ActionEmailWithImage(name, capture)
         }
     }
     
@@ -259,6 +289,10 @@ class DynamicSuffixHandler {
     }
     
     static ActionFacebook(name, capture) {
+        ; Check if we're already on Facebook with smart detection
+        if IsSet(SMD_SmartShare)
+            SMD_SmartShare(name)
+        
         url := capture.Has("url") ? capture["url"] : ""
         if (url != "") {
             Run("https://www.facebook.com/sharer/sharer.php?u=" . this.UrlEncode(url))
@@ -321,6 +355,66 @@ class DynamicSuffixHandler {
         ; Mastodon doesn't have a universal share URL, so copy to clipboard
         A_Clipboard := postText
         TrayTip("Content copied! Paste into Mastodon.", "Mastodon Share", "1")
+    }
+    
+    ; ==== IMAGE ACTIONS ====
+    
+    static ActionImageCopy(name, capture) {
+        if IsSet(IC_ShareImageClipboard)
+            IC_ShareImageClipboard(name)
+        else
+            MsgBox("Image feature not available", "Error", 16)
+    }
+    
+    static ActionImageOpen(name, capture) {
+        if IsSet(IC_OpenImage)
+            IC_OpenImage(name)
+        else
+            MsgBox("Image feature not available", "Error", 16)
+    }
+    
+    static ActionFacebookWithImage(name, capture) {
+        content := this.BuildShareContent(capture)
+        if IsSet(IC_ShareFacebookWithImage)
+            IC_ShareFacebookWithImage(name, content)
+        else {
+            ; Fallback to regular Facebook share
+            this.ActionFacebook(name, capture)
+        }
+    }
+    
+    static ActionTwitterWithImage(name, capture) {
+        content := this.BuildShareContent(capture)
+        if IsSet(IC_ShareTwitterWithImage)
+            IC_ShareTwitterWithImage(name, content)
+        else {
+            ; Fallback to regular Twitter share
+            this.ActionTwitter(name, capture)
+        }
+    }
+    
+    static ActionBlueskyWithImage(name, capture) {
+        content := this.BuildShareContent(capture)
+        if IsSet(IC_ShareBlueskyWithImage)
+            IC_ShareBlueskyWithImage(name, content)
+        else {
+            ; Fallback to regular Bluesky share
+            this.ActionBluesky(name, capture)
+        }
+    }
+    
+    static ActionEmailWithImage(name, capture) {
+        content := this.BuildShareContent(capture)
+        subject := capture.Has("title") ? capture["title"] : name
+        if (StrLen(subject) > 100)
+            subject := SubStr(subject, 1, 97) . "..."
+        
+        if IsSet(IC_EmailWithImage)
+            IC_EmailWithImage(name, content, subject)
+        else {
+            ; Fallback to regular email
+            this.ActionEmail(name, capture)
+        }
     }
     
     ; ==== HELPER FUNCTIONS ====
