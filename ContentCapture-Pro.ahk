@@ -4096,7 +4096,7 @@ CC_UpdateRestorePreview(restoreGui) {
         return
     }
     
-    name := listView.GetText(row, 2)  ; Column 2 is Name in Restore Browser
+    name := listView.GetText(row, 2)
     backupData := restoreGui.backupData
     
     if !backupData.Has(StrLower(name)) {
@@ -4149,7 +4149,7 @@ CC_PreviewBackupEntry(restoreGui) {
         return
     }
     
-    name := listView.GetText(row, 2)  ; Column 2 is Name in Restore Browser
+    name := listView.GetText(row, 2)
     backupData := restoreGui.backupData
     
     if !backupData.Has(StrLower(name))
@@ -4594,7 +4594,7 @@ CC_DeleteFromBackup(restoreGui) {
         if (row = 0)
             break
         
-        name := listView.GetText(row, 2)  ; Column 2 is Name in Restore Browser
+        name := listView.GetText(row, 2)
         selectedNames.Push(name)
     }
     
@@ -4682,7 +4682,7 @@ CC_RestoreSelectedEntries(restoreGui) {
         if (row = 0)
             break
         
-        name := listView.GetText(row, 2)  ; Column 2 is Name in Restore Browser
+        name := listView.GetText(row, 2)
         
         ; Check for duplicate
         if CaptureData.Has(StrLower(name))
