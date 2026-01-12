@@ -1234,18 +1234,28 @@ CC_TypeText(text) {
 ; RETURNS: true on success, false on failure
 ; ------------------------------------------------------------------------------
 CC_SafePaste(content, timeout := 2) {
-    ; Save original clipboard (ClipboardAll preserves all formats)
+    ; Save original clipboard (ClipboardAll preserves all formats including images)
     savedClip := ClipboardAll()
     
-    ; Clear clipboard completely first - THIS IS THE KEY FIX
+    ; Clear clipboard completely - must wait for it to actually clear
     A_Clipboard := ""
-    Sleep(50)
+    Sleep(100)
+    
+    ; Double-check it's clear by waiting for empty state
+    ; ClipWait with 0 timeout returns false if clipboard is empty (which we want)
+    startTime := A_TickCount
+    while (A_TickCount - startTime < 500) {
+        if (A_Clipboard = "")
+            break
+        Sleep(50)
+    }
     
     ; Set new content
     A_Clipboard := content
     
-    ; Wait for clipboard to be ready - check return value
-    if !ClipWait(timeout) {
+    ; Wait for clipboard to be ready with TEXT (type 1)
+    ; This ensures we're waiting for text, not any format
+    if !ClipWait(timeout, 1) {
         ; Failed - restore original and notify user
         A_Clipboard := savedClip
         TrayTip("Clipboard operation failed - try again", "Error", "2")
@@ -1254,7 +1264,7 @@ CC_SafePaste(content, timeout := 2) {
     
     ; Paste
     SendInput("^v")
-    Sleep(150)
+    Sleep(350)
     
     ; Restore original clipboard
     A_Clipboard := savedClip
