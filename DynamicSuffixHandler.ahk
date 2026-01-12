@@ -1,43 +1,63 @@
+#Requires AutoHotkey v2.0+
+
 ; ==============================================================================
 ; DynamicSuffixHandler.ahk - Dynamic Suffix Detection for ContentCapture Pro
 ; ==============================================================================
-; Version:     1.2 (Fixed SubStr pattern detection bug)
-; Author:      Brad (with Claude AI assistance)
-; License:     MIT
-;
-; Instead of generating thousands of suffix variants (scriptem, scriptgo, etc.),
-; this module monitors typing and intercepts suffix patterns dynamically.
+; Monitors typing and intercepts suffix patterns dynamically instead of
+; generating thousands of separate hotstring entries.
 ;
 ; Supported Suffixes (type scriptnameSUFFIX then space/enter):
 ;   em  → Email via Outlook
 ;   vi  → View/Edit in GUI
 ;   go  → Open URL in browser
 ;   rd  → Read content in MsgBox
+;   sh  → Paste short version only (for comments/replies)
 ;   fb  → Share to Facebook
 ;   x   → Share to Twitter/X
 ;   bs  → Share to Bluesky
 ;   li  → Share to LinkedIn
 ;   mt  → Share to Mastodon
+;   yt  → YouTube Transcript (Research)
+;   pp  → Perplexity AI (Research)
+;   fc  → Fact Check - Snopes (Research)
+;   mb  → Media Bias Check (Research)
+;   wb  → Wayback Machine (Research)
+;   gs  → Google Scholar (Research)
+;   av  → Archive Page (Research)
 ;
-; The base hotstring (::scriptname::) and action menu (::scriptname?::) 
-; are still generated statically for reliability.
-;
-; Usage: #Include this file and call DynamicSuffixHandler.Initialize()
+; Usage: #Include this file and call DynamicSuffixHandler.Initialize(CaptureData, CaptureNames)
 ; ==============================================================================
 
 class DynamicSuffixHandler {
     ; ==== CONFIGURATION ====
     static SUFFIX_MAP := Map(
+        ; Core actions
         "em", "email",       ; Email via Outlook
         "vi", "view",        ; View/Edit in GUI
         "go", "openurl",     ; Open URL in browser
         "rd", "read",        ; Read in MsgBox
+        "sh", "short",       ; Paste short version only
+        ; Social media sharing
         "fb", "facebook",    ; Share to Facebook
         "x",  "twitter",     ; Share to Twitter/X
         "bs", "bluesky",     ; Share to Bluesky
         "li", "linkedin",    ; Share to LinkedIn
-        "mt", "mastodon"     ; Share to Mastodon
+        "mt", "mastodon",    ; Share to Mastodon
+        ; Research tools
+        "yt", "transcript",  ; YouTube Transcript
+        "pp", "perplexity",  ; Perplexity AI research
+        "fc", "factcheck",   ; Fact check (Snopes)
+        "mb", "mediabias",   ; Media Bias check
+        "wb", "wayback",     ; Wayback Machine
+        "gs", "scholar",     ; Google Scholar
+        "av", "archive"      ; Archive.today
     )
+    
+    ; Character limits for social platforms
+    static LIMIT_TWITTER := 280
+    static LIMIT_BLUESKY := 300
+    static LIMIT_LINKEDIN := 3000
+    static LIMIT_MASTODON := 500
     
     ; Internal state
     static inputHook := ""
@@ -86,299 +106,412 @@ class DynamicSuffixHandler {
     
     ; ==== INPUT MONITORING ====
     static OnCharTyped(ih, char) {
-        ; Check if this is an ending character (triggers hotstring)
-        endingChars := " `t`n.,;:!?/)>]}-=`r"
+        ; Check if this is an ending character (triggers hotstring check)
+        endingChars := " `t`n.,;:!?)-]}"
         
-        if (InStr(endingChars, char)) {
-            ; Check for suffix pattern BEFORE adding the ending char
+        if InStr(endingChars, char) {
+            ; Check for suffix pattern before adding char
             this.CheckForSuffixPattern(char)
         }
         
         ; Add character to buffer
         this.inputBuffer .= char
         
+        ; Keep buffer at reasonable length
         if (StrLen(this.inputBuffer) > this.maxBufferLen)
             this.inputBuffer := SubStr(this.inputBuffer, -(this.maxBufferLen // 2))
     }
     
     static OnKeyDown(ih, vk, sc) {
-        ; Clear buffer on Escape
-        if (vk = 27)
+        ; Clear buffer on Enter, Escape, Tab
+        if (vk = 13 || vk = 27 || vk = 9)
             this.inputBuffer := ""
+        
+        ; Handle backspace
+        if (vk = 8 && StrLen(this.inputBuffer) > 0)
+            this.inputBuffer := SubStr(this.inputBuffer, 1, -1)
     }
     
     ; ==== PATTERN DETECTION ====
-    static CheckForSuffixPattern(endChar) {
+    static CheckForSuffixPattern(endingChar) {
         buffer := this.inputBuffer
         
-        if (StrLen(buffer) < 4)
+        if (StrLen(buffer) < 3)
             return
         
-        ; Check each suffix (longest first to avoid partial matches)
-        suffixesByLen := ["mt", "bs", "li", "fb", "em", "vi", "go", "rd", "x"]
+        ; Check each suffix - ONLY research suffixes (others handled by generated hotstrings)
+        suffixesByLen := ["yt", "pp", "fc", "mb", "wb", "gs", "av"]
         
         for suffix in suffixesByLen {
             if (!this.SUFFIX_MAP.Has(suffix))
                 continue
-                
+            
             action := this.SUFFIX_MAP[suffix]
             suffixLen := StrLen(suffix)
             
             ; Check if buffer ends with this suffix
-            if (StrLen(buffer) < suffixLen + 2)
-                continue
-            
-            ; FIXED: Was -suffixLen + 1, now correctly -suffixLen
-            bufferEnd := SubStr(buffer, -suffixLen)
-            
-            if (StrLower(bufferEnd) = suffix) {
-                ; Extract potential capture name (everything before suffix, after last space/punctuation)
-                beforeSuffix := SubStr(buffer, 1, StrLen(buffer) - suffixLen)
+            if (StrLen(buffer) >= suffixLen) {
+                bufferEnd := SubStr(buffer, -suffixLen)
                 
-                ; Find the start of the word (after last delimiter)
-                wordStart := 1
-                Loop Parse, beforeSuffix {
-                    if (InStr(" `t`n.,;:!?()[]{}=`r", A_LoopField))
-                        wordStart := A_Index + 1
-                }
-                
-                baseName := SubStr(beforeSuffix, wordStart)
-                
-                ; Must have a base name
-                if (baseName = "")
-                    continue
-                
-                ; Verify this capture exists
-                if (this.CaptureExists(baseName)) {
-                    ; Calculate total characters to erase: baseName + suffix
-                    eraseCount := StrLen(baseName) + suffixLen + 
+                if (bufferEnd = suffix) {
+                    ; Get potential capture name (everything before suffix)
+                    potentialName := SubStr(buffer, 1, StrLen(buffer) - suffixLen)
                     
-                    ; Erase the typed text
-                    this.EraseTypedText(eraseCount)
+                    ; Remove any leading non-word characters
+                    potentialName := RegExReplace(potentialName, "^[^\w]+", "")
                     
-                    ; Execute action
-                    this.ExecuteAction(baseName, action)
-                    
-                    ; Clear buffer
-                    this.inputBuffer := ""
-                    return
+                    ; Check if this is a valid capture name
+                    if (this.captureDataRef != "" && this.captureDataRef.Has(potentialName)) {
+                        ; Clear buffer and execute action
+                        this.inputBuffer := ""
+                        
+                        ; Delete the typed text (name + suffix + ending char)
+                        deleteLen := StrLen(potentialName) + suffixLen + 1
+                        Send("{BS " deleteLen "}")
+                        Sleep(50)
+                        
+                        ; Execute the action
+                        this.ExecuteAction(potentialName, action)
+                        return
+                    }
                 }
             }
         }
-    }
-    
-    ; ==== CAPTURE LOOKUP ====
-    static CaptureExists(name) {
-        nameLower := StrLower(name)
-        
-        ; Check our stored reference
-        if (this.captureDataRef != "" && this.captureDataRef.Has(nameLower))
-            return true
-        
-        ; Check global CaptureData if it exists
-        if (IsSet(CaptureData) && CaptureData.Has(nameLower))
-            return true
-            
-        ; Check CaptureNames array
-        if (this.captureNamesRef != "") {
-            for n in this.captureNamesRef {
-                if (StrLower(n) = nameLower)
-                    return true
-            }
-        }
-        
-        ; Check global CaptureNames
-        if (IsSet(CaptureNames)) {
-            for n in CaptureNames {
-                if (StrLower(n) = nameLower)
-                    return true
-            }
-        }
-        
-        return false
-    }
-    
-    static GetCapture(name) {
-        nameLower := StrLower(name)
-        
-        if (this.captureDataRef != "" && this.captureDataRef.Has(nameLower))
-            return this.captureDataRef[nameLower]
-        
-        if (IsSet(CaptureData) && CaptureData.Has(nameLower))
-            return CaptureData[nameLower]
-        
-        return ""
-    }
-    
-    ; ==== TEXT MANIPULATION ====
-    static EraseTypedText(charCount) {
-        Send("{BS " . charCount . "}")
     }
     
     ; ==== ACTION EXECUTION ====
     static ExecuteAction(name, action) {
-        ; Get capture data
-        capture := this.GetCapture(name)
-        if (capture = "")
+        if (!this.captureDataRef.Has(name))
             return
         
+        capture := this.captureDataRef[name]
+        
         switch action {
+            ; Core actions
             case "email":
-                this.DoEmail(name, capture)
+                this.ActionEmail(name, capture)
             case "view":
-                this.DoView(name, capture)
+                this.ActionView(name, capture)
             case "openurl":
-                this.DoOpenURL(name, capture)
+                this.ActionOpenURL(name, capture)
             case "read":
-                this.DoRead(name, capture)
+                this.ActionRead(name, capture)
+            case "short":
+                this.ActionShort(name, capture)
+            ; Social media
             case "facebook":
-                this.DoFacebook(name, capture)
+                this.ActionFacebook(name, capture)
             case "twitter":
-                this.DoTwitter(name, capture)
+                this.ActionTwitter(name, capture)
             case "bluesky":
-                this.DoBluesky(name, capture)
+                this.ActionBluesky(name, capture)
             case "linkedin":
-                this.DoLinkedIn(name, capture)
+                this.ActionLinkedIn(name, capture)
             case "mastodon":
-                this.DoMastodon(name, capture)
+                this.ActionMastodon(name, capture)
+            ; Research tools - delegate to ResearchTools class
+            case "transcript", "perplexity", "factcheck", "mediabias", "wayback", "scholar", "archive":
+                if IsSet(ResearchTools)
+                    ResearchTools.ExecuteAction(action, name, capture)
         }
     }
     
-    ; ==== ACTION IMPLEMENTATIONS ====
-    static DoEmail(name, capture) {
-        ; Use the main script's email function if available
-        if (IsSet(CC_HotstringEmail)) {
-            CC_HotstringEmail(name)
-        } else {
-            content := this.BuildContent(capture)
-            try {
-                ol := ComObject("Outlook.Application")
-                mail := ol.CreateItem(0)
-                mail.Body := content
-                mail.Display()
-            } catch as e {
-                MsgBox("Could not open Outlook: " . e.Message, "Email Error", "Icon!")
-            }
-        }
-    }
+    ; ==== INDIVIDUAL ACTIONS ====
     
-    static DoView(name, capture) {
-        ; Use the main script's edit function if available
-        if (IsSet(CC_EditCapture)) {
-            CC_EditCapture(name)
-        } else if (IsSet(CC_ShowReadWindow)) {
-            CC_ShowReadWindow(name)
-        } else {
-            this.DoRead(name, capture)
-        }
-    }
-    
-    static DoOpenURL(name, capture) {
-        if (capture.Has("url") && capture["url"] != "") {
-            try Run(capture["url"])
-        } else {
-            MsgBox("No URL found for '" . name . "'", "No URL", "Icon!")
-        }
-    }
-    
-    static DoRead(name, capture) {
-        content := ""
-        
-        if (capture.Has("title") && capture["title"] != "")
-            content .= capture["title"] . "`n`n"
-        
-        if (capture.Has("url") && capture["url"] != "")
-            content .= capture["url"] . "`n`n"
-        
-        if (capture.Has("body") && capture["body"] != "")
-            content .= capture["body"]
-        
-        if (content = "")
-            content := "(No content)"
-        
-        MsgBox(content, "📖 " . name, 0)
-    }
-    
-    static DoFacebook(name, capture) {
-        if (IsSet(CC_HotstringFacebook)) {
-            CC_HotstringFacebook(name)
-        } else {
-            content := this.BuildContent(capture)
-            this.ShareToSocial("facebook", content)
-        }
-    }
-    
-    static DoTwitter(name, capture) {
-        if (IsSet(CC_HotstringTwitter)) {
-            CC_HotstringTwitter(name)
-        } else {
-            content := this.BuildContent(capture)
-            this.ShareToSocial("twitter", content)
-        }
-    }
-    
-    static DoBluesky(name, capture) {
-        if (IsSet(CC_HotstringBluesky)) {
-            CC_HotstringBluesky(name)
-        } else {
-            content := this.BuildContent(capture)
-            this.ShareToSocial("bluesky", content)
-        }
-    }
-    
-    static DoLinkedIn(name, capture) {
-        if (IsSet(CC_HotstringLinkedIn)) {
-            CC_HotstringLinkedIn(name)
-        } else {
-            content := this.BuildContent(capture)
-            this.ShareToSocial("linkedin", content)
-        }
-    }
-    
-    static DoMastodon(name, capture) {
-        if (IsSet(CC_HotstringMastodon)) {
-            CC_HotstringMastodon(name)
-        } else {
-            content := this.BuildContent(capture)
-            this.ShareToSocial("mastodon", content)
-        }
-    }
-    
-    ; ==== HELPER FUNCTIONS ====
     static BuildContent(capture) {
+        ; Check for short version first (for social media)
+        if (capture.Has("short") && capture["short"] != "") {
+            return capture["short"]
+        }
+        
         content := ""
         
         if (capture.Has("title") && capture["title"] != "")
-            content .= capture["title"] . "`n`n"
+            content .= capture["title"]
         
         if (capture.Has("url") && capture["url"] != "")
-            content .= capture["url"] . "`n`n"
+            content .= (content != "" ? "`n" : "") . capture["url"]
         
         if (capture.Has("opinion") && capture["opinion"] != "")
-            content .= capture["opinion"] . "`n`n"
+            content .= (content != "" ? "`n`n" : "") . capture["opinion"]
         
         if (capture.Has("body") && capture["body"] != "")
-            content .= capture["body"]
+            content .= (content != "" ? "`n`n" : "") . capture["body"]
         
-        return Trim(content)
+        return content
     }
     
-    static ShareToSocial(platform, content) {
-        ; Generic share - copy to clipboard and open platform
+    static ActionEmail(name, capture) {
+        content := this.BuildContent(capture)
+        subject := capture.Has("title") ? capture["title"] : name
+        
+        if (StrLen(subject) > 100)
+            subject := SubStr(subject, 1, 97) . "..."
+        
+        this.SendOutlookEmail(subject, content)
+    }
+    
+    static SendOutlookEmail(subject, body) {
+        try {
+            outlook := ComObject("Outlook.Application")
+            mail := outlook.CreateItem(0)
+            mail.Subject := subject
+            mail.Body := body
+            mail.Display()
+        } catch as err {
+            MsgBox("Failed to create email:`n" . err.Message, "Email Error", "48")
+        }
+    }
+    
+    static ActionView(name, capture) {
+        ; Call the main edit function if it exists
+        if IsSet(CC_ShowEditDialog)
+            CC_ShowEditDialog(name)
+        else
+            MsgBox("Edit function not available", "Error", "48")
+    }
+    
+    static ActionOpenURL(name, capture) {
+        url := capture.Has("url") ? capture["url"] : ""
+        if (url != "")
+            Run(url)
+        else
+            MsgBox("No URL found for '" name "'", "No URL", "48")
+    }
+    
+    static ActionRead(name, capture) {
+        content := this.BuildContent(capture)
+        title := capture.Has("title") ? capture["title"] : name
+        MsgBox(content, "📖 " title, "0")
+    }
+    
+    static ActionShort(name, capture) {
+        ; Paste exactly what's in the short field - nothing added
+        if (capture.Has("short") && capture["short"] != "") {
+            A_Clipboard := capture["short"]
+            ClipWait(1)
+            SendInput("^v")
+        } else {
+            ; No short version - notify user
+            TrayTip("No short version saved for '" name "'`nEdit capture to add one.", "No Short Version", "2")
+        }
+    }
+    
+    static ActionFacebook(name, capture) {
+        hasShort := capture.Has("short") && capture["short"] != ""
+        content := this.BuildContent(capture)
+        A_Clipboard := content
+        
+        url := capture.Has("url") ? capture["url"] : ""
+        ; Only use sharer URL if NOT using short version
+        if (!hasShort && url != "") {
+            shareURL := "https://www.facebook.com/sharer/sharer.php?u=" . this.URLEncode(url)
+            Run(shareURL)
+        } else {
+            Run("https://www.facebook.com/")
+        }
+        
+        TrayTip("Content copied! Paste with Ctrl+V", "Facebook Share", "1")
+    }
+    
+    static ActionTwitter(name, capture) {
+        ; Check if using short version (already contains URL if needed)
+        hasShort := capture.Has("short") && capture["short"] != ""
+        content := this.BuildContent(capture)
+        url := capture.Has("url") ? capture["url"] : ""
+        
+        ; Check character limit
+        tweetText := content
+        if (StrLen(tweetText) > this.LIMIT_TWITTER - 25)  ; Leave room for URL
+            tweetText := SubStr(tweetText, 1, this.LIMIT_TWITTER - 28) . "..."
+        
+        shareURL := "https://twitter.com/intent/tweet?"
+        if (tweetText != "")
+            shareURL .= "text=" . this.URLEncode(tweetText)
+        
+        ; Only add URL parameter if NOT using short version (short already has URL if needed)
+        if (!hasShort && url != "")
+            shareURL .= "&url=" . this.URLEncode(url)
+        
+        Run(shareURL)
+    }
+    
+    static ActionBluesky(name, capture) {
+        ; Check if short version exists first
+        if (capture.Has("short") && capture["short"] != "") {
+            ; Use short version directly - no warning needed
+            content := capture["short"]
+            A_Clipboard := content
+            ClipWait(1)
+            SendInput("^v")
+            TrayTip("Short version pasted (" StrLen(content) "/" this.LIMIT_BLUESKY " chars)", "Bluesky", "1")
+            return
+        }
+        
+        ; Build full content
+        content := this.BuildContent(capture)
+        charCount := StrLen(content)
+        
+        ; If under limit, just paste
+        if (charCount <= this.LIMIT_BLUESKY) {
+            A_Clipboard := content
+            ClipWait(1)
+            SendInput("^v")
+            TrayTip("Content pasted (" charCount "/" this.LIMIT_BLUESKY " chars)", "Bluesky", "1")
+            return
+        }
+        
+        ; OVER LIMIT - Show warning/edit dialog
+        this.ShowSocialEditDialog(name, capture, "Bluesky", this.LIMIT_BLUESKY, content)
+    }
+    
+    ; Generic social media edit dialog for over-limit content
+    static ShowSocialEditDialog(name, capture, platform, charLimit, content) {
+        charCount := StrLen(content)
+        
+        editGui := Gui("+AlwaysOnTop", "⚠️ " platform " - Over Character Limit")
+        editGui.SetFont("s10")
+        editGui.BackColor := "FFFFF0"
+        
+        ; Warning header
+        editGui.SetFont("s11 cCC0000 bold")
+        editGui.Add("Text", "x15 y10 w450", "⚠️ Content exceeds " platform "'s " charLimit " character limit!")
+        editGui.SetFont("s10 c000000 norm")
+        editGui.Add("Text", "x15 y35 w450", "Current: " charCount " chars (over by " (charCount - charLimit) ")")
+        
+        ; Editable content
+        editGui.Add("Text", "x15 y60 w450", "Edit your content below:")
+        contentEdit := editGui.Add("Edit", "x15 y80 w450 h150 Multi vEditContent", content)
+        
+        ; Live character counter
+        counterColor := "CC0000"
+        editGui.Add("Text", "x15 y235 w200 vCharCounter c" counterColor, charCount "/" charLimit " chars")
+        
+        ; Update counter on change
+        contentEdit.OnEvent("Change", (*) => this.UpdateCharCounter(editGui, charLimit))
+        
+        ; Buttons
+        editGui.Add("Button", "x15 y260 w100 h30", "✂️ Auto-Trim").OnEvent("Click", (*) => this.AutoTrimContent(editGui, capture, charLimit))
+        
+        saveCheck := editGui.Add("Checkbox", "x130 y265 w180 vSaveShort", "Save as Short Version")
+        
+        editGui.Add("Button", "x320 y260 w70 h30 Default", "Share").OnEvent("Click", (*) => this.DoSocialShare(editGui, name, platform, charLimit))
+        editGui.Add("Button", "x395 y260 w70 h30", "Cancel").OnEvent("Click", (*) => editGui.Destroy())
+        
+        editGui.OnEvent("Escape", (*) => editGui.Destroy())
+        editGui.Show("w480 h305")
+    }
+    
+    static UpdateCharCounter(gui, limit) {
+        try {
+            content := gui["EditContent"].Value
+            count := StrLen(content)
+            color := count <= limit ? "008800" : "CC0000"
+            gui["CharCounter"].Value := count "/" limit " chars"
+            ; Can't change color dynamically easily, but the text updates
+        }
+    }
+    
+    static AutoTrimContent(gui, capture, limit) {
+        ; Get URL to preserve
+        url := capture.Has("url") ? capture["url"] : ""
+        urlLen := StrLen(url)
+        
+        ; Start with title + URL if they fit
+        title := capture.Has("title") ? capture["title"] : ""
+        
+        if (url != "" && urlLen + StrLen(title) + 2 <= limit) {
+            ; Title + newline + URL fits
+            gui["EditContent"].Value := title "`n" url
+        } else if (url != "" && urlLen + 50 <= limit) {
+            ; Truncate title to fit with URL
+            maxTitleLen := limit - urlLen - 5  ; Leave room for newline and "..."
+            if (StrLen(title) > maxTitleLen)
+                title := SubStr(title, 1, maxTitleLen) "..."
+            gui["EditContent"].Value := title "`n" url
+        } else if (url != "") {
+            ; Just URL
+            gui["EditContent"].Value := url
+        } else {
+            ; No URL, truncate content
+            content := gui["EditContent"].Value
+            gui["EditContent"].Value := SubStr(content, 1, limit - 3) "..."
+        }
+        
+        this.UpdateCharCounter(gui, limit)
+    }
+    
+    static DoSocialShare(gui, name, platform, limit) {
+        saved := gui.Submit()
+        content := saved.EditContent
+        saveShort := saved.SaveShort
+        
+        ; Final check
+        if (StrLen(content) > limit) {
+            result := MsgBox("Content is still " StrLen(content) " chars (limit: " limit ").`n`nShare anyway (will be truncated)?", "Still Over Limit", "YesNo Icon!")
+            if (result = "No")
+                return
+            content := SubStr(content, 1, limit - 3) "..."
+        }
+        
+        ; Save as short version if checked
+        if (saveShort) {
+            global CaptureData
+            if (CaptureData.Has(StrLower(name))) {
+                CaptureData[StrLower(name)]["short"] := content
+                if IsSet(CC_SaveCaptureData)
+                    CC_SaveCaptureData()
+                TrayTip("Short version saved for future use!", name, "1")
+            }
+        }
+        
+        ; Paste the content
         A_Clipboard := content
         ClipWait(1)
+        SendInput("^v")
         
-        urls := Map(
-            "facebook", "https://www.facebook.com/",
-            "twitter", "https://twitter.com/compose/tweet",
-            "bluesky", "https://bsky.app/",
-            "linkedin", "https://www.linkedin.com/feed/",
-            "mastodon", "https://mastodon.social/"
-        )
+        gui.Destroy()
+    }
+    
+    static ActionLinkedIn(name, capture) {
+        hasShort := capture.Has("short") && capture["short"] != ""
+        content := this.BuildContent(capture)
+        url := capture.Has("url") ? capture["url"] : ""
         
-        if (urls.Has(platform)) {
-            try Run(urls[platform])
-            TrayTip("Content copied! Paste with Ctrl+V", platform . " Share", "1")
+        A_Clipboard := content
+        
+        ; Only use share URL if NOT using short version
+        if (!hasShort && url != "") {
+            shareURL := "https://www.linkedin.com/sharing/share-offsite/?url=" . this.URLEncode(url)
+            Run(shareURL)
+        } else {
+            Run("https://www.linkedin.com/feed/")
         }
+        
+        TrayTip("Content copied! Paste with Ctrl+V", "LinkedIn Share", "1")
+    }
+    
+    static ActionMastodon(name, capture) {
+        content := this.BuildContent(capture)
+        
+        if (StrLen(content) > this.LIMIT_MASTODON)
+            content := SubStr(content, 1, this.LIMIT_MASTODON - 3) . "..."
+        
+        A_Clipboard := content
+        TrayTip("Content copied! Paste into your Mastodon instance", "Mastodon Share", "1")
+    }
+    
+    ; ==== UTILITY FUNCTIONS ====
+    static URLEncode(str) {
+        encoded := ""
+        for i, char in StrSplit(str) {
+            if RegExMatch(char, "[a-zA-Z0-9_.-]")
+                encoded .= char
+            else if (char = " ")
+                encoded .= "+"
+            else
+                encoded .= "%" Format("{:02X}", Ord(char))
+        }
+        return encoded
     }
 }
