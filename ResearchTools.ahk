@@ -134,8 +134,7 @@ class ResearchTools {
         this.CurrentTool := "YouTube Transcript"
         
         ; Copy URL to clipboard for easy pasting
-        A_Clipboard := url
-        ClipWait(1)
+        CC_SafeCopy(url)
         
         ; Open transcript site
         Run("https://youtubetotranscript.com/")

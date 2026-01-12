@@ -3,6 +3,14 @@
 ; ==============================================================================
 ; DynamicSuffixHandler.ahk - Dynamic Suffix Detection for ContentCapture Pro
 ; ==============================================================================
+; Version:     2.0
+; Updated:     2026-01-13
+;
+; CHANGELOG v2.0:
+;   - Fixed all clipboard operations to use CC_SafePaste/CC_SafeCopy
+;   - Clipboard is now properly cleared before setting content
+;   - User's original clipboard is preserved and restored
+;
 ; Monitors typing and intercepts suffix patterns dynamically instead of
 ; generating thousands of separate hotstring entries.
 ;
@@ -288,9 +296,7 @@ class DynamicSuffixHandler {
     static ActionShort(name, capture) {
         ; Paste exactly what's in the short field - nothing added
         if (capture.Has("short") && capture["short"] != "") {
-            A_Clipboard := capture["short"]
-            ClipWait(1)
-            SendInput("^v")
+            CC_SafePaste(capture["short"])
         } else {
             ; No short version - notify user
             TrayTip("No short version saved for '" name "'`nEdit capture to add one.", "No Short Version", "2")
@@ -300,7 +306,7 @@ class DynamicSuffixHandler {
     static ActionFacebook(name, capture) {
         hasShort := capture.Has("short") && capture["short"] != ""
         content := this.BuildContent(capture)
-        A_Clipboard := content
+        CC_SafeCopy(content)
         
         url := capture.Has("url") ? capture["url"] : ""
         ; Only use sharer URL if NOT using short version
@@ -341,9 +347,7 @@ class DynamicSuffixHandler {
         if (capture.Has("short") && capture["short"] != "") {
             ; Use short version directly - no warning needed
             content := capture["short"]
-            A_Clipboard := content
-            ClipWait(1)
-            SendInput("^v")
+            CC_SafePaste(content)
             TrayTip("Short version pasted (" StrLen(content) "/" this.LIMIT_BLUESKY " chars)", "Bluesky", "1")
             return
         }
@@ -354,9 +358,7 @@ class DynamicSuffixHandler {
         
         ; If under limit, just paste
         if (charCount <= this.LIMIT_BLUESKY) {
-            A_Clipboard := content
-            ClipWait(1)
-            SendInput("^v")
+            CC_SafePaste(content)
             TrayTip("Content pasted (" charCount "/" this.LIMIT_BLUESKY " chars)", "Bluesky", "1")
             return
         }
@@ -465,12 +467,9 @@ class DynamicSuffixHandler {
             }
         }
         
-        ; Paste the content
-        A_Clipboard := content
-        ClipWait(1)
-        SendInput("^v")
-        
+        ; Paste the content using safe paste
         gui.Destroy()
+        CC_SafePaste(content)
     }
     
     static ActionLinkedIn(name, capture) {
@@ -478,7 +477,7 @@ class DynamicSuffixHandler {
         content := this.BuildContent(capture)
         url := capture.Has("url") ? capture["url"] : ""
         
-        A_Clipboard := content
+        CC_SafeCopy(content)
         
         ; Only use share URL if NOT using short version
         if (!hasShort && url != "") {
@@ -497,7 +496,7 @@ class DynamicSuffixHandler {
         if (StrLen(content) > this.LIMIT_MASTODON)
             content := SubStr(content, 1, this.LIMIT_MASTODON - 3) . "..."
         
-        A_Clipboard := content
+        CC_SafeCopy(content)
         TrayTip("Content copied! Paste into your Mastodon instance", "Mastodon Share", "1")
     }
     

@@ -2,9 +2,14 @@
 ; ContentCapture Pro - Professional Content Capture & Sharing System
 ; ==============================================================================
 ; Author:      Brad
-; Version:     5.1 (AHK v2)
-; Updated:     2025-01-04
+; Version:     5.2 (AHK v2)
+; Updated:     2026-01-13
 ; License:     MIT
+;
+; CHANGELOG v5.2:
+;   - Fixed clipboard reliability issues (clear before set, proper timeout)
+;   - Added CC_SafePaste, CC_SafeCopy helper functions
+;   - All paste operations now use safe clipboard handling
 ;
 ; NOTE: This file is designed to be #Included from a launcher script.
 ;       Do NOT add #Requires or #SingleInstance here!
@@ -1208,13 +1213,104 @@ CC_UnescapeJSON(str) {
 }
 
 CC_TypeText(text) {
-    ; Type the text using SendInput
-    oldClip := A_Clipboard
-    A_Clipboard := text
+    ; Type the text using clipboard - with safe handling
+    CC_SafePaste(text)
+}
+
+; ==============================================================================
+; SAFE CLIPBOARD HELPER FUNCTIONS
+; ==============================================================================
+; These functions ensure clipboard operations work reliably by:
+; 1. Clearing the clipboard before setting new content
+; 2. Waiting for the clipboard to be ready (with timeout)
+; 3. Saving and restoring the user's original clipboard
+; 4. Providing error feedback if something fails
+; ==============================================================================
+
+; ------------------------------------------------------------------------------
+; CC_SafePaste(content, timeout)
+; ------------------------------------------------------------------------------
+; Safely paste content while preserving the user's original clipboard.
+; RETURNS: true on success, false on failure
+; ------------------------------------------------------------------------------
+CC_SafePaste(content, timeout := 2) {
+    ; Save original clipboard (ClipboardAll preserves all formats)
+    savedClip := ClipboardAll()
+    
+    ; Clear clipboard completely first - THIS IS THE KEY FIX
+    A_Clipboard := ""
     Sleep(50)
-    Send("^v")
-    Sleep(100)
-    A_Clipboard := oldClip
+    
+    ; Set new content
+    A_Clipboard := content
+    
+    ; Wait for clipboard to be ready - check return value
+    if !ClipWait(timeout) {
+        ; Failed - restore original and notify user
+        A_Clipboard := savedClip
+        TrayTip("Clipboard operation failed - try again", "Error", "2")
+        return false
+    }
+    
+    ; Paste
+    SendInput("^v")
+    Sleep(150)
+    
+    ; Restore original clipboard
+    A_Clipboard := savedClip
+    return true
+}
+
+; ------------------------------------------------------------------------------
+; CC_SafeCopy(content, timeout)
+; ------------------------------------------------------------------------------
+; Safely copy content to clipboard (does NOT paste, does NOT restore).
+; Use this when you want to put something on the clipboard for the user.
+; RETURNS: true on success, false on failure
+; ------------------------------------------------------------------------------
+CC_SafeCopy(content, timeout := 2) {
+    ; Clear clipboard completely first
+    A_Clipboard := ""
+    Sleep(50)
+    
+    ; Set new content
+    A_Clipboard := content
+    
+    ; Wait for clipboard to be ready
+    if !ClipWait(timeout) {
+        TrayTip("Failed to copy to clipboard", "Error", "2")
+        return false
+    }
+    
+    return true
+}
+
+; ------------------------------------------------------------------------------
+; CC_SafePasteNoRestore(content, timeout)
+; ------------------------------------------------------------------------------
+; Paste content but don't restore the original clipboard.
+; Use this when you WANT the content to stay on the clipboard after pasting.
+; RETURNS: true on success, false on failure
+; ------------------------------------------------------------------------------
+CC_SafePasteNoRestore(content, timeout := 2) {
+    ; Clear clipboard completely first
+    A_Clipboard := ""
+    Sleep(50)
+    
+    ; Set new content
+    A_Clipboard := content
+    
+    ; Wait for clipboard to be ready
+    if !ClipWait(timeout) {
+        TrayTip("Clipboard operation failed - try again", "Error", "2")
+        return false
+    }
+    
+    ; Paste
+    SendInput("^v")
+    Sleep(150)
+    
+    return true
 }
 
 ; ==============================================================================
@@ -1805,25 +1901,14 @@ CC_GetCaptureURL(name) {
 CC_HotstringPaste(name, *) {
     global CaptureData
     
-    ; === SAVE ORIGINAL CLIPBOARD ===
-    savedClip := ClipboardAll()
-    
     ; Get full content - always paste full content regardless of platform
     content := CC_GetCaptureContent(name)
     if (content = "") {
-        A_Clipboard := savedClip  ; Restore even on failure
-        savedClip := ""
         return
     }
 
-    A_Clipboard := content
-    ClipWait(1)
-    SendInput("^v")
-    Sleep(300)  ; Wait for paste to complete
-    
-    ; === RESTORE ORIGINAL CLIPBOARD ===
-    A_Clipboard := savedClip
-    savedClip := ""  ; Free memory
+    ; Use safe paste - handles clipboard save/restore internally
+    CC_SafePaste(content)
     
     ; Show tip for new users
     CCHelp.TipAfterFirstHotstring()
@@ -1897,9 +1982,6 @@ CC_SocialEditUpdateCounter(ctrl, *) {
 CC_SocialEditDoPaste(ctrl, *) {
     editGui := ctrl.Gui
     
-    ; === SAVE ORIGINAL CLIPBOARD ===
-    savedClip := ClipboardAll()
-    
     ; Get values BEFORE destroying GUI
     editedContent := editGui.contentEdit.Value
     saveName := editGui.captureName
@@ -1914,8 +1996,6 @@ CC_SocialEditDoPaste(ctrl, *) {
     if (editedLen > charLimit) {
         result := MsgBox("Content still exceeds " siteName " limit by " (editedLen - charLimit) " chars.`n`nPaste anyway?", "Over Limit", "YesNo 48")
         if (result = "No") {
-            A_Clipboard := savedClip  ; Restore on cancel
-            savedClip := ""
             return
         }
     }
@@ -1930,15 +2010,8 @@ CC_SocialEditDoPaste(ctrl, *) {
     ; Small delay to let GUI close and focus return
     Sleep(150)
     
-    ; Paste the content
-    A_Clipboard := editedContent
-    ClipWait(1)
-    SendInput("^v")
-    Sleep(300)  ; Wait for paste to complete
-    
-    ; === RESTORE ORIGINAL CLIPBOARD ===
-    A_Clipboard := savedClip
-    savedClip := ""  ; Free memory
+    ; Paste the content using safe paste
+    CC_SafePaste(editedContent)
     
     ; Show confirmation if saved
     if (saveShort)
@@ -1975,9 +2048,9 @@ CC_HotstringCopy(name, *) {
     if (content = "")
         return
 
-    A_Clipboard := content
-    ClipWait(1)
-    TrayTip("Content copied to clipboard!", name, "1")
+    ; Use safe copy - user wants this on clipboard, so don't restore
+    if CC_SafeCopy(content)
+        TrayTip("Content copied to clipboard!", name, "1")
 }
 
 CC_HotstringGo(name, *) {
@@ -1998,9 +2071,7 @@ CC_HotstringShort(name, *) {
     
     ; Paste exactly what's in the short field - nothing added
     if (cap.Has("short") && cap["short"] != "") {
-        A_Clipboard := cap["short"]
-        ClipWait(1)
-        SendInput("^v")
+        CC_SafePaste(cap["short"])
     } else {
         TrayTip("No short version saved for '" name "'`nEdit capture (namevi) to add one.", "No Short Version", "2")
     }
@@ -3807,23 +3878,12 @@ CC_BrowserPasteSelected(listView, browserGui) {
     
     name := listView.GetText(row, 2)  ; Get the capture name
     
-    ; === SAVE ORIGINAL CLIPBOARD (binary format) ===
-    savedClip := ClipboardAll()
-    
     ; Get the content and paste it
     cap := CaptureData.Get(name, "")
     if (cap && cap.Has("content")) {
-        A_Clipboard := cap["content"]
-        ClipWait(1)
         browserGui.Minimize()
         Sleep(100)
-        Send("^v")
-        Sleep(300)
-        
-        ; === RESTORE ORIGINAL CLIPBOARD ===
-        ; Must use A_Clipboard for ClipboardAll data (binary)
-        A_Clipboard := savedClip
-        savedClip := ""  ; Free the memory
+        CC_SafePaste(cap["content"])
     }
 }
 
@@ -6389,12 +6449,19 @@ CC_CopyCleanPaste() {
 
     cleanText := CC_CleanContent(A_Clipboard)
 
+    ; Clear and set clipboard properly
+    A_Clipboard := ""
+    Sleep(50)
     A_Clipboard := cleanText
-    ClipWait(1)
+    if !ClipWait(2) {
+        A_Clipboard := oldClip
+        TrayTip("Clipboard failed", "Error", "2")
+        return
+    }
     Sleep(100)
     Send("^v")
 
-    Sleep(500)
+    Sleep(300)
     A_Clipboard := oldClip
 }
 

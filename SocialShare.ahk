@@ -104,9 +104,8 @@ SS_ShareCapture(captureName, platform := "") {
         }
     }
     
-    ; Copy content to clipboard
-    A_Clipboard := content
-    ClipWait(1)
+    ; Copy content to clipboard using safe method
+    CC_SafeCopy(content)
     
     ; Handle image if present
     if (hasImage && imagePath != "" && FileExist(imagePath)) {
@@ -361,9 +360,7 @@ SS_URLEncode(str) {
 ^!v:: {
     global SS_PendingText
     if IsSet(SS_PendingText) && SS_PendingText != "" {
-        A_Clipboard := SS_PendingText
-        ClipWait(1)
-        Send("^v")
+        CC_SafePaste(SS_PendingText)
         SS_PendingText := ""
     }
 }
