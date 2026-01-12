@@ -1,14 +1,17 @@
 # ============================================================================
-# ContentCapture Pro - PowerShell Installer v2.1
+# ContentCapture Pro - PowerShell Installer v2.2
 # ============================================================================
-# Fixed: AutoHotkey v2 silent install (uses /silent not /S)
+# Fixed: Installs to LOCAL Documents, not OneDrive
 # ============================================================================
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName PresentationFramework
 
 $AppName = "ContentCapture Pro"
-$InstallFolder = Join-Path ([Environment]::GetFolderPath('MyDocuments')) "ContentCapture Pro"
+
+# Use LOCAL Documents folder, NOT OneDrive
+# $env:USERPROFILE\Documents is always local
+$InstallFolder = Join-Path $env:USERPROFILE "Documents\ContentCapture Pro"
 
 $RequiredFiles = @("ContentCapture-Pro.ahk", "DynamicSuffixHandler.ahk")
 $OptionalFiles = @(
@@ -124,8 +127,6 @@ function Install-AutoHotkey {
     
     if (-not (Test-Path $installerPath)) { Write-Fail "Installer not found"; return $null }
     
-    # AutoHotkey v2 installer - just run it normally and let user click through
-    # The /S and /silent flags don't work reliably with AHK v2 installer
     Write-Host "  Launching AutoHotkey installer..." -ForegroundColor Yellow
     Write-Host "  Please follow the installation prompts." -ForegroundColor Yellow
     
@@ -187,7 +188,7 @@ function Install-ContentCaptureFiles {
 
 Clear-Host
 Write-Host "`n  ============================================================" -ForegroundColor Cyan
-Write-Host "     CONTENTCAPTURE PRO - INSTALLER v2.1" -ForegroundColor White
+Write-Host "     CONTENTCAPTURE PRO - INSTALLER v2.2" -ForegroundColor White
 Write-Host "  ============================================================" -ForegroundColor Cyan
 
 $SourceDir = $PSScriptRoot

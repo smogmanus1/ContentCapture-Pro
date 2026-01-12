@@ -1,5 +1,5 @@
 @echo off
-:: ContentCapture Pro Installer Launcher v2.1
+:: ContentCapture Pro Installer Launcher v2.2
 
 echo.
 echo  Starting ContentCapture Pro Installer...
