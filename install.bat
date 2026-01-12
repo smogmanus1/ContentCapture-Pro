@@ -1,6 +1,5 @@
 @echo off
-:: ContentCapture Pro Installer Launcher v2.0
-:: This launches the PowerShell installer
+:: ContentCapture Pro Installer Launcher v2.1
 
 echo.
 echo  Starting ContentCapture Pro Installer...
@@ -10,8 +9,8 @@ powershell -ExecutionPolicy Bypass -NoProfile -File "%~dp0Install-ContentCapture
 
 if %errorlevel% neq 0 (
     echo.
-    echo  Installation encountered an issue.
-    echo  Try right-clicking install.bat and select "Run as administrator"
+    echo  If you see errors, try right-clicking install.bat
+    echo  and selecting "Run as administrator"
     echo.
     pause
 )
