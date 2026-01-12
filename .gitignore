@@ -1,0 +1,30 @@
+# User data - never commit personal captures
+captures.dat
+capture_index.txt
+config.ini
+
+# Generated files
+ContentCapture_Generated.ahk
+
+# Backup files
+*.backup-*
+backups/
+archive/
+
+# Logs
+*.log
+contentcapture_log.txt
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# macOS
+.DS_Store
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
