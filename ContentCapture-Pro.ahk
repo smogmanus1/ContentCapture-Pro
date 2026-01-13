@@ -2,9 +2,14 @@
 ; ContentCapture Pro - Professional Content Capture & Sharing System
 ; ==============================================================================
 ; Author:      Brad
-; Version:     5.2 (AHK v2)
+; Version:     5.3 (AHK v2)
 ; Updated:     2026-01-13
 ; License:     MIT
+;
+; CHANGELOG v5.3:
+;   - Fixed paste truncation for large content (5000+ chars)
+;   - CC_SafePaste now scales delay based on content length
+;   - Prevents clipboard restore from interrupting long pastes
 ;
 ; CHANGELOG v5.2:
 ;   - Fixed clipboard reliability issues (clear before set, proper timeout)
@@ -1264,7 +1269,14 @@ CC_SafePaste(content, timeout := 2) {
     
     ; Paste
     SendInput("^v")
-    Sleep(350)
+    
+    ; CRITICAL: Wait for paste to complete BEFORE restoring clipboard
+    ; Scale delay based on content length - longer content needs more time
+    ; Base: 400ms + ~100ms per 1000 chars (minimum 400ms, maximum 2000ms)
+    contentLen := StrLen(content)
+    pasteDelay := 400 + (contentLen // 10)  ; ~100ms per 1000 chars
+    pasteDelay := Min(pasteDelay, 2000)      ; Cap at 2 seconds
+    Sleep(pasteDelay)
     
     ; Restore original clipboard
     A_Clipboard := savedClip
@@ -1318,7 +1330,12 @@ CC_SafePasteNoRestore(content, timeout := 2) {
     
     ; Paste
     SendInput("^v")
-    Sleep(150)
+    
+    ; Wait for paste to complete - scale by content length
+    contentLen := StrLen(content)
+    pasteDelay := 300 + (contentLen // 10)  ; ~100ms per 1000 chars
+    pasteDelay := Min(pasteDelay, 1500)      ; Cap at 1.5 seconds
+    Sleep(pasteDelay)
     
     return true
 }
