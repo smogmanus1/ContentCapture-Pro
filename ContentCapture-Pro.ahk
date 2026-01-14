@@ -35,7 +35,7 @@
 ; ==============================================================================
 ;
 ; 🚀 INSTANT CAPTURE
-;    • Press Ctrl+Alt+P on any webpage to capture URL, title, and content
+;    • Press Ctrl+Alt+G on any webpage to capture URL, title, and content
 ;    • Highlight text before capturing to save specific excerpts
 ;    • Add tags, notes, and your personal opinion/commentary
 ;    • Works with Chrome, Firefox, Edge, Brave, and most browsers
@@ -127,7 +127,7 @@
 ;
 ; 1. Run the script — first launch opens Setup wizard
 ; 2. Go to any webpage you want to save
-; 3. Press Ctrl+Alt+P
+; 3. Press Ctrl+Alt+G
 ; 4. Give it a short name like "recipe" or "article"
 ; 5. Now type ::recipe:: anywhere to paste it!
 ;
@@ -186,7 +186,7 @@
 ; ==============================================================================
 ;
 ; CAPTURE & CREATE
-;   Ctrl+Alt+P         Capture current webpage (highlight text first for excerpt)
+;   Ctrl+Alt+G         Capture current webpage (highlight text first for excerpt)
 ;   Ctrl+Alt+N         Manual capture (no browser needed)
 ;   Ctrl+Alt+F         Format selected text into a new capture
 ;
@@ -478,7 +478,7 @@ if (CCHelp.ShouldShowTutorial()) {
 ^!Space:: CC_QuickSearch()
 ^!a:: CC_AIAssistMenu()
 ^!m:: CC_ShowMainMenu()
-^!p:: CC_CaptureContent()
+^!g:: CC_CaptureContent()
 ^!n:: CC_ManualCapture()
 ^!b:: CC_OpenCaptureBrowser()
 ^!+b:: CC_OpenRestoreBrowser()
@@ -984,7 +984,7 @@ CC_AIAction(action, target) {
     if (target = "last") {
         ; Use last captured content
         if (LastCapturedBody = "") {
-            MsgBox("No recent capture found.`n`nCapture something first with Ctrl+Alt+P", "No Content", "Icon!")
+            MsgBox("No recent capture found.`n`nCapture something first with Ctrl+Alt+G", "No Content", "Icon!")
             return
         }
         content := LastCapturedBody
@@ -1355,7 +1355,7 @@ CC_SetupTrayMenu() {
     ; Quick actions
     A_TrayMenu.Add("🔍 Quick Search`tCtrl+Alt+Space", (*) => CC_QuickSearch())
     A_TrayMenu.Add("🤖 AI Assist`tCtrl+Alt+A", (*) => CC_AIAssistMenu())
-    A_TrayMenu.Add("📷 Capture Webpage`tCtrl+Alt+P", (*) => CC_CaptureContent())
+    A_TrayMenu.Add("📷 Capture Webpage`tCtrl+Alt+G", (*) => CC_CaptureContent())
     A_TrayMenu.Add("📝 Manual Capture`tCtrl+Alt+N", (*) => CC_ManualCapture())
     A_TrayMenu.Add("🔎 Browse All`tCtrl+Alt+B", (*) => CC_OpenCaptureBrowser())
     A_TrayMenu.Add()
@@ -2386,7 +2386,7 @@ CC_FinishSetup(setupGui, pathEdit, cbEmail, cbFacebook, cbTwitter, cbBluesky) {
 
     setupGui.Destroy()
 
-    TrayTip("Setup complete!`n`nPress Ctrl+Alt+P to capture.", "ContentCapture Pro", "1")
+    TrayTip("Setup complete!`n`nPress Ctrl+Alt+G to capture.", "ContentCapture Pro", "1")
 }
 
 CC_SaveConfig() {
@@ -3765,7 +3765,7 @@ CC_OpenCaptureBrowser() {
     } 
     
     if (CaptureNames.Length = 0) {
-        MsgBox("No captures yet.`n`nUse Ctrl+Alt+P to capture content.", "Capture Browser", "48")
+        MsgBox("No captures yet.`n`nUse Ctrl+Alt+G to capture content.", "Capture Browser", "48")
         return
     }
 
@@ -6545,7 +6545,7 @@ CC_ShowQuickHelp(isStartup := false) {
 
     commands := [
         ["Ctrl+Alt+M", "Show menu"],
-        ["Ctrl+Alt+P", "Capture webpage"],
+        ["Ctrl+Alt+G", "Capture webpage"],
         ["Ctrl+Alt+B", "Browse captures"],
         ["Ctrl+Alt+L", "Reload script"]
     ]
@@ -6818,7 +6818,7 @@ class CCHelp {
         tutGui.SetFont("s11 norm")
         tutGui.Add("Text", "w450 y+15", "1. Go to any webpage in your browser")
         tutGui.Add("Text", "w450 y+5", "2. Highlight text you want to save (optional)")
-        tutGui.Add("Text", "w450 y+5", "3. Press  Ctrl + Alt + P")
+        tutGui.Add("Text", "w450 y+5", "3. Press  Ctrl + Alt + G")
         tutGui.Add("Text", "w450 y+5", "4. Give it a short name like 'recipe' or 'article'")
         
         tutGui.SetFont("s10 c666666")
@@ -6904,7 +6904,7 @@ class CCHelp {
         
         MsgBox("You're all set! 🎉`n`n"
             . "Quick reference:`n"
-            . "• Ctrl+Alt+P → Capture webpage`n"
+            . "• Ctrl+Alt+G → Capture webpage`n"
             . "• Ctrl+Alt+B → Browse captures`n"
             . "• Ctrl+Alt+Space → Quick search`n"
             . "• Ctrl+Alt+F12 → Show help`n`n"
@@ -6976,7 +6976,7 @@ class CCHelp {
         helpGui.SetFont("s10 norm")
         
         shortcuts := [
-            ["Ctrl+Alt+P", "Capture current webpage"],
+            ["Ctrl+Alt+G", "Capture current webpage"],
             ["Ctrl+Alt+B", "Browse all captures"],
             ["Ctrl+Alt+Shift+B", "Restore from backup"],
             ["Ctrl+Alt+Space", "Quick search"],
