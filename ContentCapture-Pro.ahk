@@ -2,9 +2,14 @@
 ; ContentCapture Pro - Professional Content Capture & Sharing System
 ; ==============================================================================
 ; Author:      Brad
-; Version:     5.3 (AHK v2)
-; Updated:     2026-01-13
+; Version:     5.4 (AHK v2)
+; Updated:     2026-01-14
 ; License:     MIT
+;
+; CHANGELOG v5.4:
+;   - Added "oi" suffix for Outlook Insert at cursor
+;   - ::nameoi:: inserts content into OPEN Outlook email at cursor position
+;   - Works in replies and compose windows (vs "em" which creates NEW email)
 ;
 ; CHANGELOG v5.3:
 ;   - Fixed paste truncation for large content (5000+ chars)
@@ -63,6 +68,7 @@
 ;    • ::name?::    → Show action menu with all options
 ;    • ::namego::   → Open the original URL in browser
 ;    • ::nameem::   → Create Outlook email with content
+;    • ::nameoi::   → Insert into open Outlook email at cursor
 ;    • ::nameed::   → Create email with document attached
 ;    • ::named.::   → Open attached document
 ;    • ::namepr::   → Print formatted record
@@ -1340,6 +1346,76 @@ CC_SafePasteNoRestore(content, timeout := 2) {
     return true
 }
 
+; ------------------------------------------------------------------------------
+; CC_OutlookInsertAtCursor(content)
+; ------------------------------------------------------------------------------
+; Insert text into an open Outlook compose/reply window at the cursor position.
+; Uses WordEditor for reliable plain-text insertion with proper line breaks.
+; Use with the "oi" suffix: ::nameoi:: → insert into open email at cursor
+; RETURNS: true on success, false on failure
+; ------------------------------------------------------------------------------
+CC_OutlookInsertAtCursor(content) {
+    if (content = "") {
+        SoundBeep(900, 120)
+        return false
+    }
+    
+    ; Normalize line breaks for Word paragraphs
+    t := content
+    t := StrReplace(t, "`r`n", "`n")
+    t := StrReplace(t, "`r", "`n")
+    t := StrReplace(t, "`n", "`r")
+    
+    ; Try to connect to running Outlook
+    ol := ""
+    try {
+        ol := ComObjActive("Outlook.Application")
+    } catch {
+        try {
+            ol := ComObject("Outlook.Application")
+        } catch as e {
+            MsgBox("Outlook COM connection failed`r`n`r`n" .
+                   "1) Make sure Outlook is running.`r`n" .
+                   "2) Open/reply to an email and click inside the body.`r`n`r`n" .
+                   "Details: " . e.Message,
+                   "ContentCapture Pro - Outlook Insert", 48)
+            return false
+        }
+    }
+    
+    ; Get the active Inspector (compose/reply window)
+    insp := ""
+    try {
+        insp := ol.ActiveInspector
+    } catch {
+        MsgBox("No active Outlook email window detected.`r`n`r`n" .
+               "Open a compose/reply window and click inside the message body.",
+               "ContentCapture Pro - Outlook Insert", 48)
+        return false
+    }
+    
+    if !insp {
+        MsgBox("No active Outlook email window detected.`r`n`r`n" .
+               "Open a compose/reply window and click inside the message body.",
+               "ContentCapture Pro - Outlook Insert", 48)
+        return false
+    }
+    
+    ; Insert text via WordEditor at cursor position
+    try {
+        wd := insp.WordEditor
+        sel := wd.Application.Selection
+        sel.TypeText(t)
+        return true
+    } catch as e {
+        MsgBox("Failed to insert into Outlook body.`r`n`r`n" .
+               "Make sure your cursor is inside the email BODY (not To/Subject).`r`n`r`n" .
+               "Details: " . e.Message,
+               "ContentCapture Pro - Outlook Insert", 48)
+        return false
+    }
+}
+
 ; ==============================================================================
 ; TRAY MENU SETUP
 ; ==============================================================================
@@ -1502,6 +1578,9 @@ CC_GenerateHotstringFile() {
         
         ; Print suffix
         content .= "::" name "pr::{`n    CC_PrintCapture(`"" name "`")`n}`n"
+        
+        ; Outlook Insert suffix (insert at cursor in open email)
+        content .= "::" name "oi::{`n    CC_HotstringOutlookInsert(`"" name "`")`n}`n"
         
         ; Social media suffixes
         content .= "::" name "fb::{`n    CC_HotstringFacebook(`"" name "`")`n}`n"
@@ -2110,6 +2189,14 @@ CC_HotstringEmail(name, *) {
         return
 
     CC_SendOutlookEmail(content)
+}
+
+CC_HotstringOutlookInsert(name, *) {
+    content := CC_GetCaptureContent(name)
+    if (content = "")
+        return
+    
+    CC_OutlookInsertAtCursor(content)
 }
 
 CC_HotstringFacebook(name, *) {
@@ -7007,7 +7094,8 @@ class CCHelp {
             ["::name::", "Paste full content"],
             ["::name?::", "Show action menu"],
             ["::namesh::", "Paste short version only"],
-            ["::nameem::", "Email via Outlook"],
+            ["::nameem::", "Email via Outlook (new)"],
+            ["::nameoi::", "Insert into open email"],
             ["::namego::", "Open URL in browser"],
             ["::namerd::", "Read in popup window"],
             ["::namevi::", "View/Edit capture"]
