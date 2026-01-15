@@ -3542,8 +3542,16 @@ CC_CaptureContent() {
         ytResult := MsgBox("This is a YouTube video.`n`nWould you like to get the TRANSCRIPT first?`n`nThis helps you write better notes/opinions for sharing.`n`nYes = I'll get the transcript`nNo = Continue without transcript", "YouTube Video Detected 🎬", "YesNo")
         
         if (ytResult = "Yes") {
-            ; Show instructions for using YouTube's built-in transcript
-            MsgBox("To get the transcript:`n`n1. Below the video, click '...more' to expand the description`n2. Scroll down and click 'Show transcript'`n3. A transcript panel opens on the right side`n4. Select all text (Ctrl+A) and copy (Ctrl+C)`n`nNote: Not all videos have transcripts available.`n`nClick OK when you have the transcript copied.", "Get YouTube Transcript 📝", "OK Iconi")
+            ; Open working transcript service
+            videoId := CC_GetYouTubeVideoId(url)
+            if (videoId != "") {
+                transcriptUrl := "https://youtubetotranscript.com/transcript?v=" videoId
+                Run(transcriptUrl)
+                
+                MsgBox("Transcript page opened!`n`n1. Wait for transcript to load`n2. Click 'Copy entire transcript' button (bottom left)`n3. Click OK when you have it copied", "Get YouTube Transcript 📝", "OK Iconi")
+            } else {
+                MsgBox("Could not extract video ID.`n`nTry YouTube's built-in transcript:`n1. Click '...more' below the video`n2. Click 'Show transcript'`n3. Select all and copy", "Transcript", "OK Icon!")
+            }
             gotTranscript := true
             
             ; Offer to send to AI for summarization
