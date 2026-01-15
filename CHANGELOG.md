@@ -4,6 +4,24 @@ All notable changes to ContentCapture Pro.
 
 ---
 
+## [5.6] - 2026-01-15
+
+### Added
+- **Quiet Mode** - Toggle in tray menu to suppress success notifications
+  - Right-click system tray icon → "🔇 Quiet Mode"
+  - Errors still show regardless of setting
+  - Setting persists between sessions via config.ini
+- **YouTube Transcript Option** - When capturing a YouTube video, offers to fetch transcript first
+  - Opens transcript extraction tool in browser
+  - Copy relevant parts to use in your notes/opinion
+  - Helps write better social media posts about videos
+
+### Changed
+- All success notifications now respect Quiet Mode setting
+- Startup notification respects Quiet Mode
+
+---
+
 ## [5.4] - 2026-01-14
 
 ### Added

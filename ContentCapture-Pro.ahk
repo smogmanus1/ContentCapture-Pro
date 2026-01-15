@@ -2,9 +2,17 @@
 ; ContentCapture Pro - Professional Content Capture & Sharing System
 ; ==============================================================================
 ; Author:      Brad
-; Version:     5.5 (AHK v2)
-; Updated:     2026-01-14
+; Version:     5.6 (AHK v2)
+; Updated:     2026-01-15
 ; License:     MIT
+;
+; CHANGELOG v5.6:
+;   - Added "Quiet Mode" toggle in tray menu (right-click system tray icon)
+;   - Suppresses success notifications when enabled (errors still show)
+;   - Setting persists between sessions
+;   - Added YouTube transcript guidance during capture
+;   - When capturing a YouTube video, shows how to use YouTube's built-in transcript
+;   - Transcript text can be pasted into Body field for better posts
 ;
 ; CHANGELOG v5.4:
 ;   - Added "oi" suffix for Outlook Insert at cursor
@@ -418,6 +426,9 @@ global AIOllamaURL := "http://localhost:11434"  ; For local Ollama
 ; Help popup setting
 global ShowHelpOnStartup := false  ; Disabled by default now
 
+; Quiet Mode - suppress success notifications
+global QuietMode := 0
+
 ; Document attachment - supported file types
 global CC_SupportedDocTypes := "*.docx;*.doc;*.pdf;*.odt;*.rtf;*.xlsx;*.xls;*.ods;*.pptx;*.ppt;*.txt;*.md"
 
@@ -452,7 +463,7 @@ CC_CheckAutoBackup()
 CC_SetupTrayMenu()
 
 ; Show startup notification
-TrayTip("ContentCapture Pro v4.5 loaded!`n" CaptureNames.Length " captures available.`nSmart paste detects social media limits!", "ContentCapture Pro", "1")
+CC_Notify("ContentCapture Pro v5.6 loaded!`n" CaptureNames.Length " captures available.`nSmart paste detects social media limits!")
 
 ; Check if we should open browser after reload (flag file from edit save)
 openBrowserFlag := BaseDir "\open_browser.flag"
@@ -1495,6 +1506,10 @@ CC_SetupTrayMenu() {
     A_TrayMenu.Add()
     A_TrayMenu.Add("💾 Backup/Restore", (*) => CC_BackupCaptures())
     A_TrayMenu.Add("⚙️ Settings", (*) => CC_RunSetup())
+    A_TrayMenu.Add()
+    A_TrayMenu.Add("🔇 Quiet Mode", CC_ToggleQuietMode)
+    if QuietMode
+        A_TrayMenu.Check("🔇 Quiet Mode")
     A_TrayMenu.Add("🔄 Reload Script", (*) => Reload())
     A_TrayMenu.Add()
     A_TrayMenu.Add("❌ Exit", (*) => ExitApp())
@@ -1553,7 +1568,7 @@ CC_ToggleFavorite(name) {
             Favorites.RemoveAt(i)
             CC_SaveFavorites()
             CC_SetupTrayMenu()  ; Refresh tray menu
-            TrayTip("Removed from favorites", name, "1")
+            CC_Notify("Removed from favorites", name)
             return false
         }
     }
@@ -1562,7 +1577,7 @@ CC_ToggleFavorite(name) {
     Favorites.Push(name)
     CC_SaveFavorites()
     CC_SetupTrayMenu()  ; Refresh tray menu
-    TrayTip("Added to favorites ⭐", name, "1")
+    CC_Notify("Added to favorites ⭐", name)
     return true
 }
 
@@ -1577,6 +1592,42 @@ CC_IsFavorite(name) {
 
 ; Load favorites at startup
 CC_LoadFavorites()
+
+; ==============================================================================
+; QUIET MODE - Suppress Success Notifications
+; ==============================================================================
+; Toggle via tray menu or set in config.ini
+; Errors always show regardless of setting
+
+CC_ToggleQuietMode(*) {
+    global QuietMode, ConfigFile
+    
+    QuietMode := !QuietMode
+    
+    ; Save to config file
+    IniWrite(QuietMode, ConfigFile, "General", "QuietMode")
+    
+    ; Update menu checkmark
+    if QuietMode {
+        A_TrayMenu.Check("🔇 Quiet Mode")
+        TrayTip("Notifications disabled", "ContentCapture Pro", "1")
+    } else {
+        A_TrayMenu.Uncheck("🔇 Quiet Mode")
+        TrayTip("Notifications enabled", "ContentCapture Pro", "1")
+    }
+}
+
+; Helper function for notifications - respects Quiet Mode
+CC_Notify(message, title := "ContentCapture Pro", options := "1") {
+    global QuietMode
+    if !QuietMode
+        TrayTip(message, title, options)
+}
+
+; Errors always show regardless of Quiet Mode
+CC_NotifyError(message, title := "Error") {
+    TrayTip(message, title, "2")  ; 2 = error icon
+}
 
 ; ==============================================================================
 ; STATIC HOTSTRING FILE GENERATION - COMPACT FORMAT
@@ -2162,7 +2213,7 @@ CC_SocialEditDoPaste(ctrl, *) {
     
     ; Show confirmation if saved
     if (saveShort)
-        TrayTip("Short version saved for future use!", saveName, "1")
+        CC_Notify("Short version saved for future use!", saveName)
 }
 
 ; Clean entire content for social sharing (clean titles in each line)
@@ -2197,7 +2248,7 @@ CC_HotstringCopy(name, *) {
 
     ; Use safe copy - user wants this on clipboard, so don't restore
     if CC_SafeCopy(content)
-        TrayTip("Content copied to clipboard!", name, "1")
+        CC_Notify("Content copied to clipboard!", name)
 }
 
 CC_HotstringGo(name, *) {
@@ -2386,7 +2437,7 @@ CC_CopyReadContent(name) {
     content := CC_GetCaptureContent(name)
     A_Clipboard := content
     ClipWait(1)
-    TrayTip("Copied to clipboard!", name, "1")
+    CC_Notify("Copied to clipboard!", name)
 }
 
 ; ==============================================================================
@@ -2514,7 +2565,7 @@ CC_FinishSetup(setupGui, pathEdit, cbEmail, cbFacebook, cbTwitter, cbBluesky) {
 
     setupGui.Destroy()
 
-    TrayTip("Setup complete!`n`nPress Ctrl+Alt+G to capture.", "ContentCapture Pro", "1")
+    CC_Notify("Setup complete!\n\nPress Ctrl+Alt+G to capture.")
 }
 
 CC_SaveConfig() {
@@ -2558,6 +2609,7 @@ CC_LoadConfig() {
     global EnableEmail, EnableFacebook, EnableTwitter, EnableBluesky, EnableLinkedIn, EnableMastodon
     global AvailableTags, BackupLocation, LastBackupDate, ShowHelpOnStartup
     global AIEnabled, AIProvider, AIApiKey, AIModel, AIOllamaURL
+    global QuietMode
 
     try {
         BaseDir := IniRead(ConfigFile, "Paths", "BaseDir")
@@ -2570,6 +2622,9 @@ CC_LoadConfig() {
         MaxFileSize := MaxFileSizeMB * 1024 * 1024
         
         ShowHelpOnStartup := IniRead(ConfigFile, "Settings", "ShowHelpOnStartup", "0") = "1"
+        
+        ; Quiet Mode setting
+        QuietMode := Integer(IniRead(ConfigFile, "General", "QuietMode", "0"))
 
         EnableEmail := Integer(IniRead(ConfigFile, "SocialMedia", "EnableEmail", "1"))
         EnableFacebook := Integer(IniRead(ConfigFile, "SocialMedia", "EnableFacebook", "1"))
@@ -2945,7 +3000,7 @@ CC_AddCapture(name, url, title, date, tags, note, opinion, body, short := "", re
     CC_GenerateHotstringFile()
     
     ; Show message that reload is needed
-    TrayTip("Capture saved! Reloading to activate hotstring...", "ContentCapture Pro", "1")
+    CC_Notify("Capture saved! Reloading to activate hotstring...")
     Sleep(500)
     ; Create flag to reopen browser after reload
     try FileAppend("1", BaseDir "\open_browser.flag")
@@ -3474,12 +3529,22 @@ CC_CaptureContent() {
     title := CC_CleanContent(title)
     title := CC_CleanTitleForSocial(title)  ; Remove " - YouTube", " | CNN", etc.
 
-    ; Check if YouTube video - offer timestamp option
+    ; Check if YouTube video - offer timestamp and transcript options
+    youtubeTranscript := ""
     if (RegExMatch(url, "i)youtube\.com/watch|youtube\.com/shorts|youtu\.be/")) {
         ; Remove any existing timestamp from URL first
         url := RegExReplace(url, "[?&]t=\d+", "")
         
-        tsResult := MsgBox("This is a YouTube video.`n`nStart from the BEGINNING (recommended)`nor enter a specific start time?`n`nYes = Beginning`nNo = Enter timestamp", "YouTube Timestamp", "YesNo")
+        ; Offer transcript option first (for better note-taking)
+        ytResult := MsgBox("This is a YouTube video.`n`nWould you like to get the TRANSCRIPT first?`n`nThis helps you write better notes/opinions for sharing.`n`nYes = I'll get the transcript`nNo = Continue without transcript", "YouTube Video Detected 🎬", "YesNo")
+        
+        if (ytResult = "Yes") {
+            ; Show instructions for using YouTube's built-in transcript
+            MsgBox("To get the transcript:`n`n1. Below the video, click '...more' to expand the description`n2. Scroll down and click 'Show transcript'`n3. A transcript panel opens on the right side`n4. Select all text (Ctrl+A) and copy (Ctrl+C)`n`nNote: Not all videos have transcripts available.`n`nClick OK when ready to continue, then paste into the Body field.", "Get YouTube Transcript 📝", "OK Iconi")
+        }
+        
+        ; Then offer timestamp option
+        tsResult := MsgBox("Start video from the BEGINNING (recommended)`nor enter a specific start time?`n`nYes = Beginning`nNo = Enter timestamp", "YouTube Timestamp", "YesNo")
         
         if (tsResult = "No") {
             timestamp := InputBox("Enter start time:`n`nExamples: 1:30 (1m 30s) or 1:15:30 (1h 15m 30s)`n`nLeave blank for beginning.", "Start Time", "w300 h150").Value
@@ -3692,7 +3757,7 @@ CC_AutoFormatManualShort(gui, urlEdit, titleEdit, opinionEdit) {
     
     gui["Short"].Value := shortText
     CC_UpdateManualShortCount(gui)
-    TrayTip("Short version created!", "Auto-Format", "1")
+    CC_Notify("Short version created!", "Auto-Format")
 }
 
 CC_SaveManualCapture(manualGui, nameEdit, urlEdit, titleEdit, bodyEdit, noteEdit, opinionEdit, researchEdit, shortEdit, tagCheckboxes) {
@@ -4138,7 +4203,7 @@ CC_BrowserCopyContent(listView) {
     content := CC_GetCaptureContent(name)
     A_Clipboard := content
     ClipWait(1)
-    TrayTip("Copied!", name, "1")
+    CC_Notify("Copied!", name)
 }
 
 ; Show Copy menu with options
@@ -4271,7 +4336,7 @@ CC_DoDuplicate(dupGui, sourceName, browserGui) {
     
     dupGui.Destroy()
     
-    TrayTip("Duplicated!", sourceName " → " newName, "1")
+    CC_Notify("Duplicated!", sourceName " → " newName)
     
     ; Refresh browser if it's open
     if (browserGui != "") {
@@ -4420,9 +4485,9 @@ CC_BrowserDeleteCapture(listView, browserGui) {
     CC_OpenCaptureBrowser()
 
     if (selectedNames.Length = 1)
-        TrayTip("Capture deleted.", selectedNames[1], "1")
+        CC_Notify("Capture deleted.", selectedNames[1])
     else
-        TrayTip(selectedNames.Length " captures deleted.", "Batch Delete", "1")
+        CC_Notify(selectedNames.Length " captures deleted.", "Batch Delete")
 }
 
 ; ==============================================================================
@@ -4914,7 +4979,7 @@ CC_CleanBodyURLs(editGui) {
     }
     
     bodyField.Value := body
-    TrayTip("URLs cleaned from body text!", "Clean URLs", "1")
+    CC_Notify("URLs cleaned from body text!", "Clean URLs")
 }
 
 CC_SaveBackupEdits(editGui, saveAsNew := false) {
@@ -4993,7 +5058,7 @@ CC_SaveBackupEdits(editGui, saveAsNew := false) {
         CC_FilterRestoreList(restoreGui)
         
         editGui.Destroy()
-        TrayTip("New entry created: " newName, "Save As New", "1")
+        CC_Notify("New entry created: " newName, "Save As New")
         
     } else {
         ; Regular Save - update existing entry
@@ -5029,7 +5094,7 @@ CC_SaveBackupEdits(editGui, saveAsNew := false) {
         CC_UpdateRestorePreview(restoreGui)
         
         editGui.Destroy()
-        TrayTip("Changes saved to backup!", newName, "1")
+        CC_Notify("Changes saved to backup!", newName)
     }
 }
 
@@ -5121,7 +5186,7 @@ CC_SaveToWorkingFile(editGui) {
         CC_FilterRestoreList(restoreGui)
     }
     
-    TrayTip("Saved to working file!`nHotstring ::" newName ":: ready to use.", "Saved", "1")
+    CC_Notify("Saved to working file!`nHotstring ::" newName ":: ready to use.", "Saved")
     
     ; Ask about reload
     result := MsgBox("'" newName "' saved to captures.dat!`n`nReload script now to activate the hotstring?", "Saved to Working File", "YesNo Iconi")
@@ -5286,9 +5351,9 @@ CC_DeleteFromBackup(restoreGui) {
     restoreGui.statusText.Value := "Backup: " newNames.Length " entries | New (not in working file): " newCount " | Working file: " CaptureNames.Length " captures"
     
     if (selectedNames.Length = 1)
-        TrayTip("Deleted from backup.", selectedNames[1], "1")
+        CC_Notify("Deleted from backup.", selectedNames[1])
     else
-        TrayTip(selectedNames.Length " entries deleted from backup.", "Deleted", "1")
+        CC_Notify(selectedNames.Length " entries deleted from backup.", "Deleted")
 }
 
 CC_RestoreSelectedEntries(restoreGui) {
@@ -5401,7 +5466,7 @@ CC_RestoreSelectedEntries(restoreGui) {
     CC_CloseRestoreGui(restoreGui)
     
     archiveMsg := moveToArchive ? "`nMoved to archive." : ""
-    TrayTip("Restored " restoredCount " entries!" archiveMsg "`nHotstrings are ready to use.", "Restore Complete", "1")
+    CC_Notify("Restored " restoredCount " entries!" archiveMsg "`nHotstrings are ready to use.", "Restore Complete")
     
     ; Ask about reload
     result := MsgBox("Restored " restoredCount " entries!" archiveMsg "`n`nReload script now to activate new hotstrings?", "Restore Complete", "YesNo Iconi")
@@ -5780,7 +5845,7 @@ CC_SaveEditedCapture(editGui, originalName) {
             }
             
             editGui.Destroy()
-            TrayTip("Renamed '" originalName "' → '" newName "' - Reloading...", "ContentCapture Pro", "1")
+            CC_Notify("Renamed '" originalName "' → '" newName "' - Reloading...")
             Sleep(500)
             ; Create flag to reopen browser after reload
             try FileAppend("1", BaseDir "\open_browser.flag")
@@ -5799,7 +5864,7 @@ CC_SaveEditedCapture(editGui, originalName) {
             }
             
             editGui.Destroy()
-            TrayTip("Capture '" newName "' saved - Reloading...", "ContentCapture Pro", "1")
+            CC_Notify("Capture '" newName "' saved - Reloading...")
             Sleep(500)
             ; Create flag to reopen browser after reload
             try FileAppend("1", BaseDir "\open_browser.flag")
@@ -5848,7 +5913,7 @@ CC_AttachDocClick(editGui, *) {
     
     ; Show confirmation
     SplitPath(selectedFile, &fileName)
-    TrayTip("Document attached: " fileName, "ContentCapture Pro", "1")
+    CC_Notify("Document attached: " fileName)
     
     ; Note: GUI won't visually update until next edit, but the path is stored
     MsgBox("Document attached: " fileName "`n`nClick Save to keep this attachment.", "Document Attached", "64")
@@ -5923,7 +5988,7 @@ CC_EmailWithDocument(captureName) {
         if (docPath != "" && FileExist(docPath)) {
             mail.Attachments.Add(docPath)
             SplitPath(docPath, &fileName)
-            TrayTip("Document attached: " fileName, "Email Ready", "1")
+            CC_Notify("Document attached: " fileName, "Email Ready")
         } else if (docPath != "") {
             result := MsgBox("Document not found:`n" docPath "`n`nSend email without attachment?", "Attachment Missing", "YesNo Icon!")
             if (result = "No")
@@ -6259,7 +6324,7 @@ CC_PrintCapture(name) {
         ; Open in browser
         Run(printFile)
         
-        TrayTip("Print preview opened - Press Ctrl+P to print", "🖨️ " name, "1")
+        CC_Notify("Print preview opened - Press Ctrl+P to print", "🖨️ " name)
         return true
     } catch as err {
         MsgBox("Could not create print file:`n" err.Message, "Print Error", "16")
@@ -6297,7 +6362,7 @@ CC_AutoFormatBody(editControl) {
     if InStr(text, "`n`n") {
         text := CC_CleanContent(text)
         editControl.Value := text
-        TrayTip("Text cleaned up!", "Auto-Format", "1")
+        CC_Notify("Text cleaned up!", "Auto-Format")
         return
     }
     
@@ -6336,7 +6401,7 @@ CC_AutoFormatBody(editControl) {
     ; Update the edit control
     editControl.Value := Trim(formatted)
     
-    TrayTip("Text reformatted!", "Auto-Format", "1")
+    CC_Notify("Text reformatted!", "Auto-Format")
 }
 
 ; ==============================================================================
@@ -6383,7 +6448,7 @@ CC_AutoFormatShort(editGui, cap) {
     if (StrLen(shortText) <= 300) {
         editGui["EditShort"].Value := shortText
         CC_UpdateShortCharCount(editGui)
-        TrayTip("URLs removed - now fits!", "Auto-Format", "1")
+        CC_Notify("URLs removed - now fits!", "Auto-Format")
         return
     }
     
@@ -6395,7 +6460,7 @@ CC_AutoFormatShort(editGui, cap) {
         if (StrLen(opinion) <= 300) {
             editGui["EditShort"].Value := opinion
             CC_UpdateShortCharCount(editGui)
-            TrayTip("Using opinion only - fits!", "Auto-Format", "1")
+            CC_Notify("Using opinion only - fits!", "Auto-Format")
             return
         }
     }
@@ -6420,7 +6485,7 @@ CC_AutoFormatShort(editGui, cap) {
     
     editGui["EditShort"].Value := truncated
     CC_UpdateShortCharCount(editGui)
-    TrayTip("Truncated to fit 300 chars", "Auto-Format", "1")
+    CC_Notify("Truncated to fit 300 chars", "Auto-Format")
 }
 
 ; ==============================================================================
@@ -6859,7 +6924,7 @@ CC_ShareToFacebook(content) {
     url := StrSplit(content, "`n")[1]
     Run("https://www.facebook.com/sharer/sharer.php?u=" CC_UrlEncode(url))
     A_Clipboard := content
-    TrayTip("Content copied!", "Facebook", "1")
+    CC_Notify("Content copied!", "Facebook")
 }
 
 CC_ShareToTwitter(content) {
@@ -6875,7 +6940,7 @@ CC_ShareToBluesky(content) {
     title := lines.Has(2) ? lines[2] : ""
     Run("https://bsky.app/intent/compose?text=" CC_UrlEncode(title " " url))
     A_Clipboard := content
-    TrayTip("Content copied!", "Bluesky", "1")
+    CC_Notify("Content copied!", "Bluesky")
 }
 
 CC_ShareToLinkedIn(content) {
@@ -7046,7 +7111,7 @@ class CCHelp {
         try {
             IniWrite("1", ConfigFile, "Settings", "TutorialComplete")
         }
-        TrayTip("Press Ctrl+Alt+F12 anytime for help!", "ContentCapture Pro", "1")
+        CC_Notify("Press Ctrl+Alt+F12 anytime for help!")
     }
     
     ; ==== CONTEXTUAL TIPS ====

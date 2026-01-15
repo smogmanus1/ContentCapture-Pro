@@ -1,9 +1,9 @@
-# ContentCapture Pro v5.4
+# ContentCapture Pro v5.6
 
 **Capture any webpage and recall it instantly by typing a short keyword.**
 
 ![AutoHotkey](https://img.shields.io/badge/AutoHotkey-v2.0+-green)
-![Version](https://img.shields.io/badge/version-5.4-blue)
+![Version](https://img.shields.io/badge/version-5.6-blue)
 ![License](https://img.shields.io/badge/License-MIT-orange)
 ![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-lightgrey)
 
@@ -75,6 +75,8 @@ Type your name followed by `::` to paste, or add a suffix:
 - **Searchable Browser** (`Ctrl+Alt+B`) - Find any capture by name, title, or tags
 - **Tags & Categories** - Organize captures with customizable tags
 - **Personal Notes** - Add opinions and private notes to each capture
+- **Quiet Mode** - Toggle notifications on/off via tray menu
+- **YouTube Transcript** - Option to fetch video transcript during capture
 
 ### Sharing Options (Suffixes)
 
