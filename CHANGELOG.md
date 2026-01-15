@@ -11,14 +11,18 @@ All notable changes to ContentCapture Pro.
   - Right-click system tray icon → "🔇 Quiet Mode"
   - Errors still show regardless of setting
   - Setting persists between sessions via config.ini
-- **YouTube Transcript Option** - When capturing a YouTube video, offers to fetch transcript first
-  - Opens transcript extraction tool in browser
-  - Copy relevant parts to use in your notes/opinion
-  - Helps write better social media posts about videos
+- **YouTube Transcript Workflow** - When capturing YouTube videos:
+  - Guidance for using YouTube's built-in transcript feature
+  - AI service selection dialog (ChatGPT, Claude, Ollama, Skip)
+  - Ollama option runs locally - no API key needed, 100% private
+  - Summary or raw transcript saved to Body field
 
 ### Changed
 - All success notifications now respect Quiet Mode setting
 - Startup notification respects Quiet Mode
+
+### Fixed
+- Removed duplicate CC_EscapeJSON function
 
 ---
 

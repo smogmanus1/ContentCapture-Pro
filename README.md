@@ -76,7 +76,7 @@ Type your name followed by `::` to paste, or add a suffix:
 - **Tags & Categories** - Organize captures with customizable tags
 - **Personal Notes** - Add opinions and private notes to each capture
 - **Quiet Mode** - Toggle notifications on/off via tray menu
-- **YouTube Transcript** - Option to fetch video transcript during capture
+- **YouTube Transcript + AI** - Get transcripts and summarize with ChatGPT, Claude, or Ollama (local)
 
 ### Sharing Options (Suffixes)
 

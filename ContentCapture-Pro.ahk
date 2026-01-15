@@ -10,9 +10,11 @@
 ;   - Added "Quiet Mode" toggle in tray menu (right-click system tray icon)
 ;   - Suppresses success notifications when enabled (errors still show)
 ;   - Setting persists between sessions
-;   - Added YouTube transcript guidance during capture
-;   - When capturing a YouTube video, shows how to use YouTube's built-in transcript
-;   - Transcript text can be pasted into Body field for better posts
+;   - Added YouTube transcript workflow during capture:
+;     * Shows how to get transcript from YouTube's built-in feature
+;     * Option to send transcript to ChatGPT, Claude, or Ollama (local) for summarization
+;     * Ollama runs locally - no API key needed, 100% private
+;     * Summary or raw transcript saved to Body field
 ;
 ; CHANGELOG v5.4:
 ;   - Added "oi" suffix for Outlook Insert at cursor
@@ -3531,6 +3533,7 @@ CC_CaptureContent() {
 
     ; Check if YouTube video - offer timestamp and transcript options
     youtubeTranscript := ""
+    gotTranscript := false
     if (RegExMatch(url, "i)youtube\.com/watch|youtube\.com/shorts|youtu\.be/")) {
         ; Remove any existing timestamp from URL first
         url := RegExReplace(url, "[?&]t=\d+", "")
@@ -3540,7 +3543,23 @@ CC_CaptureContent() {
         
         if (ytResult = "Yes") {
             ; Show instructions for using YouTube's built-in transcript
-            MsgBox("To get the transcript:`n`n1. Below the video, click '...more' to expand the description`n2. Scroll down and click 'Show transcript'`n3. A transcript panel opens on the right side`n4. Select all text (Ctrl+A) and copy (Ctrl+C)`n`nNote: Not all videos have transcripts available.`n`nClick OK when ready to continue, then paste into the Body field.", "Get YouTube Transcript 📝", "OK Iconi")
+            MsgBox("To get the transcript:`n`n1. Below the video, click '...more' to expand the description`n2. Scroll down and click 'Show transcript'`n3. A transcript panel opens on the right side`n4. Select all text (Ctrl+A) and copy (Ctrl+C)`n`nNote: Not all videos have transcripts available.`n`nClick OK when you have the transcript copied.", "Get YouTube Transcript 📝", "OK Iconi")
+            gotTranscript := true
+            
+            ; Offer to send to AI for summarization
+            aiChoice := CC_ShowAIChoiceDialog()
+            
+            if (aiChoice = "chatgpt") {
+                Run("https://chat.openai.com/")
+                MsgBox("ChatGPT opened.`n`n1. Paste the transcript`n2. Ask: 'Summarize the key points of this video transcript'`n3. Copy the summary`n4. Click OK to continue capture`n`nThe summary will go in your Body field.", "ChatGPT Summary", "OK Iconi")
+            } else if (aiChoice = "claude") {
+                Run("https://claude.ai/")
+                MsgBox("Claude opened.`n`n1. Paste the transcript`n2. Ask: 'Summarize the key points of this video transcript'`n3. Copy the summary`n4. Click OK to continue capture`n`nThe summary will go in your Body field.", "Claude Summary", "OK Iconi")
+            } else if (aiChoice = "ollama") {
+                ; Use local Ollama
+                CC_SummarizeWithOllama()
+            }
+            ; If "skip", just use the raw transcript they already copied
         }
         
         ; Then offer timestamp option
@@ -3562,7 +3581,12 @@ CC_CaptureContent() {
         }
     }
 
-    result := MsgBox("URL: " url "`n`nTitle: " title "`n`nCapture body text?`n`nYes = Highlight text and press Ctrl+C`nNo = URL + title only", "Ready to Capture", "YesNoCancel")
+    ; If user got transcript, ask if they want to use it
+    if (gotTranscript) {
+        result := MsgBox("URL: " url "`n`nTitle: " title "`n`nUse the transcript you copied as body text?`n`nYes = Use transcript from clipboard`nNo = URL + title only", "Ready to Capture", "YesNoCancel")
+    } else {
+        result := MsgBox("URL: " url "`n`nTitle: " title "`n`nCapture body text?`n`nYes = Highlight text and press Ctrl+C`nNo = URL + title only", "Ready to Capture", "YesNoCancel")
+    }
 
     if (result = "Cancel") {
         A_Clipboard := oldClip
@@ -3572,16 +3596,31 @@ CC_CaptureContent() {
     bodyText := ""
 
     if (result = "Yes") {
-        A_Clipboard := ""
-        if !ClipWait(60) {
-            noTextResult := MsgBox("No text copied.`n`nContinue without body text?", "No Selection", "YesNo")
-            if (noTextResult = "No") {
-                A_Clipboard := oldClip
-                return
+        if (gotTranscript) {
+            ; Use what's already on clipboard (the transcript)
+            bodyText := A_Clipboard
+            if (bodyText = "") {
+                noTextResult := MsgBox("Clipboard is empty - no transcript found.`n`nContinue without body text?", "No Transcript", "YesNo")
+                if (noTextResult = "No") {
+                    A_Clipboard := oldClip
+                    return
+                }
+            } else {
+                bodyText := CC_CleanContent(bodyText)
             }
         } else {
-            bodyText := A_Clipboard
-            bodyText := CC_CleanContent(bodyText)
+            ; Normal flow - wait for user to copy something
+            A_Clipboard := ""
+            if !ClipWait(60) {
+                noTextResult := MsgBox("No text copied.`n`nContinue without body text?", "No Selection", "YesNo")
+                if (noTextResult = "No") {
+                    A_Clipboard := oldClip
+                    return
+                }
+            } else {
+                bodyText := A_Clipboard
+                bodyText := CC_CleanContent(bodyText)
+            }
         }
     }
 
@@ -6039,6 +6078,110 @@ CC_GetYouTubeVideoId(url) {
         return match[1]
     
     return ""
+}
+
+; ==============================================================================
+; AI CHOICE DIALOG - Select AI for transcript summarization
+; ==============================================================================
+
+CC_ShowAIChoiceDialog() {
+    choice := ""
+    
+    aiGui := Gui("+AlwaysOnTop", "AI Summary Option 🤖")
+    aiGui.SetFont("s11")
+    aiGui.BackColor := "1a1a2e"
+    
+    aiGui.SetFont("s12 cWhite Bold")
+    aiGui.Add("Text", "x20 y15 w300", "Send transcript to AI for summarization?")
+    
+    aiGui.SetFont("s10 cWhite")
+    aiGui.Add("Text", "x20 y45 w300", "Choose your preferred AI service:")
+    
+    aiGui.SetFont("s10")
+    btnChatGPT := aiGui.Add("Button", "x20 y80 w130 h35", "🟢 ChatGPT")
+    btnClaude := aiGui.Add("Button", "x160 y80 w130 h35", "🟠 Claude")
+    btnOllama := aiGui.Add("Button", "x20 y125 w130 h35", "🔵 Ollama (Local)")
+    btnSkip := aiGui.Add("Button", "x160 y125 w130 h35", "⏭️ Skip AI")
+    
+    btnChatGPT.OnEvent("Click", (*) => (choice := "chatgpt", aiGui.Destroy()))
+    btnClaude.OnEvent("Click", (*) => (choice := "claude", aiGui.Destroy()))
+    btnOllama.OnEvent("Click", (*) => (choice := "ollama", aiGui.Destroy()))
+    btnSkip.OnEvent("Click", (*) => (choice := "skip", aiGui.Destroy()))
+    
+    aiGui.OnEvent("Close", (*) => (choice := "skip", aiGui.Destroy()))
+    aiGui.OnEvent("Escape", (*) => (choice := "skip", aiGui.Destroy()))
+    
+    aiGui.Show("w310 h175")
+    
+    ; Wait for user choice
+    while (choice = "" && WinExist("ahk_id " aiGui.Hwnd))
+        Sleep(50)
+    
+    return choice
+}
+
+; ==============================================================================
+; OLLAMA LOCAL SUMMARIZATION
+; ==============================================================================
+
+CC_SummarizeWithOllama() {
+    global AIOllamaURL, AIModel
+    
+    ; Get transcript from clipboard
+    transcript := A_Clipboard
+    
+    if (transcript = "") {
+        MsgBox("No transcript on clipboard.`n`nCopy the transcript first, then try again.", "No Content", "48")
+        return
+    }
+    
+    ; Show progress
+    progressGui := Gui("+AlwaysOnTop -Caption", "Processing...")
+    progressGui.SetFont("s12")
+    progressGui.BackColor := "1a1a2e"
+    progressGui.SetFont("cWhite")
+    progressGui.Add("Text", "x20 y20 w250", "🔄 Summarizing with Ollama...")
+    progressGui.Add("Text", "x20 y50 w250 cGray", "This may take a moment...")
+    progressGui.Show("w290 h90")
+    
+    try {
+        ; Build the prompt
+        prompt := "Summarize the key points of this video transcript in a concise format suitable for social media sharing:`n`n" transcript
+        
+        ; Make request to Ollama
+        url := AIOllamaURL "/api/generate"
+        
+        body := '{"model": "' (AIModel != "" ? AIModel : "llama2") '", "prompt": "' CC_EscapeJSON(prompt) '", "stream": false}'
+        
+        http := ComObject("WinHttp.WinHttpRequest.5.1")
+        http.Open("POST", url, false)
+        http.SetRequestHeader("Content-Type", "application/json")
+        http.Send(body)
+        
+        if (http.Status = 200) {
+            response := http.ResponseText
+            
+            ; Extract the response text
+            if RegExMatch(response, '"response"\s*:\s*"([^"]*(?:\\"[^"]*)*)"', &match) {
+                summary := match[1]
+                summary := StrReplace(summary, "\n", "`n")
+                summary := StrReplace(summary, '\"', '"')
+                
+                ; Put summary on clipboard
+                A_Clipboard := summary
+                
+                progressGui.Destroy()
+                MsgBox("Summary generated and copied to clipboard!`n`nClick OK to continue with capture.`n`nThe summary will go in your Body field.", "Ollama Summary ✅", "64")
+            } else {
+                throw Error("Could not parse response")
+            }
+        } else {
+            throw Error("HTTP " http.Status)
+        }
+    } catch as err {
+        progressGui.Destroy()
+        MsgBox("Ollama summarization failed:`n" err.Message "`n`nMake sure Ollama is running locally.`n`nUsing raw transcript instead.", "Ollama Error", "48")
+    }
 }
 
 ; ==============================================================================
