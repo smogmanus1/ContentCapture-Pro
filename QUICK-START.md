@@ -1,109 +1,127 @@
 # ContentCapture Pro - Quick Start Guide
 
-## First Time Setup
-
-1. **Install AutoHotkey v2** from https://www.autohotkey.com/
-2. **Put these files in one folder:**
-   - ContentCapture.ahk (run this one)
-   - ContentCapture-Pro.ahk
-   - DynamicSuffixHandler.ahk
-3. **Double-click ContentCapture.ahk**
-4. **Follow the setup wizard**
-
-That's it! You're ready to capture.
+Get capturing in 5 minutes or less!
 
 ---
 
-## The 5 Hotkeys You Need to Know
+## Step 1: Install AutoHotkey v2 (2 minutes)
 
-| Press This | What It Does |
-|------------|--------------|
-| `Ctrl+Alt+P` | **Capture** the current webpage |
+1. Go to [autohotkey.com](https://www.autohotkey.com/)
+2. Click **Download**
+3. Choose **v2.0** (important - not v1!)
+4. Run the installer, click Next through the prompts
+
+---
+
+## Step 2: Get ContentCapture Pro (1 minute)
+
+**Option A: Download ZIP**
+1. On the GitHub page, click the green **Code** button
+2. Click **Download ZIP**
+3. Extract to any folder (like `Documents\ContentCapture-Pro`)
+
+**Option B: Use the Installer**
+1. Download and run `install.bat`
+2. It handles everything automatically
+
+---
+
+## Step 3: Run the Script (30 seconds)
+
+1. Double-click `ContentCapture-Pro.ahk`
+2. A setup wizard appears - just click through it
+3. Look for the green "H" icon in your system tray
+
+---
+
+## Step 4: Capture Your First Page (1 minute)
+
+1. Open any webpage in Chrome, Edge, or Firefox
+2. Press `Ctrl+Alt+G`
+3. A window pops up with the page info
+4. Type a short name (like `news` or `recipe`)
+5. Add tags if you want (optional)
+6. Click **Save**
+
+**Congratulations!** You just made your first capture.
+
+---
+
+## Step 5: Use Your Capture
+
+Now the magic happens. Type your capture name to use it:
+
+### Basic Usage
+
+| You Type | What Happens |
+|----------|--------------|
+| `news` | Pastes the full content |
+| `newsgo` | Opens the URL in your browser |
+| `newsem` | Creates an Outlook email |
+
+### Social Sharing
+
+| You Type | What Happens |
+|----------|--------------|
+| `newsfb` | Opens Facebook with content ready |
+| `newsx` | Opens Twitter/X with content |
+| `newsbs` | Opens Bluesky with content |
+| `newsli` | Opens LinkedIn with content |
+
+### Quick Reference
+
+| You Type | What Happens |
+|----------|--------------|
+| `news?` | Shows menu with all options |
+| `newsrd` | Shows content in popup (read-only) |
+| `newsvi` | Opens editor to modify |
+
+---
+
+## Essential Hotkeys to Remember
+
+| Hotkey | What It Does |
+|--------|--------------|
+| `Ctrl+Alt+G` | **Capture** current webpage |
 | `Ctrl+Alt+B` | **Browse** all your captures |
-| `Ctrl+Alt+Shift+B` | **Restore** from backup file |
-| `Ctrl+Alt+Space` | **Quick Search** popup |
-| `Ctrl+Alt+M` | **Menu** of all commands |
+| `Ctrl+Alt+M` | **Menu** with all commands |
+
+That's all you need to get started!
 
 ---
 
-## How to Capture a Webpage
+## Tips for Success
 
-1. Go to a webpage you want to save
-2. Press `Ctrl+Alt+P`
-3. Enter a short name (like `14thar` or `recipe1`)
-4. Add your opinion (optional)
-5. Click OK
-6. Done! Now type `::14thar::` anywhere to paste it
+**Good capture names:**
+- Short: `recipe` not `my-favorite-pasta-recipe`
+- Memorable: `guitar` not `vid123`
+- Letters only: `news` not `news-2024`
 
----
+**Use tags** to organize:
+- Add tags like `work`, `recipe`, `music` when saving
+- Filter by tag in the browser (`Ctrl+Alt+B`)
 
-## How to Use Your Captures
-
-Type `::name::` followed by Enter or Space:
-
-- `::14thar::` → Pastes the full content
-- `::14thar?::` → Shows a menu of options
-- `::14thargo::` → Opens the URL
-- `::14tharem::` → Sends via email
-
----
-
-## The Restore Browser (New!)
-
-Press `Ctrl+Alt+Shift+B` to:
-
-- Search your backup file
-- Edit old entries before restoring
-- Delete entries you don't need
-- Create new variations of old content
-- Save directly to your working file
-
----
-
-## Creating an .exe File
-
-### What You Need
-- VS Code with AutoHotkey v2 extension (easiest method)
-
-### Steps
-1. Open `ContentCapture.ahk` in VS Code
-2. Right-click → **Compile Script**
-3. Save the .exe wherever you want
-
-### Files to Include with the .exe
-```
-YourFolder/
-├── ContentCapture.exe        ← The compiled file
-├── ContentCapture-Pro.ahk    ← REQUIRED
-├── DynamicSuffixHandler.ahk  ← REQUIRED
-```
-
-The .exe needs those two .ahk files in the same folder to work!
-
----
-
-## File Cheat Sheet
-
-| File | What It Is |
-|------|------------|
-| `captures.dat` | Your active hotstrings |
-| `capturesbackup.dat` | Your backup/archive |
-| `capturesarchive.dat` | Permanently archived |
-| `config.ini` | Your settings |
-
----
-
-## Pro Tips
-
-1. **Keep captures.dat small** - Only keep what you use regularly
-2. **Use the backup as your library** - Pull entries when you need them
-3. **Create short versions** - For Twitter/Bluesky (auto-detected!)
-4. **Use "Save As New"** - To create variations of the same content
+**The `?` suffix** shows all options:
+- Forgot what suffixes exist? Type `myname?`
+- A menu pops up with every action available
 
 ---
 
 ## Need Help?
 
-- Press `Ctrl+Alt+F12` for help popup
 - Press `Ctrl+Alt+M` for the main menu
-- Check the full README for details
+- See the full [User Guide](USER-GUIDE.md)
+- Check [Troubleshooting](TROUBLESHOOTING.md) for common issues
+
+---
+
+## Next Steps
+
+Once you're comfortable:
+
+1. **Browse the full [Suffix Reference](SUFFIX-REFERENCE.md)** - 25+ actions available
+2. **Try research tools** - Fact-check with `fc`, find archives with `wb`
+3. **Export to HTML** - `Ctrl+Alt+H` creates a beautiful searchable page
+4. **Customize settings** - `Ctrl+Alt+S` opens configuration
+
+Happy capturing! 🎯

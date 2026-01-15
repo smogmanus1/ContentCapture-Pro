@@ -1,104 +1,158 @@
 # Changelog
 
-All notable changes to ContentCapture Pro will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+All notable changes to ContentCapture Pro.
 
 ---
 
-## [4.2] - 2025-12-10
+## [5.4] - 2026-01-14
 
 ### Added
-- **YouTube URL Cleanup** - Automatically strips timestamp parameters (`t=`, `start=`, `time_continue=`) so shared videos start from the beginning
-- Portable installation - No hardcoded paths, works from any folder
-- GitHub-ready distribution with LICENSE, .gitignore, CHANGELOG
+- **Outlook Insert suffix (`oi`)** - Insert captured content directly into open Outlook compose/reply windows at cursor position
+- Improved clipboard handling for images - text pasting now works correctly when images are on clipboard
 
 ### Fixed
-- Tag checkbox syntax error in capture dialog (AHK v2 compatibility)
-- URL cleanup now properly handles YouTube-specific parameters
-
-### Changed
-- `CC_CleanURL()` now intelligently detects YouTube URLs and removes time parameters while preserving other important params (playlist IDs, video IDs)
+- Clipboard operations with image content no longer interfere with text paste
+- `ClipWait` now specifically waits for TEXT format, preventing image conflicts
 
 ---
 
-## [4.1] - 2025-12-08
+## [5.3] - 2026-01-12
 
-### Added
-- **AI Integration** - Support for OpenAI, Anthropic (Claude), and local Ollama
-- AI actions: Summarize, Generate Title, Rewrite, Improve, Custom Prompt
-- **Quick Search** - Alfred/Raycast-style popup with `Ctrl+Alt+Space`
-- **Favorites System** - Star captures for quick access from tray menu
-- First-run tutorial for new users
-- Contextual tips system
-
-### Changed
-- Improved tray menu organization
-- Enhanced GUI styling throughout
+### Fixed
+- Installer now correctly installs to local Documents folder (not OneDrive)
+- Improved AutoHotkey v2 detection in installer
 
 ---
 
-## [4.0] - 2025-12-01
+## [5.2] - 2026-01-10
+
+### Fixed
+- Clipboard timing issues causing truncated pastes
+- Longer delays ensure clipboard properly clears before setting new content
+
+---
+
+## [5.1] - 2026-01-08
+
+### Changed
+- **Capture hotkey changed** from `Ctrl+Alt+P` to `Ctrl+Alt+G` to avoid conflicts with common applications
+
+### Updated
+- All documentation and help text updated to reflect new hotkey
+
+---
+
+## [5.0] - 2026-01-01
 
 ### Added
-- **Dynamic Suffix Handler** - Reduced generated hotstrings file from ~2MB to ~200KB
-- Social media sharing: Facebook, Twitter/X, Bluesky, LinkedIn, Mastodon
-- Character limit detection with edit windows for social platforms
-- Multi-select deletion in Capture Browser
+- **Document attachment system** - Attach files to captures
+- `d.` suffix - Open attached document
+- `ed` suffix - Email with document attached
+
+### Improved
+- Email integration stability
+- Social media detection for compose windows
+
+---
+
+## [4.9] - 2025-12-15
+
+### Added
+- **Research tools suffixes:**
+  - `yt` - YouTube transcript extraction
+  - `pp` - Perplexity AI research
+  - `fc` - Snopes fact-checking
+  - `mb` - Media Bias/Fact Check
+  - `wb` - Wayback Machine archives
+  - `gs` - Google Scholar search
+  - `av` - Archive.today snapshot
+
+---
+
+## [4.8] - 2025-12-10
+
+### Added
+- AI integration support (OpenAI, Anthropic, Ollama)
+- AI Setup Guide documentation
+
+### Improved
+- Configuration system
+- Error handling
+
+---
+
+## [4.5] - 2025-12-05
+
+### Added
+- **Mastodon support** (`mt` suffix)
+- Tag filtering in Capture Browser
 - HTML export with search functionality
 
-### Changed
-- Complete rewrite for AutoHotkey v2
-- Data-driven architecture with INI-style storage
-- Modular code organization
+---
+
+## [4.2] - 2025-12-01
+
+### Added
+- Bluesky support (`bs` suffix)
+- LinkedIn support (`li` suffix)
+- Recent Captures widget (`Ctrl+Alt+W`)
+
+### Improved
+- Social media sharing workflow
+- URL placement for video thumbnails
 
 ---
 
-## [3.0] - 2025-11-15
+## [4.0] - 2025-11-25
+
+### Changed
+- **Major architecture change:** Dynamic suffix handler
+- Hotstrings now handled dynamically instead of generated statically
+- Significantly reduced file sizes
 
 ### Added
-- Capture Browser GUI with search and filtering
-- Tag system for organizing captures
-- Opinion field (included in output) vs Note field (private)
+- `?` suffix for action menu
+- `vi` suffix for view/edit
+- `rd` suffix for read popup
+
+---
+
+## [3.1] - 2025-11-15
+
+### Added
+- Migration tool for v2 captures
 - Duplicate URL detection
-- Cloud folder auto-detection (Dropbox, OneDrive, Google Drive)
-- Automatic backup system
+- Automatic URL cleaning (removes tracking parameters)
+
+---
+
+## [3.0] - 2025-11-01
 
 ### Changed
-- Migrated from flat file to structured data format
-- Improved URL cleaning (tracking parameters removed)
-
----
-
-## [2.0] - 2025-10-01
+- **Data-driven architecture** - captures stored in `captures.dat` instead of generated code
+- Each capture now ~10 lines of data instead of ~70 lines of code
 
 ### Added
-- Manual capture mode (`Ctrl+Alt+N`)
-- Email integration via Outlook
-- Action menu with `?` suffix
-- Read window for viewing captures
-
-### Changed
-- Restructured hotstring generation
-- Better title extraction from browser windows
+- Tags system
+- Searchable Capture Browser
+- Opinion/Notes field
 
 ---
 
-## [1.0] - 2025-09-01
+## [2.x] - Legacy
 
-### Added
-- Initial release
-- Basic webpage capture with `Ctrl+Alt+P`
-- Hotstring generation for instant recall
-- URL and title capture from browsers
-- Body text selection support
+Original static hotstring generation system. Each capture created multiple hotstring variants in code.
 
 ---
 
-## Legend
+## [1.x] - Legacy
 
-- **Added** - New features
-- **Changed** - Changes to existing functionality
-- **Fixed** - Bug fixes
-- **Removed** - Removed features
-- **Security** - Security improvements
+Original AutoHotkey v1 versions. See archive for historical code.
+
+---
+
+## Version Numbering
+
+- **Major.Minor** format (e.g., 5.4)
+- Major: Significant feature additions or architecture changes
+- Minor: Bug fixes, small features, improvements
