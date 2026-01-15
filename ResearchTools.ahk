@@ -386,8 +386,11 @@ class ResearchTools {
         ; Prefill with tool name and date if provided
         prefill := toolName != "" ? toolName " - " FormatTime(, "yyyy-MM-dd") ": " : ""
         
-        noteGui.Add("Text", "x15 y" yOffset " w450", "New note:")
+        noteGui.Add("Text", "x15 y" yOffset " w80", "New note:")
         noteEdit := noteGui.Add("Edit", "x15 y" (yOffset + 20) " w450 h80 Multi vNewNote", prefill)
+        ; Auto-Format button - positioned next to "New note:" label
+        formatBtn := noteGui.Add("Button", "x100 y" (yOffset - 2) " w100 h22", "🔧 Auto-Format")
+        formatBtn.OnEvent("Click", (*) => CC_AutoFormatBody(noteEdit))
         
         ; Buttons
         btnY := yOffset + 110

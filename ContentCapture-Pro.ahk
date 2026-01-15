@@ -2,7 +2,7 @@
 ; ContentCapture Pro - Professional Content Capture & Sharing System
 ; ==============================================================================
 ; Author:      Brad
-; Version:     5.4 (AHK v2)
+; Version:     5.5 (AHK v2)
 ; Updated:     2026-01-14
 ; License:     MIT
 ;
@@ -353,6 +353,7 @@
 #Include ImageClipboard.ahk
 #Include SocialShare.ahk
 #Include ResearchTools.ahk 
+
 global ContentCaptureDir := ""
 
 ; This trick gets the directory of THIS file, not the main script
@@ -607,7 +608,7 @@ CC_PopulateQuickSearch(resultList, filter) {
             for name in Favorites {
                 if CaptureData.Has(StrLower(name)) {
                     title := CaptureData[StrLower(name)].Has("title") ? CaptureData[StrLower(name)]["title"] : name
-                    matches.Push({name: name, title: title, fav: true})
+                    matches.Push({name: name, title: title, fav: true, score: 100})
                 }
             }
         }
@@ -627,29 +628,49 @@ CC_PopulateQuickSearch(resultList, filter) {
             }
             if (!alreadyAdded) {
                 title := CaptureData[StrLower(name)].Has("title") ? CaptureData[StrLower(name)]["title"] : name
-                matches.Push({name: name, title: title, fav: false})
+                matches.Push({name: name, title: title, fav: false, score: 50})
                 count++
             }
         }
     } else {
-        ; Search by filter
+        ; FUZZY SEARCH - score all captures and rank by match quality
         for name in CaptureNames {
-            if InStr(StrLower(name), filter) {
-                title := CaptureData[StrLower(name)].Has("title") ? CaptureData[StrLower(name)]["title"] : name
-                isFav := IsSet(Favorites) && CC_ArrayContains(Favorites, name)
-                matches.Push({name: name, title: title, fav: isFav})
-            } else if CaptureData[StrLower(name)].Has("title") && InStr(StrLower(CaptureData[StrLower(name)]["title"]), filter) {
-                title := CaptureData[StrLower(name)]["title"]
-                isFav := IsSet(Favorites) && CC_ArrayContains(Favorites, name)
-                matches.Push({name: name, title: title, fav: isFav})
-            } else if CaptureData[StrLower(name)].Has("tags") && InStr(StrLower(CaptureData[StrLower(name)]["tags"]), filter) {
-                title := CaptureData[StrLower(name)].Has("title") ? CaptureData[StrLower(name)]["title"] : name
-                isFav := IsSet(Favorites) && CC_ArrayContains(Favorites, name)
-                matches.Push({name: name, title: title, fav: isFav})
+            cap := CaptureData[StrLower(name)]
+            title := cap.Has("title") ? cap["title"] : name
+            tags := cap.Has("tags") ? cap["tags"] : ""
+            isFav := IsSet(Favorites) && CC_ArrayContains(Favorites, name)
+            
+            ; Calculate best score across name, title, tags
+            nameScore := CC_FuzzyScore(filter, name)
+            titleScore := CC_FuzzyScore(filter, title)
+            tagScore := tags != "" ? CC_FuzzyScore(filter, tags) : 0
+            
+            ; Use best score, with slight preference for name matches
+            bestScore := Max(nameScore + 5, titleScore, tagScore)
+            
+            ; Favorite bonus
+            if (isFav && bestScore > 0)
+                bestScore += 3
+            
+            ; Add if score is good enough (threshold 40)
+            if (bestScore >= 40) {
+                matches.Push({name: name, title: title, fav: isFav, score: bestScore})
             }
             
-            if (matches.Length >= 50)
+            ; Limit to prevent performance issues
+            if (matches.Length >= 100)
                 break
+        }
+        
+        ; Sort by score (highest first)
+        matches := CC_SortByScore(matches)
+        
+        ; Keep top 50
+        if (matches.Length > 50) {
+            sorted := []
+            Loop 50
+                sorted.Push(matches[A_Index])
+            matches := sorted
         }
     }
     
@@ -666,10 +687,30 @@ CC_PopulateQuickSearch(resultList, filter) {
     return matches.Length
 }
 
+; Sort matches by score (simple bubble sort - fine for <100 items)
+CC_SortByScore(matches) {
+    n := matches.Length
+    Loop n - 1 {
+        i := A_Index
+        Loop n - i {
+            j := A_Index
+            if (matches[j].score < matches[j + 1].score) {
+                temp := matches[j]
+                matches[j] := matches[j + 1]
+                matches[j + 1] := temp
+            }
+        }
+    }
+    return matches
+}
+
 CC_QuickSearchFilter(searchGui, searchEdit, resultList, statusText) {
     filter := searchEdit.Value
     count := CC_PopulateQuickSearch(resultList, filter)
-    statusText.Value := count " matches • ↑↓ Navigate • Enter=Paste • Ctrl+Enter=Open URL"
+    if (filter = "")
+        statusText.Value := "↑↓ Navigate • Enter=Paste • Ctrl+Enter=Open URL • Esc=Close"
+    else
+        statusText.Value := count " matches (fuzzy) • ↑↓ Navigate • Enter=Paste"
 }
 
 CC_QuickSearchNavigate(resultList, direction) {
@@ -7233,6 +7274,128 @@ class CCHelp {
 ;   This reloads from disk and re-generates hotstrings.
 ;
 ; ==============================================================================
+
+; ==============================================================================
+; FUZZY SEARCH FUNCTIONS
+; Enables finding captures even with typos or partial names
+; ==============================================================================
+
+; Calculate fuzzy match score (higher = better match)
+; Returns 0-100 score based on match quality
+CC_FuzzyScore(needle, haystack) {
+    needle := StrLower(needle)
+    haystack := StrLower(haystack)
+    
+    ; Perfect match = 100
+    if (needle = haystack)
+        return 100
+    
+    ; Starts with = 90
+    if (SubStr(haystack, 1, StrLen(needle)) = needle)
+        return 90
+    
+    ; Contains exact = 70
+    if InStr(haystack, needle)
+        return 70
+    
+    ; Word-start matching (e.g., "ts" matches "trumpspeech", "14am" matches "14thamendment")
+    wordStartScore := CC_WordStartMatch(needle, haystack)
+    if (wordStartScore > 0)
+        return wordStartScore
+    
+    ; Fuzzy match using character sequence matching
+    fuzzyScore := CC_CharSequenceScore(needle, haystack)
+    if (fuzzyScore > 40)
+        return fuzzyScore
+    
+    return 0
+}
+
+; Word-start matching: "ts" matches "TrumpSpeech", "abt" matches "ABronxTale"
+CC_WordStartMatch(needle, haystack) {
+    if (StrLen(needle) < 2)
+        return 0
+    
+    ; Build pattern from first chars of "words" in haystack
+    ; Words start at: beginning, after numbers, or capital letters
+    wordStarts := SubStr(haystack, 1, 1)
+    
+    Loop StrLen(haystack) - 1 {
+        char := SubStr(haystack, A_Index + 1, 1)
+        prevChar := SubStr(haystack, A_Index, 1)
+        
+        ; New word starts after a number, or at a capital
+        if (IsDigit(prevChar) && !IsDigit(char)) || (RegExMatch(char, "[A-Z]"))
+            wordStarts .= char
+    }
+    
+    wordStarts := StrLower(wordStarts)
+    
+    ; Check if needle matches word starts
+    if (SubStr(wordStarts, 1, StrLen(needle)) = needle)
+        return 80  ; Good match
+    
+    if InStr(wordStarts, needle)
+        return 65  ; Partial word-start match
+    
+    return 0
+}
+
+; Character sequence matching for typo tolerance
+CC_CharSequenceScore(needle, haystack) {
+    if (StrLen(needle) < 2 || StrLen(haystack) < 2)
+        return 0
+    
+    ; Count how many chars from needle appear in order in haystack
+    needleLen := StrLen(needle)
+    haystackLen := StrLen(haystack)
+    
+    needleIdx := 1
+    matchCount := 0
+    consecutiveBonus := 0
+    lastMatchPos := 0
+    
+    Loop haystackLen {
+        if (needleIdx > needleLen)
+            break
+        
+        haystackChar := SubStr(haystack, A_Index, 1)
+        needleChar := SubStr(needle, needleIdx, 1)
+        
+        if (haystackChar = needleChar) {
+            matchCount++
+            ; Bonus for consecutive matches
+            if (A_Index = lastMatchPos + 1)
+                consecutiveBonus += 5
+            lastMatchPos := A_Index
+            needleIdx++
+        }
+    }
+    
+    ; Calculate score based on matches
+    if (matchCount = 0)
+        return 0
+    
+    ; Base score from match percentage
+    matchPercent := (matchCount / needleLen) * 100
+    
+    ; Penalize if many chars didn't match
+    penalty := (needleLen - matchCount) * 10
+    
+    ; Bonus for matching most chars
+    if (matchCount >= needleLen - 1)
+        consecutiveBonus += 15
+    
+    score := matchPercent + consecutiveBonus - penalty
+    
+    ; Only return if reasonably good match
+    return (score > 40 && matchCount >= needleLen * 0.7) ? Min(score, 60) : 0
+}
+
+; Helper function
+IsDigit(char) {
+    return RegExMatch(char, "\d")
+}
 
 ; ==============================================================================
 ; INCLUDE GENERATED HOTSTRINGS
