@@ -3,8 +3,13 @@
 ; ==============================================================================
 ; DynamicSuffixHandler.ahk - Dynamic Suffix Detection for ContentCapture Pro
 ; ==============================================================================
-; Version:     2.1
-; Updated:     2026-01-15
+; Version:     2.2
+; Updated:     2026-01-16
+;
+; CHANGELOG v2.2:
+;   - Added "img" suffix for pasting attached images
+;   - Uses IC_GetImagePath() from ImageCapture.ahk
+;   - Pastes actual image (not path) into documents, social media, etc.
 ;
 ; CHANGELOG v2.1:
 ;   - Added "sum" suffix for on-demand AI summarization
@@ -30,7 +35,8 @@
 ;   bs  → Share to Bluesky
 ;   li  → Share to LinkedIn
 ;   mt  → Share to Mastodon
-;   sum → Summarize with AI (NEW - on-demand)
+;   sum → Summarize with AI (on-demand)
+;   img → Paste attached image (NEW)
 ;   yt  → YouTube Transcript (Research)
 ;   pp  → Perplexity AI (Research)
 ;   fc  → Fact Check - Snopes (Research)
@@ -57,8 +63,10 @@ class DynamicSuffixHandler {
         "bs", "bluesky",     ; Share to Bluesky
         "li", "linkedin",    ; Share to LinkedIn
         "mt", "mastodon",    ; Share to Mastodon
-        ; AI & Processing (NEW in v2.1)
+        ; AI & Processing
         "sum", "summarize",  ; Summarize with AI (on-demand)
+        ; Image
+        "img", "pasteimage", ; Paste attached image (NEW v2.2)
         ; Research tools
         "yt", "transcript",  ; YouTube Transcript
         "pp", "perplexity",  ; Perplexity AI research
@@ -155,9 +163,9 @@ class DynamicSuffixHandler {
         if (StrLen(buffer) < 3)
             return
         
-        ; Check each suffix - research suffixes AND sum (others handled by generated hotstrings)
-        ; Added "sum" for on-demand summarization (v2.1)
-        suffixesByLen := ["sum", "yt", "pp", "fc", "mb", "wb", "gs", "av"]
+        ; Check each suffix - research suffixes, sum, and img (others handled by generated hotstrings)
+        ; Added "img" for image pasting (v2.2)
+        suffixesByLen := ["sum", "img", "yt", "pp", "fc", "mb", "wb", "gs", "av"]
         
         for suffix in suffixesByLen {
             if (!this.SUFFIX_MAP.Has(suffix))
@@ -226,9 +234,12 @@ class DynamicSuffixHandler {
                 this.ActionLinkedIn(name, capture)
             case "mastodon":
                 this.ActionMastodon(name, capture)
-            ; AI & Processing (NEW in v2.1)
+            ; AI & Processing
             case "summarize":
                 this.ActionSummarize(name, capture)
+            ; Image (NEW v2.2)
+            case "pasteimage":
+                this.ActionPasteImage(name, capture)
             ; Research tools - delegate to ResearchTools class
             case "transcript", "perplexity", "factcheck", "mediabias", "wayback", "scholar", "archive":
                 if IsSet(ResearchTools)
@@ -316,13 +327,63 @@ class DynamicSuffixHandler {
     }
     
     ; ==============================================================================
-    ; ActionSummarize - On-demand AI summarization (NEW in v2.1)
+    ; ActionPasteImage - Paste attached image (NEW in v2.2)
     ; ==============================================================================
-    ; PURPOSE: Summarize capture content when YOU want, not during capture
-    ; BENEFITS:
-    ;   - Captures never fail due to Ollama being down
-    ;   - Choose your AI provider at summarization time
-    ;   - Can re-summarize anytime with different AI
+    ; PURPOSE: Paste an attached image directly into documents, social media, etc.
+    ; USAGE: Type "capturenameimg " to paste the image
+    ; ==============================================================================
+    
+    static ActionPasteImage(name, capture) {
+        ; Get image path using IC_GetImagePath from ImageCapture.ahk
+        imgPath := ""
+        
+        if IsSet(IC_GetImagePath) {
+            imgPath := IC_GetImagePath(name)
+        }
+        
+        ; Fallback: check capture data directly
+        if (imgPath = "") {
+            if (capture.Has("image") && capture["image"] != "")
+                imgPath := capture["image"]
+            else if (capture.Has("img") && capture["img"] != "")
+                imgPath := capture["img"]
+        }
+        
+        if (imgPath = "") {
+            TrayTip("No image attached to '" name "'", "No Image 📷", "2")
+            return
+        }
+        
+        ; Check if file exists
+        if !FileExist(imgPath) {
+            MsgBox("Image file not found:`n" imgPath, "Image Not Found", "48")
+            return
+        }
+        
+        ; Load image to clipboard using PowerShell and paste
+        try {
+            ; Escape backslashes for PowerShell
+            psPath := StrReplace(imgPath, "\", "\\")
+            psPath := StrReplace(psPath, "'", "''")
+            
+            psScript := "Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $img = [System.Drawing.Image]::FromFile('" psPath "'); [System.Windows.Forms.Clipboard]::SetImage($img); $img.Dispose()"
+            
+            RunWait('powershell -NoProfile -WindowStyle Hidden -Command "' psScript '"',, "Hide")
+            
+            ; Small delay to ensure clipboard is ready
+            Sleep(150)
+            
+            ; Paste the image
+            Send("^v")
+            
+            TrayTip("Image pasted!", name " 📷", "1")
+        } catch as err {
+            MsgBox("Failed to paste image:`n" err.Message, "Image Error", "48")
+        }
+    }
+    
+    ; ==============================================================================
+    ; ActionSummarize - On-demand AI summarization
     ; ==============================================================================
     
     static ActionSummarize(name, capture) {
