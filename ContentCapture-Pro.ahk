@@ -5,7 +5,7 @@
 ; Version:     5.7 (AHK v2)
 ; Updated:     2026-01-15
 ; License:     MIT
-;
+; Reupdated
 ; CHANGELOG v5.7:
 ;   - NEW: "Capture First, Process Later" workflow
 ;   - Removed AI choice dialog from YouTube capture flow
