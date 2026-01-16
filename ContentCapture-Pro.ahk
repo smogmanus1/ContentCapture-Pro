@@ -4053,7 +4053,7 @@ CC_OpenCaptureBrowser() {
             cap.Has("date") ? cap["date"] : "")
     }
     
-    listView.ModifyCol(3, "Sort")  ; Sort alphabetically by Name
+    listView.ModifyCol(6, "SortDesc")  ; Sort by Date (newest first)
 
     listView.OnEvent("DoubleClick", (*) => CC_BrowserOpenURL(listView))
     
@@ -4227,7 +4227,7 @@ CC_FilterBrowserCaptures(browserGui) {
         matchCount++
     }
     
-    listView.ModifyCol(3, "Sort")  ; Sort alphabetically by Name
+    listView.ModifyCol(6, "SortDesc")  ; Sort by Date (newest first)
     browserGui.statusText.Value := "Showing " matchCount " of " CaptureNames.Length " captures (searching all fields)"
 }
 
