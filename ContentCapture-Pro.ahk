@@ -2,9 +2,17 @@
 ; ContentCapture Pro - Professional Content Capture & Sharing System
 ; ==============================================================================
 ; Author:      Brad
-; Version:     5.6 (AHK v2)
+; Version:     5.7 (AHK v2)
 ; Updated:     2026-01-15
 ; License:     MIT
+;
+; CHANGELOG v5.7:
+;   - NEW: "Capture First, Process Later" workflow
+;   - Removed AI choice dialog from YouTube capture flow
+;   - Captures NEVER fail due to Ollama being down
+;   - Added "sum" suffix for on-demand summarization
+;   - Type "capturenamesum" to summarize any capture when YOU want
+;   - Ollama errors no longer block captures
 ;
 ; CHANGELOG v5.6:
 ;   - Added "Quiet Mode" toggle in tray menu (right-click system tray icon)
@@ -247,6 +255,7 @@
 ; bs        Share to Bluesky            ::recipebs::
 ; li        Share to LinkedIn           ::recipeli::
 ; mt        Share to Mastodon           ::recipemt::
+; sum       Summarize with AI           ::recipesum::
 ;
 ; IMAGE SUFFIXES (when image is attached):
 ; img       Copy image to clipboard     ::recipeimg::
@@ -465,7 +474,7 @@ CC_CheckAutoBackup()
 CC_SetupTrayMenu()
 
 ; Show startup notification
-CC_Notify("ContentCapture Pro v5.6 loaded!`n" CaptureNames.Length " captures available.`nSmart paste detects social media limits!")
+CC_Notify("ContentCapture Pro v5.7 loaded!`n" CaptureNames.Length " captures available.`nType 'namesum' to summarize any capture!")
 
 ; Check if we should open browser after reload (flag file from edit save)
 openBrowserFlag := BaseDir "\open_browser.flag"
@@ -3531,46 +3540,39 @@ CC_CaptureContent() {
     title := CC_CleanContent(title)
     title := CC_CleanTitleForSocial(title)  ; Remove " - YouTube", " | CNN", etc.
 
-    ; Check if YouTube video - offer timestamp and transcript options
-    youtubeTranscript := ""
+    ; =========================================================================
+    ; SIMPLIFIED YOUTUBE FLOW v5.7 - No AI during capture
+    ; =========================================================================
+    ; Check if YouTube video - offer transcript option (NO AI during capture)
     gotTranscript := false
     if (RegExMatch(url, "i)youtube\.com/watch|youtube\.com/shorts|youtu\.be/")) {
         ; Remove any existing timestamp from URL first
         url := RegExReplace(url, "[?&]t=\d+", "")
         
-        ; Offer transcript option first (for better note-taking)
-        ytResult := MsgBox("This is a YouTube video.`n`nWould you like to get the TRANSCRIPT first?`n`nThis helps you write better notes/opinions for sharing.`n`nYes = I'll get the transcript`nNo = Continue without transcript", "YouTube Video Detected 🎬", "YesNo")
+        ; Offer transcript option (simplified - no AI choice)
+        ytResult := MsgBox("This is a YouTube video.`n`nWould you like to get the TRANSCRIPT first?`n`nThis helps you write better notes/opinions for sharing.`n`nYes = Open transcript page`nNo = Continue without transcript", "YouTube Video Detected 🎬", "YesNo")
         
         if (ytResult = "Yes") {
-            ; Open working transcript service
+            ; Open transcript service
             videoId := CC_GetYouTubeVideoId(url)
             if (videoId != "") {
                 transcriptUrl := "https://youtubetotranscript.com/transcript?v=" videoId
                 Run(transcriptUrl)
                 
-                MsgBox("Transcript page opened!`n`n1. Wait for transcript to load`n2. Click 'Copy entire transcript' button (bottom left)`n3. Click OK when you have it copied", "Get YouTube Transcript 📝", "OK Iconi")
+                MsgBox("Transcript page opened!`n`n1. Wait for transcript to load`n2. Click 'Copy entire transcript' button`n3. Click OK when you have it copied`n`n💡 Tip: Type 'capturenamesum' later to summarize!", "Get YouTube Transcript 📝", "OK Iconi")
             } else {
                 MsgBox("Could not extract video ID.`n`nTry YouTube's built-in transcript:`n1. Click '...more' below the video`n2. Click 'Show transcript'`n3. Select all and copy", "Transcript", "OK Icon!")
             }
             gotTranscript := true
             
-            ; Offer to send to AI for summarization
-            aiChoice := CC_ShowAIChoiceDialog()
-            
-            if (aiChoice = "chatgpt") {
-                Run("https://chat.openai.com/")
-                MsgBox("ChatGPT opened.`n`n1. Paste the transcript`n2. Ask: 'Summarize the key points of this video transcript'`n3. Copy the summary`n4. Click OK to continue capture`n`nThe summary will go in your Body field.", "ChatGPT Summary", "OK Iconi")
-            } else if (aiChoice = "claude") {
-                Run("https://claude.ai/")
-                MsgBox("Claude opened.`n`n1. Paste the transcript`n2. Ask: 'Summarize the key points of this video transcript'`n3. Copy the summary`n4. Click OK to continue capture`n`nThe summary will go in your Body field.", "Claude Summary", "OK Iconi")
-            } else if (aiChoice = "ollama") {
-                ; Use local Ollama
-                CC_SummarizeWithOllama()
-            }
-            ; If "skip", just use the raw transcript they already copied
+            ; =====================================================
+            ; v5.7: Removed AI choice dialog from capture flow
+            ; User can summarize later with 'sum' suffix
+            ; This prevents Ollama errors from blocking captures
+            ; =====================================================
         }
         
-        ; Then offer timestamp option
+        ; Timestamp option
         tsResult := MsgBox("Start video from the BEGINNING (recommended)`nor enter a specific start time?`n`nYes = Beginning`nNo = Enter timestamp", "YouTube Timestamp", "YesNo")
         
         if (tsResult = "No") {
@@ -3588,6 +3590,9 @@ CC_CaptureContent() {
             }
         }
     }
+    ; =========================================================================
+    ; END OF SIMPLIFIED YOUTUBE FLOW
+    ; =========================================================================
 
     ; If user got transcript, ask if they want to use it
     if (gotTranscript) {

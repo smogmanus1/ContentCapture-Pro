@@ -3,8 +3,13 @@
 ; ==============================================================================
 ; DynamicSuffixHandler.ahk - Dynamic Suffix Detection for ContentCapture Pro
 ; ==============================================================================
-; Version:     2.0
-; Updated:     2026-01-13
+; Version:     2.1
+; Updated:     2026-01-15
+;
+; CHANGELOG v2.1:
+;   - Added "sum" suffix for on-demand AI summarization
+;   - Implements "Capture First, Process Later" workflow
+;   - Summarization no longer blocks captures - happens when YOU want
 ;
 ; CHANGELOG v2.0:
 ;   - Fixed all clipboard operations to use CC_SafePaste/CC_SafeCopy
@@ -25,6 +30,7 @@
 ;   bs  → Share to Bluesky
 ;   li  → Share to LinkedIn
 ;   mt  → Share to Mastodon
+;   sum → Summarize with AI (NEW - on-demand)
 ;   yt  → YouTube Transcript (Research)
 ;   pp  → Perplexity AI (Research)
 ;   fc  → Fact Check - Snopes (Research)
@@ -51,6 +57,8 @@ class DynamicSuffixHandler {
         "bs", "bluesky",     ; Share to Bluesky
         "li", "linkedin",    ; Share to LinkedIn
         "mt", "mastodon",    ; Share to Mastodon
+        ; AI & Processing (NEW in v2.1)
+        "sum", "summarize",  ; Summarize with AI (on-demand)
         ; Research tools
         "yt", "transcript",  ; YouTube Transcript
         "pp", "perplexity",  ; Perplexity AI research
@@ -147,8 +155,9 @@ class DynamicSuffixHandler {
         if (StrLen(buffer) < 3)
             return
         
-        ; Check each suffix - ONLY research suffixes (others handled by generated hotstrings)
-        suffixesByLen := ["yt", "pp", "fc", "mb", "wb", "gs", "av"]
+        ; Check each suffix - research suffixes AND sum (others handled by generated hotstrings)
+        ; Added "sum" for on-demand summarization (v2.1)
+        suffixesByLen := ["sum", "yt", "pp", "fc", "mb", "wb", "gs", "av"]
         
         for suffix in suffixesByLen {
             if (!this.SUFFIX_MAP.Has(suffix))
@@ -217,6 +226,9 @@ class DynamicSuffixHandler {
                 this.ActionLinkedIn(name, capture)
             case "mastodon":
                 this.ActionMastodon(name, capture)
+            ; AI & Processing (NEW in v2.1)
+            case "summarize":
+                this.ActionSummarize(name, capture)
             ; Research tools - delegate to ResearchTools class
             case "transcript", "perplexity", "factcheck", "mediabias", "wayback", "scholar", "archive":
                 if IsSet(ResearchTools)
@@ -302,6 +314,185 @@ class DynamicSuffixHandler {
             TrayTip("No short version saved for '" name "'`nEdit capture to add one.", "No Short Version", "2")
         }
     }
+    
+    ; ==============================================================================
+    ; ActionSummarize - On-demand AI summarization (NEW in v2.1)
+    ; ==============================================================================
+    ; PURPOSE: Summarize capture content when YOU want, not during capture
+    ; BENEFITS:
+    ;   - Captures never fail due to Ollama being down
+    ;   - Choose your AI provider at summarization time
+    ;   - Can re-summarize anytime with different AI
+    ; ==============================================================================
+    
+    static ActionSummarize(name, capture) {
+        ; Get content to summarize (prefer transcript, fall back to body)
+        content := ""
+        if (capture.Has("transcript") && capture["transcript"] != "")
+            content := capture["transcript"]
+        else if (capture.Has("body") && capture["body"] != "")
+            content := capture["body"]
+        
+        if (content = "") {
+            MsgBox("No content to summarize in '" name "'.`n`nThis capture has no body text or transcript.", "No Content", "48")
+            return
+        }
+        
+        ; Show AI choice dialog
+        choice := this.ShowSummarizeDialog(name, content)
+        
+        if (choice = "cancel")
+            return
+        
+        if (choice = "chatgpt") {
+            A_Clipboard := content
+            Run("https://chat.openai.com/")
+            MsgBox("Content copied to clipboard!`n`n1. Paste into ChatGPT (Ctrl+V)`n2. Ask: 'Summarize the key points'`n3. Copy the summary`n`n💡 Tip: Use Ctrl+Alt+A to access AI features for this capture.", "ChatGPT", "64")
+            return
+        }
+        
+        if (choice = "claude") {
+            A_Clipboard := content
+            Run("https://claude.ai/")
+            MsgBox("Content copied to clipboard!`n`n1. Paste into Claude (Ctrl+V)`n2. Ask: 'Summarize the key points'`n3. Copy the summary`n`n💡 Tip: Use Ctrl+Alt+A to access AI features for this capture.", "Claude", "64")
+            return
+        }
+        
+        if (choice = "ollama") {
+            this.DoOllamaSummarize(name, content)
+            return
+        }
+        
+        if (choice = "copy") {
+            A_Clipboard := content
+            TrayTip("Content copied!", "Ready to paste into any AI (" StrLen(content) " chars)", "1")
+            return
+        }
+    }
+    
+    static ShowSummarizeDialog(name, content) {
+        choice := ""
+        
+        sumGui := Gui("+AlwaysOnTop", "🤖 Summarize: " name)
+        sumGui.BackColor := "1a1a2e"
+        sumGui.SetFont("s11 cWhite", "Segoe UI")
+        
+        ; Preview
+        preview := StrLen(content) > 200 ? SubStr(content, 1, 200) "..." : content
+        sumGui.Add("Text", "x20 y15 w400", "Content preview:")
+        sumGui.SetFont("s9 cBBBBBB")
+        sumGui.Add("Edit", "x20 y40 w400 h80 ReadOnly Background2d2d44 cWhite", preview)
+        
+        sumGui.SetFont("s10 cWhite")
+        sumGui.Add("Text", "x20 y130 w400", "Choose how to summarize (" StrLen(content) " characters):")
+        
+        ; Buttons
+        btnChatGPT := sumGui.Add("Button", "x20 y160 w130 h35", "🟢 ChatGPT")
+        btnClaude := sumGui.Add("Button", "x160 y160 w130 h35", "🟠 Claude")
+        btnOllama := sumGui.Add("Button", "x300 y160 w120 h35", "🔵 Ollama")
+        
+        btnCopy := sumGui.Add("Button", "x20 y205 w200 h30", "📋 Copy Content Only")
+        btnCancel := sumGui.Add("Button", "x230 y205 w90 h30", "Cancel")
+        
+        ; Status for Ollama
+        sumGui.SetFont("s8 c888888")
+        sumGui.Add("Text", "x20 y245 w400", "Ollama = 100% local & private (requires: ollama serve)")
+        
+        ; Events
+        btnChatGPT.OnEvent("Click", (*) => (choice := "chatgpt", sumGui.Destroy()))
+        btnClaude.OnEvent("Click", (*) => (choice := "claude", sumGui.Destroy()))
+        btnOllama.OnEvent("Click", (*) => (choice := "ollama", sumGui.Destroy()))
+        btnCopy.OnEvent("Click", (*) => (choice := "copy", sumGui.Destroy()))
+        btnCancel.OnEvent("Click", (*) => (choice := "cancel", sumGui.Destroy()))
+        sumGui.OnEvent("Escape", (*) => (choice := "cancel", sumGui.Destroy()))
+        sumGui.OnEvent("Close", (*) => (choice := "cancel", sumGui.Destroy()))
+        
+        sumGui.Show("w440 h275")
+        WinWaitClose(sumGui.Hwnd)
+        
+        return choice
+    }
+    
+    static DoOllamaSummarize(name, content) {
+        global AIOllamaURL, AIModel, CaptureData
+        
+        ; Show progress
+        progressGui := Gui("+AlwaysOnTop -Caption +Border", "Processing...")
+        progressGui.SetFont("s12")
+        progressGui.BackColor := "1a1a2e"
+        progressGui.SetFont("cWhite")
+        progressGui.Add("Text", "x20 y20 w280", "🔄 Summarizing with Ollama...")
+        progressGui.Add("Text", "x20 y50 w280 cGray", "This may take 15-30 seconds...")
+        progressGui.Show("w320 h90")
+        
+        try {
+            ; Build the prompt
+            prompt := "Summarize the key points of this content in a concise format suitable for social media sharing. Use bullet points for clarity:`n`n" content
+            
+            ; Get Ollama URL from global or use default
+            ollamaUrl := IsSet(AIOllamaURL) ? AIOllamaURL : "http://localhost:11434"
+            url := ollamaUrl "/api/generate"
+            
+            ; Get model from global or use default
+            model := (IsSet(AIModel) && AIModel != "") ? AIModel : "llama2"
+            body := '{"model": "' model '", "prompt": "' this.EscapeJSON(prompt) '", "stream": false}'
+            
+            http := ComObject("WinHttp.WinHttpRequest.5.1")
+            http.Open("POST", url, false)
+            http.SetRequestHeader("Content-Type", "application/json")
+            http.Send(body)
+            
+            if (http.Status = 200) {
+                response := http.ResponseText
+                
+                ; Extract the response text
+                if RegExMatch(response, '"response"\s*:\s*"([^"]*(?:\\"[^"]*)*)"', &match) {
+                    summary := match[1]
+                    summary := StrReplace(summary, "\n", "`n")
+                    summary := StrReplace(summary, '\"', '"')
+                    
+                    progressGui.Destroy()
+                    
+                    ; Ask what to do with summary
+                    saveResult := MsgBox("Summary generated!`n`n" SubStr(summary, 1, 300) (StrLen(summary) > 300 ? "..." : "") "`n`nSave to this capture's 'short' field?`n`nYes = Save & Copy`nNo = Copy only", "Ollama Summary ✅", "YesNoCancel 64")
+                    
+                    if (saveResult = "Yes") {
+                        ; Save to capture
+                        if (IsSet(CaptureData) && CaptureData.Has(StrLower(name))) {
+                            CaptureData[StrLower(name)]["short"] := summary
+                            if IsSet(CC_SaveCaptureData)
+                                CC_SaveCaptureData()
+                            TrayTip("Summary saved!", "Also copied to clipboard", "1")
+                        }
+                        A_Clipboard := summary
+                    } else if (saveResult = "No") {
+                        A_Clipboard := summary
+                        TrayTip("Summary copied!", "Ready to paste", "1")
+                    }
+                    ; Cancel = do nothing
+                    
+                } else {
+                    throw Error("Could not parse Ollama response")
+                }
+            } else {
+                throw Error("HTTP " http.Status)
+            }
+        } catch as err {
+            progressGui.Destroy()
+            MsgBox("Ollama summarization failed:`n`n" err.Message "`n`nMake sure Ollama is running locally:`n  ollama serve`n`nOr use ChatGPT/Claude instead.", "Ollama Error ❌", "48")
+        }
+    }
+    
+    static EscapeJSON(str) {
+        str := StrReplace(str, "\", "\\")
+        str := StrReplace(str, '"', '\"')
+        str := StrReplace(str, "`n", "\n")
+        str := StrReplace(str, "`r", "\r")
+        str := StrReplace(str, "`t", "\t")
+        return str
+    }
+    
+    ; ==== SOCIAL MEDIA HANDLERS ====
     
     static ActionFacebook(name, capture) {
         hasShort := capture.Has("short") && capture["short"] != ""
