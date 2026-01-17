@@ -139,10 +139,20 @@ class ResearchTools {
         ; Open transcript site
         Run("https://youtubetotranscript.com/")
         
+        ; Wait for page to load, then auto-paste
+        Sleep(2500)
+        
+        ; Paste the URL into the input field
+        Send("^v")
+        
+        ; Small delay then press Enter to submit
+        Sleep(300)
+        Send("{Enter}")
+        
         ; Offer to add note after delay
         SetTimer(() => this.OfferResearchNote(name, "YouTube Transcript"), -5000)
         
-        this.ShowToolTip("YouTube URL copied!`nPaste it into the transcript tool.", 4000)
+        this.ShowToolTip("YouTube URL pasted! Getting transcript...", 3000)
     }
     
     ; ---- Perplexity AI Research ----
