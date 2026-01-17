@@ -5,7 +5,7 @@
 ; Version:     5.7 (AHK v2)
 ; Updated:     2026-01-15
 ; License:     MIT
-; Reupdated
+;
 ; CHANGELOG v5.7:
 ;   - NEW: "Capture First, Process Later" workflow
 ;   - Removed AI choice dialog from YouTube capture flow
@@ -2287,11 +2287,21 @@ CC_HotstringShort(name, *) {
 }
 
 CC_HotstringEmail(name, *) {
+    global CaptureData
+    
     content := CC_GetCaptureContent(name)
     if (content = "")
         return
 
-    CC_SendOutlookEmail(content)
+    ; Get title for subject line
+    title := ""
+    if CaptureData.Has(StrLower(name)) {
+        cap := CaptureData[StrLower(name)]
+        if (cap.Has("title") && cap["title"] != "")
+            title := cap["title"]
+    }
+    
+    CC_SendOutlookEmail(content, title)
 }
 
 CC_HotstringOutlookInsert(name, *) {
@@ -6850,7 +6860,7 @@ CC_EmailLastCapture() {
     }
 
     content := LastCapturedURL "`n`n" LastCapturedTitle "`n`n" LastCapturedBody
-    CC_SendOutlookEmail(content)
+    CC_SendOutlookEmail(content, LastCapturedTitle)
 }
 
 CC_ResetDataFile() {
@@ -7065,11 +7075,20 @@ CC_CleanContent(text) {
 ; SHARING
 ; ==============================================================================
 
-CC_SendOutlookEmail(content) {
+CC_SendOutlookEmail(content, title := "") {
     try {
         outlook := ComObject("Outlook.Application")
         mail := outlook.CreateItem(0)
         mail.Body := content
+        
+        ; Set subject from title if provided
+        if (title != "") {
+            subject := title
+            if (StrLen(subject) > 100)
+                subject := SubStr(subject, 1, 97) "..."
+            mail.Subject := subject
+        }
+        
         mail.Display()
     } catch as err {
         MsgBox("Could not create email: " err.Message, "Error", "16")
