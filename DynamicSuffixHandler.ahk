@@ -58,7 +58,8 @@ class DynamicSuffixHandler {
         "rd", "read",        ; Read in MsgBox
         "sh", "short",       ; Paste short version only
         ; Social media sharing
-        "fb", "facebook",    ; Share to Facebook
+        "fb", "facebook",    ; Share to Facebook (post)
+        "fbc", "fbcomment",  ; Facebook comment (always includes URL)
         "x",  "twitter",     ; Share to Twitter/X
         "bs", "bluesky",     ; Share to Bluesky
         "li", "linkedin",    ; Share to LinkedIn
@@ -165,7 +166,7 @@ class DynamicSuffixHandler {
         
         ; Check each suffix - research suffixes, sum, and img (others handled by generated hotstrings)
         ; Added "img" for image pasting (v2.2)
-        suffixesByLen := ["sum", "img", "yt", "pp", "fc", "mb", "wb", "gs", "av"]
+        suffixesByLen := ["sum", "img", "fbc", "yt", "pp", "fc", "mb", "wb", "gs", "av"]
         
         for suffix in suffixesByLen {
             if (!this.SUFFIX_MAP.Has(suffix))
@@ -226,6 +227,8 @@ class DynamicSuffixHandler {
             ; Social media
             case "facebook":
                 this.ActionFacebook(name, capture)
+            case "fbcomment":
+                this.ActionFacebookComment(name, capture)
             case "twitter":
                 this.ActionTwitter(name, capture)
             case "bluesky":
@@ -556,20 +559,74 @@ class DynamicSuffixHandler {
     ; ==== SOCIAL MEDIA HANDLERS ====
     
     static ActionFacebook(name, capture) {
-        hasShort := capture.Has("short") && capture["short"] != ""
-        content := this.BuildContent(capture)
-        CC_SafeCopy(content)
+        ; Build content: Title + URL (link will create preview card)
+        content := ""
         
-        url := capture.Has("url") ? capture["url"] : ""
-        ; Only use sharer URL if NOT using short version
-        if (!hasShort && url != "") {
-            shareURL := "https://www.facebook.com/sharer/sharer.php?u=" . this.URLEncode(url)
-            Run(shareURL)
+        ; Use short version if available
+        if (capture.Has("short") && capture["short"] != "") {
+            content := capture["short"]
         } else {
-            Run("https://www.facebook.com/")
+            ; Build: Title first, then URL on next line
+            if (capture.Has("title") && capture["title"] != "")
+                content := capture["title"]
+            if (capture.Has("url") && capture["url"] != "") {
+                if (content != "")
+                    content .= "`n`n"
+                content .= capture["url"]
+            }
         }
         
-        TrayTip("Content copied! Paste with Ctrl+V", "Facebook Share", "1")
+        if (content = "") {
+            TrayTip("No content to share", "Facebook", "2")
+            return
+        }
+        
+        ; Copy to clipboard
+        CC_SafeCopy(content)
+        
+        ; Open Facebook (not sharer URL - we want the composer)
+        Run("https://www.facebook.com/")
+        
+        ; Wait for browser window to appear
+        Sleep(2000)
+        
+        ; Wait for page to load, then paste
+        ; Facebook's composer activates on click - we'll paste directly
+        Sleep(1500)
+        
+        ; Paste the content
+        Send("^v")
+        
+        TrayTip("Content pasted to Facebook", "Facebook Share", "1")
+    }
+    
+    ; Facebook Comment - always includes URL (for use in comment boxes)
+    static ActionFacebookComment(name, capture) {
+        content := ""
+        
+        ; Use short version if available, otherwise use title
+        if (capture.Has("short") && capture["short"] != "") {
+            content := capture["short"]
+        } else if (capture.Has("title") && capture["title"] != "") {
+            content := capture["title"]
+        }
+        
+        ; ALWAYS append URL for comments
+        if (capture.Has("url") && capture["url"] != "") {
+            if (content != "")
+                content .= "`n"
+            content .= capture["url"]
+        }
+        
+        if (content = "") {
+            TrayTip("No content to share", "Facebook Comment", "2")
+            return
+        }
+        
+        ; Just paste directly - user is already in a comment box
+        CC_SafePaste(content)
+        
+        TrayTip("Comment pasted with URL", "Facebook Comment", "1")
     }
     
     static ActionTwitter(name, capture) {
@@ -595,28 +652,49 @@ class DynamicSuffixHandler {
     }
     
     static ActionBluesky(name, capture) {
-        ; Check if short version exists first
+        ; Build content: Title + URL
+        content := ""
+        
+        ; Use short version if available
         if (capture.Has("short") && capture["short"] != "") {
-            ; Use short version directly - no warning needed
             content := capture["short"]
-            CC_SafePaste(content)
-            TrayTip("Short version pasted (" StrLen(content) "/" this.LIMIT_BLUESKY " chars)", "Bluesky", "1")
+        } else {
+            ; Build: Title first, then URL on next line
+            if (capture.Has("title") && capture["title"] != "")
+                content := capture["title"]
+            if (capture.Has("url") && capture["url"] != "") {
+                if (content != "")
+                    content .= "`n`n"
+                content .= capture["url"]
+            }
+        }
+        
+        if (content = "") {
+            TrayTip("No content to share", "Bluesky", "2")
             return
         }
         
-        ; Build full content
-        content := this.BuildContent(capture)
+        ; Check character limit
         charCount := StrLen(content)
-        
-        ; If under limit, just paste
-        if (charCount <= this.LIMIT_BLUESKY) {
-            CC_SafePaste(content)
-            TrayTip("Content pasted (" charCount "/" this.LIMIT_BLUESKY " chars)", "Bluesky", "1")
+        if (charCount > this.LIMIT_BLUESKY) {
+            ; Show edit dialog for over-limit content
+            this.ShowSocialEditDialog(name, capture, "Bluesky", this.LIMIT_BLUESKY, content)
             return
         }
         
-        ; OVER LIMIT - Show warning/edit dialog
-        this.ShowSocialEditDialog(name, capture, "Bluesky", this.LIMIT_BLUESKY, content)
+        ; Copy to clipboard
+        CC_SafeCopy(content)
+        
+        ; Open Bluesky composer directly
+        Run("https://bsky.app/intent/compose")
+        
+        ; Wait for browser and page to load
+        Sleep(2500)
+        
+        ; Paste the content
+        Send("^v")
+        
+        TrayTip("Content pasted to Bluesky (" charCount "/" this.LIMIT_BLUESKY " chars)", "Bluesky", "1")
     }
     
     ; Generic social media edit dialog for over-limit content
@@ -725,29 +803,65 @@ class DynamicSuffixHandler {
     }
     
     static ActionLinkedIn(name, capture) {
-        hasShort := capture.Has("short") && capture["short"] != ""
-        content := this.BuildContent(capture)
-        url := capture.Has("url") ? capture["url"] : ""
+        ; Build content: Title + URL
+        content := ""
         
-        CC_SafeCopy(content)
-        
-        ; Only use share URL if NOT using short version
-        if (!hasShort && url != "") {
-            shareURL := "https://www.linkedin.com/sharing/share-offsite/?url=" . this.URLEncode(url)
-            Run(shareURL)
+        ; Use short version if available
+        if (capture.Has("short") && capture["short"] != "") {
+            content := capture["short"]
         } else {
-            Run("https://www.linkedin.com/feed/")
+            ; Build: Title first, then URL on next line
+            if (capture.Has("title") && capture["title"] != "")
+                content := capture["title"]
+            if (capture.Has("url") && capture["url"] != "") {
+                if (content != "")
+                    content .= "`n`n"
+                content .= capture["url"]
+            }
         }
         
-        TrayTip("Content copied! Paste with Ctrl+V", "LinkedIn Share", "1")
+        if (content = "") {
+            TrayTip("No content to share", "LinkedIn", "2")
+            return
+        }
+        
+        ; Copy to clipboard
+        CC_SafeCopy(content)
+        
+        ; Open LinkedIn feed
+        Run("https://www.linkedin.com/feed/")
+        
+        ; Wait for browser and page to load
+        Sleep(3000)
+        
+        ; Paste the content (LinkedIn needs to click composer first, but paste might work)
+        Send("^v")
+        
+        TrayTip("Content pasted to LinkedIn", "LinkedIn Share", "1")
     }
     
     static ActionMastodon(name, capture) {
-        content := this.BuildContent(capture)
+        ; Build content: Title + URL
+        content := ""
+        
+        ; Use short version if available
+        if (capture.Has("short") && capture["short"] != "") {
+            content := capture["short"]
+        } else {
+            ; Build: Title first, then URL on next line
+            if (capture.Has("title") && capture["title"] != "")
+                content := capture["title"]
+            if (capture.Has("url") && capture["url"] != "") {
+                if (content != "")
+                    content .= "`n`n"
+                content .= capture["url"]
+            }
+        }
         
         if (StrLen(content) > this.LIMIT_MASTODON)
             content := SubStr(content, 1, this.LIMIT_MASTODON - 3) . "..."
         
+        ; Copy to clipboard - user needs to paste into their instance
         CC_SafeCopy(content)
         TrayTip("Content copied! Paste into your Mastodon instance", "Mastodon Share", "1")
     }
