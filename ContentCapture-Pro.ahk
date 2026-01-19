@@ -2,9 +2,18 @@
 ; ContentCapture Pro - Professional Content Capture & Sharing System
 ; ==============================================================================
 ; Author:      Brad
-; Version:     5.7 (AHK v2)
-; Updated:     2026-01-15
+; Version:     5.8 (AHK v2)
+; Updated:     2026-01-19
 ; License:     MIT
+;
+; CHANGELOG v5.8:
+;   - NEW: Added 4 new buttons to Capture Browser:
+;     * New (Ctrl+N) - Create a new manual capture without leaving the browser
+;     * Link (Ctrl+L) - Copy just the URL to clipboard
+;     * Preview (Ctrl+P) - Show full capture content in a popup window
+;     * Refresh (F5) - Reload the capture list from disk
+;   - Browser window height increased to accommodate new button row
+;   - Keyboard shortcuts added for all new buttons
 ;
 ; CHANGELOG v5.7:
 ;   - NEW: "Capture First, Process Later" workflow
@@ -4070,7 +4079,7 @@ CC_OpenCaptureBrowser() {
     ; Keyboard handler for ListView
     listView.OnEvent("ItemFocus", (*) => "")  ; Just to ensure focus events work
 
-    ; Button row 1
+    ; Button row 1 - Main actions
     browserGui.Add("Button", "x10 y405 w55", "🌐 Open").OnEvent("Click", (*) => CC_BrowserOpenURL(listView))
     browserGui.Add("Button", "x70 y405 w55", "📋 Copy").OnEvent("Click", (*) => CC_BrowserCopyMenu(listView, browserGui))
     browserGui.Add("Button", "x130 y405 w55", "📧 Email").OnEvent("Click", (*) => CC_BrowserEmailContent(listView))
@@ -4083,7 +4092,13 @@ CC_OpenCaptureBrowser() {
     browserGui.Add("Button", "x535 y405 w70", "🔬 Research").OnEvent("Click", (*) => ResearchTools.ShowResearchMenu(browserGui, listView))
     browserGui.Add("Button", "x610 y405 w80", "Close").OnEvent("Click", (*) => browserGui.Destroy())
 
-    browserGui.statusText := browserGui.Add("Text", "x10 y440 w680", "Showing " CaptureNames.Length " captures | Enter=Paste | Del=Delete | Ctrl+D=Duplicate")
+    ; Button row 2 - New utility buttons
+    browserGui.Add("Button", "x10 y440 w55", "➕ New").OnEvent("Click", (*) => CC_BrowserNewCapture(browserGui))
+    browserGui.Add("Button", "x70 y440 w55", "🔗 Link").OnEvent("Click", (*) => CC_BrowserCopyLinkOnly(listView))
+    browserGui.Add("Button", "x130 y440 w65", "👁 Preview").OnEvent("Click", (*) => CC_BrowserPreviewCapture(listView))
+    browserGui.Add("Button", "x200 y440 w65", "🔄 Refresh").OnEvent("Click", (*) => CC_BrowserRefreshList(browserGui, listView))
+
+    browserGui.statusText := browserGui.Add("Text", "x10 y478 w680", "Showing " CaptureNames.Length " captures | Enter=Paste | Del=Delete | Ctrl+D=Duplicate | F5=Refresh")
 
     browserGui.OnEvent("Close", (*) => browserGui.Destroy())
     browserGui.OnEvent("Escape", (*) => browserGui.Destroy())
@@ -4097,9 +4112,14 @@ CC_OpenCaptureBrowser() {
     Hotkey("Delete", (*) => CC_BrowserDeleteCapture(listView, browserGui), "On")
     Hotkey("^f", (*) => searchEdit.Focus(), "On")
     Hotkey("^d", (*) => CC_BrowserDuplicateSelected(listView, browserGui), "On")
+    ; New keyboard shortcuts
+    Hotkey("^n", (*) => CC_BrowserNewCapture(browserGui), "On")
+    Hotkey("^l", (*) => CC_BrowserCopyLinkOnly(listView), "On")
+    Hotkey("^p", (*) => CC_BrowserPreviewCapture(listView), "On")
+    Hotkey("F5", (*) => CC_BrowserRefreshList(browserGui, listView), "On")
     HotIf()
 
-    browserGui.Show("w720 h470")
+    browserGui.Show("w720 h510")
     searchEdit.Focus()
     
     ; Show helpful tip for new users
@@ -4283,6 +4303,202 @@ CC_BrowserCopyMenu(listView, browserGui) {
     copyMenu.Add("📄 Duplicate as New Record", (*) => CC_DuplicateCapture(name, browserGui))
     copyMenu.Show()
 }
+
+; ==============================================================================
+; NEW BROWSER BUTTONS - Added for enhanced functionality
+; ==============================================================================
+
+; ---------------------------------------------
+; NEW CAPTURE - Opens manual capture dialog
+; ---------------------------------------------
+CC_BrowserNewCapture(browserGui) {
+    browserGui.Minimize()
+    Sleep(100)
+    CC_ManualCapture()
+}
+
+; ---------------------------------------------
+; COPY LINK ONLY - Copies just the URL to clipboard
+; ---------------------------------------------
+CC_BrowserCopyLinkOnly(listView) {
+    global CaptureData
+    
+    row := listView.GetNext(0, "F")
+    if (row = 0) {
+        MsgBox("Select a capture first.", "No Selection", "48")
+        return
+    }
+    
+    name := listView.GetText(row, 3)  ; Column 3 = Name
+    
+    if CaptureData.Has(StrLower(name)) {
+        cap := CaptureData[StrLower(name)]
+        if cap.Has("url") && cap["url"] != "" {
+            A_Clipboard := cap["url"]
+            ClipWait(1)
+            ToolTip("🔗 Link copied!`n" cap["url"])
+            SetTimer(() => ToolTip(), -2000)
+        } else {
+            MsgBox("This capture has no URL.", "No URL", "48")
+        }
+    }
+}
+
+; ---------------------------------------------
+; PREVIEW - Shows full capture content in popup
+; ---------------------------------------------
+CC_BrowserPreviewCapture(listView) {
+    global CaptureData
+    
+    row := listView.GetNext(0, "F")
+    if (row = 0) {
+        MsgBox("Select a capture first.", "No Selection", "48")
+        return
+    }
+    
+    name := listView.GetText(row, 3)  ; Column 3 = Name
+    
+    if !CaptureData.Has(StrLower(name)) {
+        MsgBox("Capture not found.", "Error", "16")
+        return
+    }
+    
+    cap := CaptureData[StrLower(name)]
+    
+    ; Build preview content
+    previewText := ""
+    previewText .= "═══════════════════════════════════════════════════`n"
+    previewText .= "  NAME: " . name . "`n"
+    previewText .= "═══════════════════════════════════════════════════`n`n"
+    
+    if cap.Has("title") && cap["title"] != ""
+        previewText .= "📌 TITLE:`n" . cap["title"] . "`n`n"
+    
+    if cap.Has("url") && cap["url"] != ""
+        previewText .= "🔗 URL:`n" . cap["url"] . "`n`n"
+    
+    if cap.Has("tags") && cap["tags"] != ""
+        previewText .= "🏷️ TAGS: " . cap["tags"] . "`n`n"
+    
+    if cap.Has("date") && cap["date"] != ""
+        previewText .= "📅 CAPTURED: " . cap["date"] . "`n`n"
+    
+    if cap.Has("opinion") && cap["opinion"] != ""
+        previewText .= "💭 OPINION:`n" . cap["opinion"] . "`n`n"
+    
+    if cap.Has("body") && cap["body"] != ""
+        previewText .= "📄 BODY:`n" . cap["body"] . "`n`n"
+    
+    if cap.Has("note") && cap["note"] != ""
+        previewText .= "📝 NOTE:`n" . cap["note"] . "`n`n"
+    
+    ; Show preview window
+    CC_ShowPreviewWindow(name, previewText, cap)
+}
+
+CC_ShowPreviewWindow(name, content, cap) {
+    static previewGui := ""
+    
+    ; Destroy previous preview if exists
+    if previewGui != ""
+        try previewGui.Destroy()
+    
+    previewGui := Gui("+Resize +MinSize400x300", "Preview: " . name)
+    previewGui.BackColor := "1a1a2e"
+    previewGui.SetFont("s10 cWhite", "Consolas")
+    
+    ; Add edit control for scrollable content
+    editCtrl := previewGui.Add("Edit", "x10 y10 w580 h350 ReadOnly -Wrap +VScroll Background1a1a2e cWhite", content)
+    
+    ; Button row
+    previewGui.SetFont("s10", "Segoe UI")
+    btnClose := previewGui.Add("Button", "x10 y370 w80", "Close")
+    btnClose.OnEvent("Click", (*) => previewGui.Destroy())
+    
+    btnCopyAll := previewGui.Add("Button", "x100 y370 w100", "📋 Copy All")
+    btnCopyAll.OnEvent("Click", (*) => (A_Clipboard := content, ToolTip("Copied!"), SetTimer(() => ToolTip(), -1500)))
+    
+    btnCopyURL := previewGui.Add("Button", "x210 y370 w100", "🔗 Copy URL")
+    if cap.Has("url") && cap["url"] != ""
+        btnCopyURL.OnEvent("Click", (*) => (A_Clipboard := cap["url"], ToolTip("URL Copied!"), SetTimer(() => ToolTip(), -1500)))
+    else
+        btnCopyURL.Enabled := false
+    
+    btnOpenURL := previewGui.Add("Button", "x320 y370 w100", "🌐 Open URL")
+    if cap.Has("url") && cap["url"] != ""
+        btnOpenURL.OnEvent("Click", (*) => Run(cap["url"]))
+    else
+        btnOpenURL.Enabled := false
+    
+    previewGui.OnEvent("Close", (*) => previewGui.Destroy())
+    previewGui.OnEvent("Escape", (*) => previewGui.Destroy())
+    
+    previewGui.Show("w600 h410")
+}
+
+; ---------------------------------------------
+; REFRESH LIST - Reloads the capture data
+; ---------------------------------------------
+CC_BrowserRefreshList(browserGui, listView) {
+    global CaptureData, CaptureNames, AvailableTags
+    
+    ; Show loading indicator
+    ToolTip("🔄 Refreshing captures...")
+    
+    ; Reload data from disk
+    CC_LoadCaptureData()
+    
+    ; Clear and repopulate ListView
+    listView.Delete()
+    
+    for name in CaptureNames {
+        if !CaptureData.Has(StrLower(name))
+            continue
+        cap := CaptureData[StrLower(name)]
+        isFav := CC_IsFavorite(name) ? "⭐" : ""
+        hasImg := (IsSet(IC_HasImage) && IC_HasImage(name)) ? "📷" : ""
+        listView.Add(, isFav, hasImg, name,
+            cap.Has("title") ? cap["title"] : "",
+            cap.Has("tags") ? cap["tags"] : "",
+            cap.Has("date") ? cap["date"] : "")
+    }
+    
+    ; Sort by date (newest first)
+    listView.ModifyCol(6, "SortDesc")
+    
+    ; Update title and status bar
+    browserGui.Title := "Capture Browser - " CaptureNames.Length " captures"
+    browserGui.statusText.Value := "Showing " CaptureNames.Length " captures | Enter=Paste | Del=Delete | Ctrl+D=Duplicate | F5=Refresh"
+    
+    ; Update tag dropdown if needed
+    try {
+        tagDropdown := browserGui["TagFilter"]
+        currentTag := tagDropdown.Text
+        tagDropdown.Delete()
+        tagDropdown.Add(["All Tags", AvailableTags*])
+        
+        ; Try to restore previous selection
+        if (currentTag = "All Tags")
+            tagDropdown.Choose(1)
+        else {
+            foundIdx := 0
+            for idx, tag in ["All Tags", AvailableTags*] {
+                if (tag = currentTag) {
+                    foundIdx := idx
+                    break
+                }
+            }
+            tagDropdown.Choose(foundIdx > 0 ? foundIdx : 1)
+        }
+    }
+    
+    ToolTip("✅ Refreshed! " CaptureNames.Length " captures loaded.")
+    SetTimer(() => ToolTip(), -2000)
+}
+
+; ==============================================================================
+; END NEW BROWSER BUTTONS
+; ==============================================================================
 
 ; Duplicate a capture with a new name
 CC_DuplicateCapture(sourceName, browserGui := "") {
