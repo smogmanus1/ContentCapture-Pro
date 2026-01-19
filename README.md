@@ -1,159 +1,196 @@
-# ContentCapture Pro v5.6
+# ContentCapture Pro v5.8
 
-**Capture any webpage and recall it instantly by typing a short keyword.**
+**Capture any webpage and recall it instantly with hotstrings. Built-in research tools to verify content before sharing.**
 
 ![AutoHotkey](https://img.shields.io/badge/AutoHotkey-v2.0+-green)
-![Version](https://img.shields.io/badge/version-5.6-blue)
-![License](https://img.shields.io/badge/License-MIT-orange)
-![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-lightgrey)
+![Windows](https://img.shields.io/badge/Windows-10%2F11-blue)
+![License](https://img.shields.io/badge/License-MIT-yellow)
 
 ---
 
 ## What is ContentCapture Pro?
 
-ContentCapture Pro is a Windows productivity tool that lets you:
+ContentCapture Pro transforms how you save, organize, and share web content. Instead of bookmarks you never revisit or scattered notes, capture any webpage with a simple hotkey and recall it instantly by typing a short name.
 
-1. **Capture** any webpage with one hotkey (`Ctrl+Alt+G`)
-2. **Store** the URL, title, and your notes in a searchable database
-3. **Recall** content instantly by typing a short name you choose
-4. **Share** to social media, email, or open the URL—all with simple suffixes
-
-### Example Workflow
-
-```
-1. You find an article about electric cars
-2. Press Ctrl+Alt+G → Name it "evcars" → Add your notes
-3. Later, type "evcarsgo" → Opens that article instantly
-4. Or type "evcarsfb" → Shares to Facebook
-5. Or type "evcarsem" → Creates an email with the content
-```
+Think of it as a personal knowledge base that lives at your fingertips — accessible from ANY application with just a few keystrokes.
 
 ---
 
-## Quick Start (5 Minutes)
+## Key Features
 
-### Step 1: Install AutoHotkey v2
+### 🚀 Instant Capture
+- Press `Ctrl+Alt+G` on any webpage to capture URL, title, and content
+- Highlight text before capturing to save specific excerpts
+- Add tags, notes, and your personal opinion/commentary
+- Works with Chrome, Firefox, Edge, Brave, and most browsers
 
-Download from [autohotkey.com](https://www.autohotkey.com/) → Choose **v2.0**
+### ⚡ Lightning-Fast Recall
+- Type `recipe1` anywhere to instantly paste your saved "recipe1" capture
+- No app switching, no searching — just type and it appears
+- Works in Word, email, social media, chat apps — everywhere you can type
 
-### Step 2: Download ContentCapture Pro
+### 🔍 Powerful Search
+- **Quick Search** (`Ctrl+Alt+Space`): Alfred/Raycast-style instant popup
+- **Full Browser** (`Ctrl+Alt+B`): Search by name, tags, URL, date, or content
+- Filter by favorites, date range, or specific tags
 
-- Click the green **Code** button → **Download ZIP**
-- Extract to any folder
+### 📱 Smart Social Sharing
+- Auto-detects Facebook, Twitter/X, Bluesky, LinkedIn, Mastodon
+- Warns when content exceeds platform character limits
+- Auto-cleans titles (removes "- YouTube", "| CNN", etc.)
 
-### Step 3: Run It
+### 🤖 AI Integration (Optional)
+- Summarize long articles into key points
+- Rewrite content for different platforms
+- Supports OpenAI, Anthropic Claude, or local Ollama models
+- 100% private with Ollama (runs locally)
 
-- Double-click `ContentCapture-Pro.ahk`
-- Complete the quick setup wizard
-- Done!
-
-### Step 4: Capture Your First Page
-
-1. Open any webpage in your browser
-2. Press `Ctrl+Alt+G`
-3. Enter a short name (like `recipe` or `article`)
-4. Click Save
-
-### Step 5: Use Your Capture
-
-Type your name followed by `::` to paste, or add a suffix:
-
-| You Type | What Happens |
-|----------|--------------|
-| `recipe` | Pastes the full content |
-| `recipego` | Opens the URL in browser |
-| `recipeem` | Creates an Outlook email |
-| `recipefb` | Shares to Facebook |
-
----
-
-## Features
-
-### Core Features
-- **One-Key Capture** (`Ctrl+Alt+G`) - Captures URL, title, and optional notes
-- **Instant Recall** - Type short names to paste content or open URLs
-- **Searchable Browser** (`Ctrl+Alt+B`) - Find any capture by name, title, or tags
-- **Tags & Categories** - Organize captures with customizable tags
-- **Personal Notes** - Add opinions and private notes to each capture
-- **Quiet Mode** - Toggle notifications on/off via tray menu
-- **YouTube Transcript + AI** - Get transcripts and summarize with ChatGPT, Claude, or Ollama (local)
-
-### Sharing Options (Suffixes)
-
-| Suffix | Action |
-|--------|--------|
-| (none) | Paste full content |
-| `?` | Show action menu |
-| `go` | Open URL in browser |
-| `em` | Email via Outlook |
-| `oi` | Insert into open Outlook email at cursor |
-| `rd` | Read in popup window |
-| `vi` | View/Edit the capture |
-| `sh` | Paste short version (title + URL only) |
-
-### Social Media Sharing
-
-| Suffix | Platform | Limit |
-|--------|----------|-------|
-| `fb` | Facebook | 63,206 chars |
-| `x` | Twitter/X | 280 chars |
-| `bs` | Bluesky | 300 chars |
-| `li` | LinkedIn | 3,000 chars |
-| `mt` | Mastodon | 500 chars |
-
-### Research Tools
-
-| Suffix | Tool | Purpose |
-|--------|------|---------|
-| `yt` | YouTube Transcript | Extract video transcripts |
-| `pp` | Perplexity AI | AI-powered research |
-| `fc` | Snopes | Fact-check claims |
-| `mb` | Media Bias Check | Check source credibility |
-| `wb` | Wayback Machine | View archived versions |
-| `gs` | Google Scholar | Find academic sources |
-| `av` | Archive.today | Save permanent copy |
-
-### Document Attachments
-
-| Suffix | Action |
-|--------|--------|
-| `d.` | Open attached document |
-| `ed` | Email with document attached |
-
----
-
-## Keyboard Shortcuts
-
-| Hotkey | Action |
-|--------|--------|
-| `Ctrl+Alt+G` | Capture current webpage |
-| `Ctrl+Alt+B` | Open Capture Browser |
-| `Ctrl+Alt+N` | Create manual capture (no webpage) |
-| `Ctrl+Alt+W` | Show Recent Captures widget |
-| `Ctrl+Alt+H` | Export captures to HTML |
-| `Ctrl+Alt+L` | Reload script |
-| `Ctrl+Alt+S` | Open Settings |
-| `Ctrl+Alt+M` | Show Main Menu |
+### 🔬 Research Tools
+- YouTube Transcript extraction
+- Perplexity AI research
+- Fact Check (Snopes)
+- Media Bias Check
+- Wayback Machine
+- Google Scholar
+- Archive.today
 
 ---
 
 ## Installation
 
-See [INSTALL.md](docs/INSTALL.md) for detailed installation instructions.
-
-**Requirements:**
+### Requirements
+- AutoHotkey v2.0 or higher
 - Windows 10 or 11
-- AutoHotkey v2.0 or later (free)
+
+### Quick Install
+1. Download and install [AutoHotkey v2](https://www.autohotkey.com/)
+2. Download the latest release from this repository
+3. Extract all files to a folder
+4. Double-click `ContentCapture.ahk`
+5. Press `Ctrl+Alt+G` on any webpage to make your first capture!
 
 ---
 
-## Documentation
+## Keyboard Shortcuts
 
-- [Quick Start Guide](docs/QUICK-START.md) - Get running in 5 minutes
-- [Installation Guide](docs/INSTALL.md) - Detailed setup instructions
-- [User Guide](docs/USER-GUIDE.md) - Complete feature documentation
-- [Suffix Reference](docs/SUFFIX-REFERENCE.md) - All suffixes at a glance
-- [Troubleshooting](docs/TROUBLESHOOTING.md) - Common issues and fixes
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+Alt+G` | Capture current webpage |
+| `Ctrl+Alt+N` | New manual capture (no browser needed) |
+| `Ctrl+Alt+B` | Open Capture Browser |
+| `Ctrl+Alt+Space` | Quick Search |
+| `Ctrl+Alt+A` | AI Assist menu |
+| `Ctrl+Alt+L` | Reload script |
+
+### Capture Browser Shortcuts
+| Shortcut | Action |
+|----------|--------|
+| `Enter` | Paste selected capture |
+| `Delete` | Delete selected capture |
+| `Ctrl+F` | Focus search box |
+| `Ctrl+D` | Duplicate capture |
+| `Ctrl+N` | New capture |
+| `Ctrl+L` | Copy link only |
+| `Ctrl+P` | Preview capture |
+| `F5` | Refresh list |
+
+---
+
+## Suffix System
+
+Every capture automatically gets these hotstring variants. If your capture is named `recipe1`:
+
+### Basic Actions
+| Type This | Action |
+|-----------|--------|
+| `recipe1` | Paste full content |
+| `recipe1?` | Show action menu |
+| `recipe1sh` | Paste short version |
+| `recipe1go` | Open URL in browser |
+| `recipe1vi` | View/Edit capture |
+| `recipe1rd` | Read content in popup |
+| `recipe1pr` | Print formatted record |
+| `recipe1sum` | AI summarize on demand |
+
+### Email
+| Type This | Action |
+|-----------|--------|
+| `recipe1em` | Create new Outlook email |
+| `recipe1oi` | Insert into open Outlook email |
+| `recipe1ed` | Email with document attached |
+| `recipe1d.` | Open attached document |
+
+### Social Media
+| Type This | Platform |
+|-----------|----------|
+| `recipe1fb` | Facebook |
+| `recipe1x` | Twitter/X |
+| `recipe1bs` | Bluesky |
+| `recipe1li` | LinkedIn |
+| `recipe1mt` | Mastodon |
+
+### Research Tools
+| Type This | Tool |
+|-----------|------|
+| `recipe1yt` | YouTube Transcript |
+| `recipe1pp` | Perplexity AI |
+| `recipe1fc` | Fact Check (Snopes) |
+| `recipe1mb` | Media Bias Check |
+| `recipe1wb` | Wayback Machine |
+| `recipe1gs` | Google Scholar |
+| `recipe1av` | Archive to Archive.today |
+
+---
+
+## Capture Browser
+
+The Capture Browser (`Ctrl+Alt+B`) is your home base for managing captures.
+
+### Button Row 1
+| Button | Action |
+|--------|--------|
+| 🌐 Open | Open URL in browser |
+| 📋 Copy | Copy content / Duplicate |
+| 📧 Email | Send via Outlook |
+| ⭐ Fav | Toggle favorite |
+| ❓ Hotstring | Show available suffixes |
+| 📖 Read | Read in popup |
+| ✏️ Edit | Edit capture |
+| 🗑️ Del | Delete capture |
+| 📷 Img | Attach image |
+| 🔬 Research | Research tools menu |
+| Close | Close browser |
+
+### Button Row 2 (New in v5.8)
+| Button | Shortcut | Action |
+|--------|----------|--------|
+| ➕ New | `Ctrl+N` | Create new manual capture |
+| 🔗 Link | `Ctrl+L` | Copy URL only |
+| 👁 Preview | `Ctrl+P` | Full content preview |
+| 🔄 Refresh | `F5` | Reload from disk |
+
+---
+
+## AI Integration
+
+ContentCapture Pro supports three AI providers:
+
+### OpenAI (GPT)
+- Requires API key from [platform.openai.com](https://platform.openai.com)
+- Cloud-based, pay-per-use
+
+### Anthropic (Claude)
+- Requires API key from [console.anthropic.com](https://console.anthropic.com)
+- Cloud-based, pay-per-use
+
+### Ollama (Local/Free)
+- Download from [ollama.ai](https://ollama.ai)
+- Runs 100% locally on your computer
+- No API key needed, completely free
+- Your content never leaves your machine
+
+### Setup
+Press `Ctrl+Alt+A` to open AI Assist and configure your preferred provider.
 
 ---
 
@@ -161,42 +198,43 @@ See [INSTALL.md](docs/INSTALL.md) for detailed installation instructions.
 
 ```
 ContentCapture-Pro/
-├── ContentCapture-Pro.ahk       # Main script
-├── DynamicSuffixHandler.ahk     # Suffix detection engine
+├── ContentCapture.ahk          # Main launcher (run this)
+├── ContentCapture-Pro.ahk      # Core application
+├── DynamicSuffixHandler.ahk    # Suffix system
 ├── ContentCapture_Generated.ahk # Auto-generated hotstrings
-├── captures.dat                 # Your captures database
-├── config.ini                   # Settings (auto-created)
-├── README.md                    # This file
-├── LICENSE                      # MIT License
-├── CHANGELOG.md                 # Version history
-└── docs/                        # Documentation folder
-    ├── QUICK-START.md
-    ├── INSTALL.md
-    ├── USER-GUIDE.md
-    ├── SUFFIX-REFERENCE.md
-    └── TROUBLESHOOTING.md
+├── captures.dat                # Your capture data
+├── favorites.dat               # Favorite captures
+├── config.ini                  # Settings
+└── backups/                    # Automatic backups
 ```
 
 ---
 
-## Contributing
+## Troubleshooting
 
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+### Hotstrings not working?
+- Make sure `ContentCapture_Generated.ahk` was created
+- Try reloading: `Ctrl+Alt+L`
+
+### Capture data not saving?
+- Check file permissions on the script folder
+- Ensure UTF-8 encoding is supported
+
+### Social media not detected?
+- The window title must contain the platform name
+- Try refreshing the page
 
 ---
 
 ## Credits
 
-**Author:** Brad Schrunk ([@smogmanus1](https://github.com/smogmanus1))
+Built with help from **Claude AI** (Anthropic)
 
-**Built with:**
-- [AutoHotkey v2](https://www.autohotkey.com/) - The automation platform
-
-**Community Support:**
-- AutoHotkey Forums
-- Joe Glines ([the-Automator.com](https://the-automator.com))
-- Jack Dunning (AutoHotkey educator)
-- Isaias Baez (RaptorX)
+Special thanks to the AutoHotkey community:
+- **Joe Glines** & The Automator ([the-automator.com](https://www.the-automator.com))
+- **Isaias Baez** (RaptorX)
+- **Jack Dunning** ([computoredge.com](https://www.computoredge.com/AutoHotkey/))
+- **Antonio Bueno** (atnbueno) - Original URL capture concepts
 
 ---
 
@@ -206,11 +244,6 @@ MIT License - See [LICENSE](LICENSE) for details.
 
 ---
 
-## Support
+## Feedback
 
-- **Issues:** [GitHub Issues](https://github.com/smogmanus1/ContentCapture-Pro/issues)
-- **AutoHotkey Forums:** [autohotkey.com/boards](https://www.autohotkey.com/boards/)
-
----
-
-**Made with ❤️ for the AutoHotkey community**
+Found a bug? Have a feature request? Open an issue or leave a comment!
