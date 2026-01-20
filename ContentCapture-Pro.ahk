@@ -380,7 +380,8 @@
 #Include ImageCapture.ahk
 #Include ImageClipboard.ahk
 #Include SocialShare.ahk
-#Include ResearchTools.ahk 
+#Include ResearchTools.ahk
+#Include CC_ShareModule.ahk 
 
 global ContentCaptureDir := ""
 
@@ -4097,8 +4098,10 @@ CC_OpenCaptureBrowser() {
     browserGui.Add("Button", "x70 y440 w55", "🔗 Link").OnEvent("Click", (*) => CC_BrowserCopyLinkOnly(listView))
     browserGui.Add("Button", "x130 y440 w65", "👁 Preview").OnEvent("Click", (*) => CC_BrowserPreviewCapture(listView))
     browserGui.Add("Button", "x200 y440 w65", "🔄 Refresh").OnEvent("Click", (*) => CC_BrowserRefreshList(browserGui, listView))
+    browserGui.Add("Button", "x270 y440 w55", "🔗 Share").OnEvent("Click", (*) => CC_BrowserShareCapture(listView, browserGui))
+    browserGui.Add("Button", "x330 y440 w60", "📥 Import").OnEvent("Click", (*) => CC_BrowserImportCapture())
 
-    browserGui.statusText := browserGui.Add("Text", "x10 y478 w680", "Showing " CaptureNames.Length " captures | Enter=Paste | Del=Delete | Ctrl+D=Duplicate | F5=Refresh")
+    browserGui.statusText := browserGui.Add("Text", "x10 y478 w680", "Showing " CaptureNames.Length " captures | Enter=Paste | Del=Delete | Ctrl+S=Share | Ctrl+I=Import")
 
     browserGui.OnEvent("Close", (*) => browserGui.Destroy())
     browserGui.OnEvent("Escape", (*) => browserGui.Destroy())
@@ -4117,6 +4120,8 @@ CC_OpenCaptureBrowser() {
     Hotkey("^l", (*) => CC_BrowserCopyLinkOnly(listView), "On")
     Hotkey("^p", (*) => CC_BrowserPreviewCapture(listView), "On")
     Hotkey("F5", (*) => CC_BrowserRefreshList(browserGui, listView), "On")
+    Hotkey("^s", (*) => CC_BrowserShareCapture(listView, browserGui), "On")
+    Hotkey("^i", (*) => CC_BrowserImportCapture(), "On")
     HotIf()
 
     browserGui.Show("w720 h510")
@@ -4468,7 +4473,7 @@ CC_BrowserRefreshList(browserGui, listView) {
     
     ; Update title and status bar
     browserGui.Title := "Capture Browser - " CaptureNames.Length " captures"
-    browserGui.statusText.Value := "Showing " CaptureNames.Length " captures | Enter=Paste | Del=Delete | Ctrl+D=Duplicate | F5=Refresh"
+    browserGui.statusText.Value := "Showing " CaptureNames.Length " captures | Enter=Paste | Del=Delete | Ctrl+S=Share | Ctrl+I=Import"
     
     ; Update tag dropdown if needed
     try {

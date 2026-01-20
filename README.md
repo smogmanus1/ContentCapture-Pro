@@ -54,6 +54,14 @@ Think of it as a personal knowledge base that lives at your fingertips — acces
 - Google Scholar
 - Archive.today
 
+### 🔗 Share & Import (NEW in v5.9!)
+- **Share captures** with other ContentCapture Pro users
+- Export single or multiple captures to clipboard or `.ccp` file
+- **Includes everything:** content, research notes, transcripts, summaries, images
+- Images embedded as Base64 - fully portable, no separate files needed
+- Smart conflict handling when importing (skip, replace, or rename)
+- Perfect for sharing verified content with friends and family
+
 ---
 
 ## Installation
@@ -92,6 +100,8 @@ Think of it as a personal knowledge base that lives at your fingertips — acces
 | `Ctrl+N` | New capture |
 | `Ctrl+L` | Copy link only |
 | `Ctrl+P` | Preview capture |
+| `Ctrl+S` | Share capture(s) |
+| `Ctrl+I` | Import captures |
 | `F5` | Refresh list |
 
 ---
@@ -142,6 +152,43 @@ Every capture automatically gets these hotstring variants. If your capture is na
 
 ---
 
+## Share & Import
+
+Share your captures with other ContentCapture Pro users! Perfect for sharing verified content with friends, family, or colleagues.
+
+### What Gets Shared
+- ✅ Core content (URL, title, body, tags, opinion)
+- ✅ Research notes (fact-check results, bias ratings)
+- ✅ YouTube transcripts and AI summaries
+- ✅ Attached images (embedded as Base64)
+
+### How to Share
+1. Open Capture Browser (`Ctrl+Alt+B`)
+2. Select one or more captures (`Ctrl+Click` for multiple)
+3. Click **🔗 Share** or press `Ctrl+S`
+4. Choose:
+   - **Copy to Clipboard (Full)** - includes images
+   - **Copy to Clipboard (No Images)** - smaller/faster
+   - **Save to .ccp File** - for email attachments
+
+### How to Import
+1. Open Capture Browser
+2. Click **📥 Import** or press `Ctrl+I`
+3. Paste JSON or load a `.ccp` file
+4. Preview what will be imported
+5. Handle any conflicts (skip, replace, or rename)
+6. Click **Import All**
+
+### Import Preview Shows
+```
+✅ Ready    │ opensecr  │ OpenSecrets...  │ 📷 │ 🔬 │ 📝 │
+⚠️ Conflict │ projcens  │ Already exists  │    │    │    │
+
+📷 = Has image | 🔬 = Has research | 📝 = Has transcript
+```
+
+---
+
 ## Capture Browser
 
 The Capture Browser (`Ctrl+Alt+B`) is your home base for managing captures.
@@ -161,13 +208,15 @@ The Capture Browser (`Ctrl+Alt+B`) is your home base for managing captures.
 | 🔬 Research | Research tools menu |
 | Close | Close browser |
 
-### Button Row 2 (New in v5.8)
+### Button Row 2 (New in v5.8+)
 | Button | Shortcut | Action |
 |--------|----------|--------|
 | ➕ New | `Ctrl+N` | Create new manual capture |
 | 🔗 Link | `Ctrl+L` | Copy URL only |
 | 👁 Preview | `Ctrl+P` | Full content preview |
 | 🔄 Refresh | `F5` | Reload from disk |
+| 🔗 Share | `Ctrl+S` | Share capture(s) with other users |
+| 📥 Import | `Ctrl+I` | Import shared captures |
 
 ---
 
@@ -201,10 +250,16 @@ ContentCapture-Pro/
 ├── ContentCapture.ahk          # Main launcher (run this)
 ├── ContentCapture-Pro.ahk      # Core application
 ├── DynamicSuffixHandler.ahk    # Suffix system
+├── CC_ShareModule.ahk          # Share & Import functionality
+├── ResearchTools.ahk           # Research tools
+├── ImageCapture.ahk            # Image attachments
+├── ImageClipboard.ahk          # Clipboard image handling
+├── SocialShare.ahk             # Social media integration
 ├── ContentCapture_Generated.ahk # Auto-generated hotstrings
 ├── captures.dat                # Your capture data
 ├── favorites.dat               # Favorite captures
 ├── config.ini                  # Settings
+├── images/                     # Attached images
 └── backups/                    # Automatic backups
 ```
 

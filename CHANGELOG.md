@@ -4,6 +4,28 @@ All notable changes to ContentCapture Pro are documented here.
 
 ---
 
+## [5.9] - 2026-01-19
+
+### Added
+- **🔗 Share & Import System** - Share captures with other ContentCapture Pro users!
+  - Export single or multiple captures to clipboard or `.ccp` file
+  - Includes ALL data: content, research notes, transcripts, summaries, images
+  - Images embedded as Base64 - fully portable, no separate files needed
+  - Smart import preview shows what's included (📷 image, 🔬 research, 📝 transcript)
+  - Conflict handling: skip, replace, or rename duplicates
+  - Images auto-restore to recipient's `images/` folder
+- **New Capture Browser buttons:**
+  - 🔗 **Share** (`Ctrl+S`) - Share selected capture(s)
+  - 📥 **Import** (`Ctrl+I`) - Import shared captures
+- **New file:** `CC_ShareModule.ahk` - Share/Import functionality
+- Keyboard shortcuts: `Ctrl+S` for Share, `Ctrl+I` for Import
+
+### Changed
+- Status bar now shows Share/Import shortcuts
+- Updated README with Share & Import documentation
+
+---
+
 ## [5.8] - 2026-01-19
 
 ### Added
@@ -204,6 +226,7 @@ All notable changes to ContentCapture Pro are documented here.
 
 | Version | Date | Major Features |
 |---------|------|----------------|
+| 5.9 | 2026-01-19 | Share & Import system with images |
 | 5.8 | 2026-01-19 | 4 new browser buttons, Preview window |
 | 5.7 | 2026-01-15 | Capture First Process Later, sum suffix |
 | 5.6 | 2026-01-10 | Quiet Mode, YouTube transcript workflow |
@@ -214,4 +237,4 @@ All notable changes to ContentCapture Pro are documented here.
 | 5.0 | 2025-12-15 | Research Tools |
 | 4.9.1 | 2025-12-01 | Initial public release |
 
-**Total: 9 updates since initial release!**
+**Total: 10 updates since initial release!**
