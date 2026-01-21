@@ -376,9 +376,11 @@
 ; ==============================================================================
 ; NOTE: #Requires and #SingleInstance are in the launcher (ContentCapture.ahk)
 #Requires AutoHotkey v2.0+
-#Include DynamicSuffixHandler.ahk
 #Include ImageCapture.ahk
 #Include ImageClipboard.ahk
+#Include ImageDatabase.ahk
+#Include ImageSharing.ahk
+#Include DynamicSuffixHandler.ahk
 #Include SocialShare.ahk
 #Include ResearchTools.ahk
 #Include CC_ShareModule.ahk
