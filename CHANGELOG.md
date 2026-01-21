@@ -4,6 +4,25 @@ All notable changes to ContentCapture Pro are documented here.
 
 ---
 
+## [5.9.1] - 2026-01-20
+
+### Added
+- **🔍 Hover Preview Tooltips** - Hover over any capture in the Browser to see a preview!
+  - Shows after 400ms hover delay (configurable)
+  - Displays: name, title, URL, body preview (300 chars), opinion, tags
+  - Status icons: 📅 date, ⭐ favorite, 📷 image, 🔬 research, 📝 transcript
+  - Auto-hides when you move away
+  - Zero performance impact when not hovering
+- **📋 Copy for AI Research** - New submenu in Research Tools!
+  - Copy Body, Transcript, or Summary to clipboard
+  - One-click: Copy content → Open ChatGPT, Claude, Perplexity, or Ollama
+  - Auto-builds prompt with title and "analyze this" instruction
+  - Prefers transcript over body when both exist
+- **New file:** `CC_HoverPreview.ahk` - Hover preview functionality
+- **Updated:** `ResearchTools.ahk` - Added Copy for AI submenu
+
+---
+
 ## [5.9] - 2026-01-19
 
 ### Added
@@ -226,6 +245,7 @@ All notable changes to ContentCapture Pro are documented here.
 
 | Version | Date | Major Features |
 |---------|------|----------------|
+| 5.9.1 | 2026-01-20 | Hover preview tooltips |
 | 5.9 | 2026-01-19 | Share & Import system with images |
 | 5.8 | 2026-01-19 | 4 new browser buttons, Preview window |
 | 5.7 | 2026-01-15 | Capture First Process Later, sum suffix |
@@ -237,4 +257,4 @@ All notable changes to ContentCapture Pro are documented here.
 | 5.0 | 2025-12-15 | Research Tools |
 | 4.9.1 | 2025-12-01 | Initial public release |
 
-**Total: 10 updates since initial release!**
+**Total: 11 updates since initial release!**

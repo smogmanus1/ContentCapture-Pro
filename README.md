@@ -33,6 +33,7 @@ Think of it as a personal knowledge base that lives at your fingertips — acces
 - **Quick Search** (`Ctrl+Alt+Space`): Alfred/Raycast-style instant popup
 - **Full Browser** (`Ctrl+Alt+B`): Search by name, tags, URL, date, or content
 - Filter by favorites, date range, or specific tags
+- **Hover Preview**: Hover over any capture to see a tooltip with details
 
 ### 📱 Smart Social Sharing
 - Auto-detects Facebook, Twitter/X, Bluesky, LinkedIn, Mastodon
@@ -53,6 +54,7 @@ Think of it as a personal knowledge base that lives at your fingertips — acces
 - Wayback Machine
 - Google Scholar
 - Archive.today
+- **Copy for AI** - Copy body/transcript and open ChatGPT, Claude, Perplexity, or Ollama
 
 ### 🔗 Share & Import (NEW in v5.9!)
 - **Share captures** with other ContentCapture Pro users
@@ -150,6 +152,21 @@ Every capture automatically gets these hotstring variants. If your capture is na
 | `recipe1gs` | Google Scholar |
 | `recipe1av` | Archive to Archive.today |
 
+### Copy for AI (Research Menu)
+Click **🔬 Research** in the Browser to access the "Copy for AI Research" submenu:
+
+| Option | What It Does |
+|--------|--------------|
+| 📄 Copy Body Text | Copy body to clipboard |
+| 📝 Copy Transcript | Copy transcript to clipboard |
+| 📋 Copy Summary | Copy AI summary to clipboard |
+| 🤖 Copy → ChatGPT | Copy content & open ChatGPT |
+| 🧠 Copy → Claude | Copy content & open Claude |
+| 🔍 Copy → Perplexity | Copy content & open Perplexity |
+| 🦙 Copy → Ollama | Copy content & open local Ollama |
+
+The "Copy → Open" options automatically build a prompt with the title and content, ready to paste!
+
 ---
 
 ## Share & Import
@@ -192,6 +209,12 @@ Share your captures with other ContentCapture Pro users! Perfect for sharing ver
 ## Capture Browser
 
 The Capture Browser (`Ctrl+Alt+B`) is your home base for managing captures.
+
+**Hover Preview**: Move your mouse over any capture and wait ~400ms to see a tooltip with:
+- Title and URL
+- Body preview (first 300 characters)
+- Tags and your opinion/notes
+- Status icons (favorite, image, research, transcript)
 
 ### Button Row 1
 | Button | Action |
@@ -251,6 +274,7 @@ ContentCapture-Pro/
 ├── ContentCapture-Pro.ahk      # Core application
 ├── DynamicSuffixHandler.ahk    # Suffix system
 ├── CC_ShareModule.ahk          # Share & Import functionality
+├── CC_HoverPreview.ahk         # Hover preview tooltips
 ├── ResearchTools.ahk           # Research tools
 ├── ImageCapture.ahk            # Image attachments
 ├── ImageClipboard.ahk          # Clipboard image handling

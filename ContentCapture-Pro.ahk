@@ -381,7 +381,8 @@
 #Include ImageClipboard.ahk
 #Include SocialShare.ahk
 #Include ResearchTools.ahk
-#Include CC_ShareModule.ahk 
+#Include CC_ShareModule.ahk
+#Include CC_HoverPreview.ahk
 
 global ContentCaptureDir := ""
 
@@ -4098,7 +4099,7 @@ CC_OpenCaptureBrowser() {
     browserGui.Add("Button", "x70 y440 w55", "🔗 Link").OnEvent("Click", (*) => CC_BrowserCopyLinkOnly(listView))
     browserGui.Add("Button", "x130 y440 w65", "👁 Preview").OnEvent("Click", (*) => CC_BrowserPreviewCapture(listView))
     browserGui.Add("Button", "x200 y440 w65", "🔄 Refresh").OnEvent("Click", (*) => CC_BrowserRefreshList(browserGui, listView))
-    browserGui.Add("Button", "x270 y440 w55", "🔗 Share").OnEvent("Click", (*) => CC_BrowserShareCapture(listView, browserGui))
+    browserGui.Add("Button", "x270 y440 w55", "📤 Share").OnEvent("Click", (*) => CC_BrowserShareCapture(listView, browserGui))
     browserGui.Add("Button", "x330 y440 w60", "📥 Import").OnEvent("Click", (*) => CC_BrowserImportCapture())
 
     browserGui.statusText := browserGui.Add("Text", "x10 y478 w680", "Showing " CaptureNames.Length " captures | Enter=Paste | Del=Delete | Ctrl+S=Share | Ctrl+I=Import")
@@ -4124,6 +4125,9 @@ CC_OpenCaptureBrowser() {
     Hotkey("^i", (*) => CC_BrowserImportCapture(), "On")
     HotIf()
 
+    ; Initialize hover preview tooltips
+    CC_HoverPreview.Initialize(browserGui, listView)
+    
     browserGui.Show("w720 h510")
     searchEdit.Focus()
     

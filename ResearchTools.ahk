@@ -56,6 +56,8 @@ class ResearchTools {
     
     ; Shows the research tools popup menu
     static ShowResearchMenu(browserGui, listView) {
+        global CaptureData
+        
         ; Get selected capture
         row := listView.GetNext(0, "F")
         if (row = 0) {
@@ -65,10 +67,47 @@ class ResearchTools {
         
         name := listView.GetText(row, 3)  ; Column 3 is Name (after star and image columns)
         
+        ; Get capture data to check what content exists
+        cap := CaptureData.Has(name) ? CaptureData[name] : Map()
+        hasBody := cap.Has("body") && cap["body"] != ""
+        hasTranscript := cap.Has("transcript") && cap["transcript"] != ""
+        hasSummary := cap.Has("summary") && cap["summary"] != ""
+        
         ; Create popup menu
         researchMenu := Menu()
         
-        ; Add each tool to menu
+        ; ============================================
+        ; COPY FOR AI SECTION (NEW!)
+        ; ============================================
+        copyMenu := Menu()
+        
+        ; Copy options
+        if hasBody
+            copyMenu.Add("📄 Copy Body Text", (*) => this.CopyForAI(name, "body"))
+        if hasTranscript
+            copyMenu.Add("📝 Copy Transcript", (*) => this.CopyForAI(name, "transcript"))
+        if hasSummary
+            copyMenu.Add("📋 Copy Summary", (*) => this.CopyForAI(name, "summary"))
+        if hasBody || hasTranscript
+            copyMenu.Add()  ; Separator
+        
+        ; Copy & Open AI
+        if hasBody || hasTranscript {
+            copyMenu.Add("🤖 Copy → Open ChatGPT", (*) => this.CopyAndOpenAI(name, "chatgpt"))
+            copyMenu.Add("🧠 Copy → Open Claude", (*) => this.CopyAndOpenAI(name, "claude"))
+            copyMenu.Add("🔍 Copy → Open Perplexity", (*) => this.CopyAndOpenAI(name, "perplexity"))
+            copyMenu.Add("🦙 Copy → Open Ollama", (*) => this.CopyAndOpenAI(name, "ollama"))
+        }
+        
+        ; Add submenu if there's content
+        if hasBody || hasTranscript || hasSummary {
+            researchMenu.Add("📋 Copy for AI Research", copyMenu)
+            researchMenu.Add()  ; Separator
+        }
+        
+        ; ============================================
+        ; RESEARCH TOOLS SECTION
+        ; ============================================
         researchMenu.Add("🎬 YouTube Transcript", (*) => this.OpenTranscript(name))
         researchMenu.Add("🔍 Perplexity AI", (*) => this.OpenPerplexity(name))
         researchMenu.Add()  ; Separator
@@ -84,6 +123,113 @@ class ResearchTools {
         
         ; Show menu at mouse position
         researchMenu.Show()
+    }
+    
+    ; ==== COPY FOR AI FUNCTIONS ====
+    
+    ; Copy specific content to clipboard
+    static CopyForAI(name, contentType) {
+        global CaptureData
+        
+        if !CaptureData.Has(name) {
+            MsgBox("Capture not found.", "Error", "48")
+            return
+        }
+        
+        cap := CaptureData[name]
+        content := ""
+        label := ""
+        
+        switch contentType {
+            case "body":
+                content := cap.Has("body") ? cap["body"] : ""
+                label := "Body"
+            case "transcript":
+                content := cap.Has("transcript") ? cap["transcript"] : ""
+                label := "Transcript"
+            case "summary":
+                content := cap.Has("summary") ? cap["summary"] : ""
+                label := "Summary"
+        }
+        
+        if content = "" {
+            MsgBox("No " label " content found for this capture.", "No Content", "48")
+            return
+        }
+        
+        ; Copy to clipboard
+        A_Clipboard := content
+        
+        ; Show confirmation
+        charCount := StrLen(content)
+        TrayTip(label " copied to clipboard!", charCount " characters ready to paste", "1")
+    }
+    
+    ; Copy content and open AI tool
+    static CopyAndOpenAI(name, aiTool) {
+        global CaptureData
+        
+        if !CaptureData.Has(name) {
+            MsgBox("Capture not found.", "Error", "48")
+            return
+        }
+        
+        cap := CaptureData[name]
+        
+        ; Determine what to copy (prefer transcript, fall back to body)
+        content := ""
+        contentType := ""
+        
+        if cap.Has("transcript") && cap["transcript"] != "" {
+            content := cap["transcript"]
+            contentType := "Transcript"
+        } else if cap.Has("body") && cap["body"] != "" {
+            content := cap["body"]
+            contentType := "Body"
+        }
+        
+        if content = "" {
+            MsgBox("No content to copy for this capture.", "No Content", "48")
+            return
+        }
+        
+        ; Get title for context
+        title := cap.Has("title") ? cap["title"] : name
+        
+        ; Build prompt with context
+        prompt := "Here is content from: " title "`n`n"
+        prompt .= "---`n`n"
+        prompt .= content
+        prompt .= "`n`n---`n`n"
+        prompt .= "Please analyze this content and provide a summary of the key points."
+        
+        ; Copy to clipboard
+        A_Clipboard := prompt
+        
+        ; Open the AI tool
+        switch aiTool {
+            case "chatgpt":
+                Run("https://chat.openai.com/")
+                aiName := "ChatGPT"
+            case "claude":
+                Run("https://claude.ai/")
+                aiName := "Claude"
+            case "perplexity":
+                Run("https://www.perplexity.ai/")
+                aiName := "Perplexity"
+            case "ollama":
+                ; Try to open Ollama web UI or show instructions
+                try {
+                    Run("http://localhost:11434")
+                } catch {
+                    ; If Ollama isn't running, show instructions
+                }
+                aiName := "Ollama"
+        }
+        
+        ; Show instructions
+        charCount := StrLen(prompt)
+        TrayTip(contentType " copied! " aiName " opening...", "Paste with Ctrl+V (" charCount " chars)", "1")
     }
     
     ; ==== TOOL IMPLEMENTATIONS ====
