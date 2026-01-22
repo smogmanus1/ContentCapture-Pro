@@ -5932,7 +5932,7 @@ CC_EditCapture(name) {
     currentResearch := cap.Has("research") ? cap["research"] : ""
     currentBody := cap.Has("body") ? cap["body"] : ""
 
-    editGui := Gui("+Resize", "✏️ Edit: " name)
+    editGui := Gui("+AlwaysOnTop +Resize", "✏️ Edit: " name)
     editGui.SetFont("s10")
     editGui.BackColor := "F5F5F5"
 

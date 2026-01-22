@@ -320,19 +320,52 @@ class DynamicSuffixHandler {
     
     ; ==== SOCIAL MEDIA (TEXT ONLY) ====
     
-    static ActionSocial(captureName, platform) {
+    ; Platform configurations
+    static PLATFORMS := Map(
+        "facebook", {name: "Facebook", limit: 63206, icon: "📘", url: "https://www.facebook.com/"},
+        "twitter", {name: "Twitter/X", limit: 280, icon: "🐦", url: "https://twitter.com/compose/tweet"},
+        "bluesky", {name: "Bluesky", limit: 300, icon: "🦋", url: "https://bsky.app/"},
+        "linkedin", {name: "LinkedIn", limit: 3000, icon: "💼", url: "https://www.linkedin.com/feed/"},
+        "mastodon", {name: "Mastodon", limit: 500, icon: "🐘", url: ""}
+    )
+    
+    static ActionSocial(captureName, platformKey) {
+        ; Get platform config object
+        platformObj := this.PLATFORMS.Has(platformKey) ? this.PLATFORMS[platformKey] : {name: platformKey, limit: 5000, icon: "📤", url: ""}
+        
         ; Use SocialShare module if available
         if IsSet(SS_ShareCapture) {
-            SS_ShareCapture(captureName, platform)
+            SS_ShareCapture(captureName, platformObj)
             return
         }
         
         ; Fallback: just copy content
         cap := this.captureDataRef[captureName]
-        content := this.BuildShareContent(cap, platform)
+        content := this.BuildShareContent(cap, platformKey)
         A_Clipboard := content
         ClipWait(2)
-        TrayTip("Content copied for " platform, "📋 Ready")
+        TrayTip("Content copied for " platformObj.name, "📋 Ready")
+    }
+    
+    ; Individual platform methods for direct calls from main script
+    static ActionBluesky(captureName, cap := "") {
+        this.ActionSocial(captureName, "bluesky")
+    }
+    
+    static ActionFacebook(captureName, cap := "") {
+        this.ActionSocial(captureName, "facebook")
+    }
+    
+    static ActionTwitter(captureName, cap := "") {
+        this.ActionSocial(captureName, "twitter")
+    }
+    
+    static ActionLinkedIn(captureName, cap := "") {
+        this.ActionSocial(captureName, "linkedin")
+    }
+    
+    static ActionMastodon(captureName, cap := "") {
+        this.ActionSocial(captureName, "mastodon")
     }
     
     ; ==== AI & RESEARCH ====
@@ -392,13 +425,14 @@ class DynamicSuffixHandler {
         }
     }
     
-    static ActionSocialWithImage(captureName, platform) {
+    static ActionSocialWithImage(captureName, platformKey) {
         if IsSet(IS_ShareWithImage) {
-            IS_ShareWithImage(captureName, platform)
+            ; ImageSharing expects a string like "facebook", "bluesky", etc.
+            IS_ShareWithImage(captureName, platformKey)
         } else {
             ; Fallback to text-only sharing
             TrayTip("Image sharing not available, using text only", "Note")
-            this.ActionSocial(captureName, platform)
+            this.ActionSocial(captureName, platformKey)
         }
     }
     
