@@ -5677,7 +5677,7 @@ CC_RestoreSelectedEntries(restoreGui) {
         return
     }
     
-    ; Handle duplicates
+    ; Handle duplicates - offer to OVERWRITE
     if (duplicates.Length > 0) {
         dupMsg := duplicates.Length " selected entries already exist in working file:`n`n"
         showCount := Min(duplicates.Length, 5)
@@ -5687,20 +5687,32 @@ CC_RestoreSelectedEntries(restoreGui) {
         if (duplicates.Length > 5)
             dupMsg .= "• ... and " (duplicates.Length - 5) " more`n"
         
-        dupMsg .= "`nSkip these and restore only new entries?"
-        
         if (selectedNames.Length > 0) {
-            dupMsg .= "`n`n(" selectedNames.Length " new entries will be restored)"
+            dupMsg .= "`nWhat would you like to do?`n"
+            dupMsg .= "• YES = Overwrite duplicates AND restore new entries`n"
+            dupMsg .= "• NO = Skip duplicates, restore only " selectedNames.Length " new entries`n"
+            dupMsg .= "• CANCEL = Cancel restore"
         } else {
-            MsgBox("All selected entries already exist in your working file.`n`nUncheck existing entries or select different ones.", "All Duplicates", "48")
-            return
+            ; ALL selected are duplicates - offer to overwrite
+            dupMsg .= "`nOverwrite existing entries with backup versions?`n`n"
+            dupMsg .= "• YES = Overwrite with backup data`n"
+            dupMsg .= "• NO/CANCEL = Cancel restore"
         }
         
         result := MsgBox(dupMsg, "Duplicates Found", "YesNoCancel Icon!")
         if (result = "Cancel")
             return
-        if (result = "No")
-            return
+        if (result = "Yes") {
+            ; Add duplicates to the restore list (will overwrite)
+            for name in duplicates {
+                selectedNames.Push(name)
+            }
+        } else if (result = "No") {
+            ; If no new entries, just cancel
+            if (selectedNames.Length = 0)
+                return
+            ; Otherwise skip duplicates and continue with new entries only
+        }
     }
     
     ; Confirm restore
@@ -5724,15 +5736,25 @@ CC_RestoreSelectedEntries(restoreGui) {
     
     ; Restore entries
     restoredCount := 0
+    overwriteCount := 0
     for name in selectedNames {
         if !backupData.Has(StrLower(name))
             continue
         
         cap := backupData[StrLower(name)]
         
-        ; Add to CaptureData
+        ; Check if this is an overwrite or new entry
+        isOverwrite := CaptureData.Has(StrLower(name))
+        
+        ; Add to CaptureData (overwrites if exists)
         CaptureData[StrLower(name)] := cap
-        CaptureNames.Push(name)
+        
+        ; Only add to CaptureNames if it's a new entry (not overwrite)
+        if (!isOverwrite)
+            CaptureNames.Push(name)
+        else
+            overwriteCount++
+        
         restoredCount++
         
         ; Save for archive
@@ -5754,11 +5776,22 @@ CC_RestoreSelectedEntries(restoreGui) {
     
     CC_CloseRestoreGui(restoreGui)
     
+    ; Build detailed message
+    newCount := restoredCount - overwriteCount
+    detailMsg := ""
+    if (newCount > 0)
+        detailMsg .= newCount " new"
+    if (overwriteCount > 0) {
+        if (detailMsg != "")
+            detailMsg .= ", "
+        detailMsg .= overwriteCount " overwritten"
+    }
+    
     archiveMsg := moveToArchive ? "`nMoved to archive." : ""
-    CC_Notify("Restored " restoredCount " entries!" archiveMsg "`nHotstrings are ready to use.", "Restore Complete")
+    CC_Notify("Restored " restoredCount " entries! (" detailMsg ")" archiveMsg "`nHotstrings are ready to use.", "Restore Complete")
     
     ; Ask about reload
-    result := MsgBox("Restored " restoredCount " entries!" archiveMsg "`n`nReload script now to activate new hotstrings?", "Restore Complete", "YesNo Iconi")
+    result := MsgBox("Restored " restoredCount " entries! (" detailMsg ")" archiveMsg "`n`nReload script now to activate new hotstrings?", "Restore Complete", "YesNo Iconi")
     if (result = "Yes")
         Reload()
 }

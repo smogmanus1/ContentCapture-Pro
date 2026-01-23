@@ -126,7 +126,7 @@ SS_ShareTextOnly(content, platform) {
             TrayTip(platform.icon " Text copied!`nPaste with Ctrl+V on Facebook", "Facebook Share", "1")
             
         case "Twitter/X":
-            url := platform.shareUrl . "text=" . SS_URLEncode(content)
+            url := "https://twitter.com/intent/tweet?text=" . SS_URLEncode(content)
             Run(url)
             
         case "Bluesky":
