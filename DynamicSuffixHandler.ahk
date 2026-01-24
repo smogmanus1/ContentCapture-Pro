@@ -1,76 +1,128 @@
 ; ==============================================================================
 ; DynamicSuffixHandler.ahk - Dynamic Hotstring Suffix Router
 ; ==============================================================================
-; Version: 3.0 - With Image Suffix Support
+; Version: 4.0 - Complete Suffix Support
+; Updated: 2026-01-24
 ; ==============================================================================
 ;
-; Supported Suffixes (type scriptnameSUFFIX then space/enter):
-;   em  → Email via Outlook
-;   vi  → View/Edit in GUI
-;   go  → Open URL in browser
-;   rd  → Read content in MsgBox
-;   sh  → Paste short version only (for comments/replies)
-;   fb  → Share to Facebook
-;   x   → Share to Twitter/X
-;   bs  → Share to Bluesky
-;   li  → Share to LinkedIn
-;   mt  → Share to Mastodon
-;   sum → Summarize with AI (on-demand)
-;   yt  → YouTube Transcript (Research)
-;   pp  → Perplexity AI (Research)
-;   fc  → Fact Check - Snopes (Research)
-;   mb  → Media Bias Check (Research)
-;   wb  → Wayback Machine (Research)
-;   gs  → Google Scholar (Research)
-;   av  → Archive Page (Research)
+; COMPLETE SUFFIX REFERENCE:
+; ==============================================================================
 ;
-; NEW IMAGE SUFFIXES:
-;   img → Copy attached image to clipboard
-;   imgo → Open image in default viewer
-;   fbi → Facebook + image(s)
-;   xi  → Twitter/X + image(s)
-;   bsi → Bluesky + image(s)
-;   lii → LinkedIn + image(s)
-;   mti → Mastodon + image(s)
-;   emi → Email with image attachment(s)
+; CORE CONTENT SUFFIXES:
+;   (none) → Paste full content (URL + title + opinion + body)
+;   t      → Title only - paste just the title
+;   url    → URL only - paste just the URL  
+;   body   → Body only - paste just the body text
+;   cp     → Copy to clipboard (without pasting)
+;   sh     → Paste short version only (for comments/replies)
+;   ?      → Show action menu with all options
+;
+; VIEW/EDIT SUFFIXES:
+;   rd     → Read content in popup window
+;   vi     → View/Edit in GUI
+;   go     → Open URL in browser
+;
+; EMAIL SUFFIXES:
+;   em     → Email via Outlook (new email)
+;   oi     → Outlook Insert at cursor (in open email)
+;   ed     → Email with document attached
+;   emi    → Email with image attachment(s)
+;
+; SOCIAL MEDIA SUFFIXES (text only):
+;   fb     → Share to Facebook
+;   x      → Share to Twitter/X
+;   bs     → Share to Bluesky
+;   li     → Share to LinkedIn
+;   mt     → Share to Mastodon
+;
+; IMAGE SUFFIXES:
+;   i      → Paste image PATH (for file dialogs - copies path as text)
+;   img    → Copy image to clipboard as BITMAP (for pasting into apps)
+;   imgo   → Open image in default viewer
+;   ti     → Title + Image path (paste title, then image path)
+;
+; SOCIAL MEDIA + IMAGE SUFFIXES:
+;   fbi    → Facebook + image(s)
+;   xi     → Twitter/X + image(s)
+;   bsi    → Bluesky + image(s)
+;   lii    → LinkedIn + image(s)
+;   mti    → Mastodon + image(s)
+;
+; AI & RESEARCH SUFFIXES:
+;   sum    → Summarize with AI (on-demand)
+;   yt     → YouTube Transcript
+;   pp     → Perplexity AI research
+;   fc     → Fact check (Snopes)
+;   mb     → Media Bias check
+;   wb     → Wayback Machine
+;   gs     → Google Scholar
+;   av     → Archive.today
+;
+; DOCUMENT SUFFIXES:
+;   d.     → Open attached document
+;   pr     → Print formatted record
+;
+; ==============================================================================
 ;
 ; Usage: #Include this file and call DynamicSuffixHandler.Initialize(CaptureData, CaptureNames)
 ; ==============================================================================
 
+#Warn VarUnset, Off  ; Suppress warnings - globals are defined in main script
+
 class DynamicSuffixHandler {
     ; ==== CONFIGURATION ====
     static SUFFIX_MAP := Map(
-        ; Core actions
-        "em", "email",       ; Email via Outlook
-        "vi", "view",        ; View/Edit in GUI
-        "go", "openurl",     ; Open URL in browser
-        "rd", "read",        ; Read in MsgBox
-        "sh", "short",       ; Paste short version only
-        ; Social media sharing (text only)
-        "fb", "facebook",    ; Share to Facebook
-        "x",  "twitter",     ; Share to Twitter/X
-        "bs", "bluesky",     ; Share to Bluesky
-        "li", "linkedin",    ; Share to LinkedIn
-        "mt", "mastodon",    ; Share to Mastodon
-        ; AI & Processing
-        "sum", "summarize",  ; Summarize with AI (on-demand)
-        ; Research tools
-        "yt", "transcript",  ; YouTube Transcript
-        "pp", "perplexity",  ; Perplexity AI research
-        "fc", "factcheck",   ; Fact check (Snopes)
-        "mb", "mediabias",   ; Media Bias check
-        "wb", "wayback",     ; Wayback Machine
-        "gs", "scholar",     ; Google Scholar
-        "av", "archive",     ; Archive.today
-        ; IMAGE SUFFIXES (NEW)
-        "img", "copyimage",      ; Copy image to clipboard
+        ; === CORE CONTENT SUFFIXES ===
+        "t", "title",            ; Title only
+        "url", "urlonly",        ; URL only
+        "body", "bodyonly",      ; Body only
+        "cp", "copy",            ; Copy to clipboard (no paste)
+        "sh", "short",           ; Paste short version only
+        
+        ; === VIEW/EDIT SUFFIXES ===
+        "rd", "read",            ; Read in popup window
+        "vi", "view",            ; View/Edit in GUI
+        "go", "openurl",         ; Open URL in browser
+        
+        ; === EMAIL SUFFIXES ===
+        "em", "email",           ; Email via Outlook
+        "oi", "outlookinsert",   ; Insert into open Outlook email
+        "ed", "emaildoc",        ; Email with document
+        "emi", "emailimg",       ; Email with image(s)
+        
+        ; === SOCIAL MEDIA (text only) ===
+        "fb", "facebook",        ; Share to Facebook
+        "x", "twitter",          ; Share to Twitter/X
+        "bs", "bluesky",         ; Share to Bluesky
+        "li", "linkedin",        ; Share to LinkedIn
+        "mt", "mastodon",        ; Share to Mastodon
+        
+        ; === IMAGE SUFFIXES ===
+        "i", "imagepath",        ; Paste image PATH (text for file dialogs)
+        "img", "copyimage",      ; Copy image to clipboard as BITMAP
         "imgo", "openimage",     ; Open image in viewer
+        "ti", "titleimage",      ; Title + Image path
+        
+        ; === SOCIAL + IMAGE ===
         "fbi", "facebookimg",    ; Facebook + image(s)
         "xi", "twitterimg",      ; Twitter/X + image(s)
         "bsi", "blueskyimg",     ; Bluesky + image(s)
         "lii", "linkedinimg",    ; LinkedIn + image(s)
         "mti", "mastodonimg",    ; Mastodon + image(s)
-        "emi", "emailimg"        ; Email with image(s)
+        
+        ; === AI & RESEARCH ===
+        "sum", "summarize",      ; Summarize with AI
+        "yt", "transcript",      ; YouTube Transcript
+        "pp", "perplexity",      ; Perplexity AI research
+        "fc", "factcheck",       ; Fact check (Snopes)
+        "mb", "mediabias",       ; Media Bias check
+        "wb", "wayback",         ; Wayback Machine
+        "gs", "scholar",         ; Google Scholar
+        "av", "archive",         ; Archive.today
+        
+        ; === DOCUMENT ===
+        "d.", "opendoc",         ; Open attached document
+        "pr", "print"            ; Print formatted record
     )
     
     ; Character limits for social platforms
@@ -78,6 +130,7 @@ class DynamicSuffixHandler {
     static LIMIT_BLUESKY := 300
     static LIMIT_LINKEDIN := 3000
     static LIMIT_MASTODON := 500
+    static LIMIT_FACEBOOK := 63206
     
     ; Internal state
     static inputHook := ""
@@ -191,8 +244,8 @@ class DynamicSuffixHandler {
     
     ; ==== ACTION ROUTING ====
     static HandleSuffix(captureName, suffix) {
-        ; Backspace to remove typed text
-        backspaces := StrLen(captureName) + StrLen(suffix)
+        ; Backspace to remove typed text PLUS the ending character (space/tab/enter)
+        backspaces := StrLen(captureName) + StrLen(suffix) + 1
         Send("{BS " backspaces "}")
         Sleep(50)
         
@@ -200,19 +253,37 @@ class DynamicSuffixHandler {
         action := this.SUFFIX_MAP.Has(suffix) ? this.SUFFIX_MAP[suffix] : ""
         
         switch action {
-            ; Core actions
-            case "email":
-                this.ActionEmail(captureName)
+            ; === CORE CONTENT ===
+            case "title":
+                this.ActionTitle(captureName)
+            case "urlonly":
+                this.ActionURLOnly(captureName)
+            case "bodyonly":
+                this.ActionBodyOnly(captureName)
+            case "copy":
+                this.ActionCopy(captureName)
+            case "short":
+                this.ActionShort(captureName)
+            
+            ; === VIEW/EDIT ===
+            case "read":
+                this.ActionRead(captureName)
             case "view":
                 this.ActionView(captureName)
             case "openurl":
                 this.ActionOpenURL(captureName)
-            case "read":
-                this.ActionRead(captureName)
-            case "short":
-                this.ActionShort(captureName)
             
-            ; Social media (text only)
+            ; === EMAIL ===
+            case "email":
+                this.ActionEmail(captureName)
+            case "outlookinsert":
+                this.ActionOutlookInsert(captureName)
+            case "emaildoc":
+                this.ActionEmailWithDoc(captureName)
+            case "emailimg":
+                this.ActionEmailWithImage(captureName)
+            
+            ; === SOCIAL MEDIA (text only) ===
             case "facebook":
                 this.ActionSocial(captureName, "facebook")
             case "twitter":
@@ -224,7 +295,29 @@ class DynamicSuffixHandler {
             case "mastodon":
                 this.ActionSocial(captureName, "mastodon")
             
-            ; AI & Research
+            ; === IMAGE ===
+            case "imagepath":
+                this.ActionImagePath(captureName)
+            case "copyimage":
+                this.ActionCopyImage(captureName)
+            case "openimage":
+                this.ActionOpenImage(captureName)
+            case "titleimage":
+                this.ActionTitleImage(captureName)
+            
+            ; === SOCIAL + IMAGE ===
+            case "facebookimg":
+                this.ActionSocialWithImage(captureName, "facebook")
+            case "twitterimg":
+                this.ActionSocialWithImage(captureName, "twitter")
+            case "blueskyimg":
+                this.ActionSocialWithImage(captureName, "bluesky")
+            case "linkedinimg":
+                this.ActionSocialWithImage(captureName, "linkedin")
+            case "mastodonimg":
+                this.ActionSocialWithImage(captureName, "mastodon")
+            
+            ; === AI & RESEARCH ===
             case "summarize":
                 this.ActionSummarize(captureName)
             case "transcript":
@@ -242,30 +335,100 @@ class DynamicSuffixHandler {
             case "archive":
                 this.ActionResearch(captureName, "archive")
             
-            ; IMAGE ACTIONS (NEW)
-            case "copyimage":
-                this.ActionCopyImage(captureName)
-            case "openimage":
-                this.ActionOpenImage(captureName)
-            case "facebookimg":
-                this.ActionSocialWithImage(captureName, "facebook")
-            case "twitterimg":
-                this.ActionSocialWithImage(captureName, "twitter")
-            case "blueskyimg":
-                this.ActionSocialWithImage(captureName, "bluesky")
-            case "linkedinimg":
-                this.ActionSocialWithImage(captureName, "linkedin")
-            case "mastodonimg":
-                this.ActionSocialWithImage(captureName, "mastodon")
-            case "emailimg":
-                this.ActionEmailWithImage(captureName)
-            
-            default:
-                TrayTip("Unknown suffix action: " action, "Error")
+            ; === DOCUMENT ===
+            case "opendoc":
+                this.ActionOpenDoc(captureName)
+            case "print":
+                this.ActionPrint(captureName)
         }
     }
     
-    ; ==== CORE ACTIONS ====
+    ; ==== CORE CONTENT ACTIONS ====
+    
+    ; Paste TITLE only
+    static ActionTitle(captureName) {
+        cap := this.captureDataRef[captureName]
+        title := ""
+        
+        if (cap.Has("title") && cap["title"] != "")
+            title := cap["title"]
+        else
+            title := captureName  ; Fallback to name
+        
+        this.SafePaste(title)
+    }
+    
+    ; Paste URL only
+    static ActionURLOnly(captureName) {
+        cap := this.captureDataRef[captureName]
+        
+        if (cap.Has("url") && cap["url"] != "") {
+            this.SafePaste(cap["url"])
+        } else {
+            TrayTip("No URL for: " captureName, "No URL", "2")
+        }
+    }
+    
+    ; Paste BODY only (no URL, no title)
+    static ActionBodyOnly(captureName) {
+        cap := this.captureDataRef[captureName]
+        
+        if (cap.Has("body") && cap["body"] != "") {
+            this.SafePaste(cap["body"])
+        } else if (cap.Has("content") && cap["content"] != "") {
+            this.SafePaste(cap["content"])
+        } else {
+            TrayTip("No body content for: " captureName, "No Body", "2")
+        }
+    }
+    
+    ; Copy to clipboard WITHOUT pasting
+    static ActionCopy(captureName) {
+        cap := this.captureDataRef[captureName]
+        content := this.BuildFullContent(cap)
+        
+        A_Clipboard := content
+        ClipWait(2)
+        TrayTip("Copied to clipboard!", captureName, "1")
+    }
+    
+    ; Paste short version only
+    static ActionShort(captureName) {
+        cap := this.captureDataRef[captureName]
+        if (cap.Has("short") && cap["short"] != "") {
+            this.SafePaste(cap["short"])
+        } else {
+            TrayTip("No short version saved for: " captureName, "No Short Version", "2")
+        }
+    }
+    
+    ; ==== VIEW/EDIT ACTIONS ====
+    
+    static ActionRead(captureName) {
+        cap := this.captureDataRef[captureName]
+        content := this.BuildFullContent(cap)
+        title := cap.Has("title") ? cap["title"] : captureName
+        MsgBox(content, title, "0x40000")
+    }
+    
+    static ActionView(captureName) {
+        ; Call main GUI's edit function
+        if IsSet(CC_EditCapture)
+            CC_EditCapture(captureName)
+        else
+            TrayTip("Edit function not available", "Error", "2")
+    }
+    
+    static ActionOpenURL(captureName) {
+        cap := this.captureDataRef[captureName]
+        if (cap.Has("url") && cap["url"] != "") {
+            Run(cap["url"])
+        } else {
+            TrayTip("No URL for: " captureName, "No URL", "2")
+        }
+    }
+    
+    ; ==== EMAIL ACTIONS ====
     
     static ActionEmail(captureName) {
         cap := this.captureDataRef[captureName]
@@ -279,42 +442,34 @@ class DynamicSuffixHandler {
             email.Body := body
             email.Display()
         } catch as err {
-            TrayTip("Outlook error: " err.Message, "Error")
+            TrayTip("Outlook error: " err.Message, "Error", "2")
         }
     }
     
-    static ActionView(captureName) {
-        ; Call main GUI's edit function
-        if IsSet(CC_EditCapture)
-            CC_EditCapture(captureName)
-        else
-            TrayTip("Edit function not available", "Error")
-    }
-    
-    static ActionOpenURL(captureName) {
-        cap := this.captureDataRef[captureName]
-        if (cap.Has("url") && cap["url"] != "") {
-            Run(cap["url"])
-        } else {
-            TrayTip("No URL for: " captureName, "No URL")
-        }
-    }
-    
-    static ActionRead(captureName) {
+    static ActionOutlookInsert(captureName) {
         cap := this.captureDataRef[captureName]
         content := this.BuildFullContent(cap)
-        title := cap.Has("title") ? cap["title"] : captureName
-        MsgBox(content, title, "0x40000")
+        
+        if IsSet(CC_OutlookInsertAtCursor)
+            CC_OutlookInsertAtCursor(content)
+        else
+            TrayTip("Outlook insert not available", "Error", "2")
     }
     
-    static ActionShort(captureName) {
-        cap := this.captureDataRef[captureName]
-        if (cap.Has("short") && cap["short"] != "") {
-            A_Clipboard := cap["short"]
-            ClipWait(2)
-            Send("^v")
+    static ActionEmailWithDoc(captureName) {
+        if IsSet(CC_EmailWithDocument)
+            CC_EmailWithDocument(captureName)
+        else
+            TrayTip("Email with document not available", "Error", "2")
+    }
+    
+    static ActionEmailWithImage(captureName) {
+        if IsSet(IS_EmailWithImage) {
+            IS_EmailWithImage(captureName)
         } else {
-            TrayTip("No short version saved for: " captureName, "No Short Version")
+            ; Fallback to regular email
+            TrayTip("Image attachment not available", "Note", "1")
+            this.ActionEmail(captureName)
         }
     }
     
@@ -344,7 +499,7 @@ class DynamicSuffixHandler {
         content := this.BuildShareContent(cap, platformKey)
         A_Clipboard := content
         ClipWait(2)
-        TrayTip("Content copied for " platformObj.name, "📋 Ready")
+        TrayTip("Content copied for " platformObj.name, "📋 Ready", "1")
     }
     
     ; Individual platform methods for direct calls from main script
@@ -368,24 +523,28 @@ class DynamicSuffixHandler {
         this.ActionSocial(captureName, "mastodon")
     }
     
-    ; ==== AI & RESEARCH ====
+    ; ==== IMAGE ACTIONS ====
     
-    static ActionSummarize(captureName) {
-        if IsSet(RT_SummarizeCapture)
-            RT_SummarizeCapture(captureName)
-        else
-            TrayTip("Research tools not available", "Error")
+    ; Paste image PATH as text (for file dialogs)
+    static ActionImagePath(captureName) {
+        imagePath := this.GetImagePath(captureName)
+        
+        if (imagePath = "") {
+            TrayTip("No image attached to: " captureName, "No Image", "2")
+            return
+        }
+        
+        if !FileExist(imagePath) {
+            TrayTip("Image file not found: " imagePath, "File Missing", "2")
+            return
+        }
+        
+        ; Paste the PATH as text (for file open dialogs)
+        this.SafePaste(imagePath)
+        TrayTip("Image path pasted", "📷 " this.GetFileName(imagePath), "1")
     }
     
-    static ActionResearch(captureName, tool) {
-        if IsSet(RT_LaunchResearchTool)
-            RT_LaunchResearchTool(captureName, tool)
-        else
-            TrayTip("Research tools not available", "Error")
-    }
-    
-    ; ==== IMAGE ACTIONS (NEW) ====
-    
+    ; Copy image to clipboard as BITMAP (for pasting into apps)
     static ActionCopyImage(captureName) {
         ; Try ImageSharing module first
         if IsSet(IS_CopyImageToClipboard) {
@@ -397,18 +556,21 @@ class DynamicSuffixHandler {
         if IsSet(IDB_GetImages) {
             images := IDB_GetImages(captureName)
             if (images.Length > 0) {
-                if IsSet(IS_CopyImageFileToClipboard)
+                if IsSet(IC_CopyImageToClipboardGDI)
+                    IC_CopyImageToClipboardGDI(images[1])
+                else if IsSet(IS_CopyImageFileToClipboard)
                     IS_CopyImageFileToClipboard(images[1])
                 else
-                    TrayTip("Image clipboard not available", "Error")
+                    TrayTip("Image clipboard not available", "Error", "2")
             } else {
-                TrayTip("No images attached to: " captureName, "No Image")
+                TrayTip("No images attached to: " captureName, "No Image", "2")
             }
         } else {
-            TrayTip("Image database not loaded", "Error")
+            TrayTip("Image database not loaded", "Error", "2")
         }
     }
     
+    ; Open image in default viewer
     static ActionOpenImage(captureName) {
         if IsSet(IS_OpenImage) {
             IS_OpenImage(captureName)
@@ -416,14 +578,37 @@ class DynamicSuffixHandler {
         }
         
         ; Fallback
-        if IsSet(IDB_GetImages) {
-            images := IDB_GetImages(captureName)
-            for imgPath in images {
-                if FileExist(imgPath)
-                    Run(imgPath)
-            }
+        imagePath := this.GetImagePath(captureName)
+        if (imagePath != "" && FileExist(imagePath))
+            Run(imagePath)
+        else
+            TrayTip("No image found for: " captureName, "No Image", "2")
+    }
+    
+    ; Paste TITLE, then IMAGE PATH
+    static ActionTitleImage(captureName) {
+        cap := this.captureDataRef[captureName]
+        
+        ; First paste title
+        title := cap.Has("title") ? cap["title"] : captureName
+        this.SafePaste(title)
+        
+        ; Add newline
+        Sleep(100)
+        Send("{Enter}")
+        Sleep(100)
+        
+        ; Then paste image path
+        imagePath := this.GetImagePath(captureName)
+        if (imagePath != "" && FileExist(imagePath)) {
+            this.SafePaste(imagePath)
+            TrayTip("Title + Image path pasted", captureName, "1")
+        } else {
+            TrayTip("Title pasted (no image found)", captureName, "1")
         }
     }
+    
+    ; ==== SOCIAL + IMAGE ====
     
     static ActionSocialWithImage(captureName, platformKey) {
         if IsSet(IS_ShareWithImage) {
@@ -431,19 +616,41 @@ class DynamicSuffixHandler {
             IS_ShareWithImage(captureName, platformKey)
         } else {
             ; Fallback to text-only sharing
-            TrayTip("Image sharing not available, using text only", "Note")
+            TrayTip("Image sharing not available, using text only", "Note", "1")
             this.ActionSocial(captureName, platformKey)
         }
     }
     
-    static ActionEmailWithImage(captureName) {
-        if IsSet(IS_EmailWithImage) {
-            IS_EmailWithImage(captureName)
-        } else {
-            ; Fallback to regular email
-            TrayTip("Image attachment not available", "Note")
-            this.ActionEmail(captureName)
-        }
+    ; ==== AI & RESEARCH ====
+    
+    static ActionSummarize(captureName) {
+        if IsSet(RT_SummarizeCapture)
+            RT_SummarizeCapture(captureName)
+        else
+            TrayTip("Research tools not available", "Error", "2")
+    }
+    
+    static ActionResearch(captureName, tool) {
+        if IsSet(RT_LaunchResearchTool)
+            RT_LaunchResearchTool(captureName, tool)
+        else
+            TrayTip("Research tools not available", "Error", "2")
+    }
+    
+    ; ==== DOCUMENT ACTIONS ====
+    
+    static ActionOpenDoc(captureName) {
+        if IsSet(CC_OpenDocument)
+            CC_OpenDocument(captureName)
+        else
+            TrayTip("Document open not available", "Error", "2")
+    }
+    
+    static ActionPrint(captureName) {
+        if IsSet(CC_PrintCapture)
+            CC_PrintCapture(captureName)
+        else
+            TrayTip("Print not available", "Error", "2")
     }
     
     ; ==== CONTENT BUILDING ====
@@ -489,6 +696,55 @@ class DynamicSuffixHandler {
             content := SubStr(content, 1, limit - 3) "..."
         
         return content
+    }
+    
+    ; ==== HELPER FUNCTIONS ====
+    
+    ; Get image path for a capture
+    static GetImagePath(captureName) {
+        global BaseDir
+        
+        ; Try ImageDatabase first
+        if IsSet(IDB_GetImages) {
+            images := IDB_GetImages(captureName)
+            if (images.Length > 0)
+                return images[1]
+        }
+        
+        ; Try capture data
+        cap := this.captureDataRef[captureName]
+        if (cap.Has("image") && cap["image"] != "") {
+            imgPath := cap["image"]
+            ; Handle relative paths
+            if (!InStr(imgPath, ":") && !InStr(imgPath, "\\"))
+                imgPath := BaseDir "\images\" imgPath
+            if FileExist(imgPath)
+                return imgPath
+        }
+        
+        return ""
+    }
+    
+    ; Get filename from path
+    static GetFileName(path) {
+        SplitPath(path, &name)
+        return name
+    }
+    
+    ; Safe paste with clipboard handling
+    static SafePaste(text) {
+        ; Save clipboard
+        savedClip := ClipboardAll()
+        
+        ; Set and paste
+        A_Clipboard := text
+        if ClipWait(2) {
+            Send("^v")
+            Sleep(100)
+        }
+        
+        ; Restore clipboard
+        SetTimer(() => (A_Clipboard := savedClip), -500)
     }
     
     ; ==== UTILITY ====

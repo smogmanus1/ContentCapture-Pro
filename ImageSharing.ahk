@@ -502,7 +502,7 @@ IS_ShareToTwitter(content, images) {
         imagesToShare.Push(images[A_Index])
     
     ; Open Twitter compose
-    composeUrl := "https://twitter.com/intent/tweet?text=" IS_EncodeURIComponent(content)
+    composeUrl := "https://twitter.com/intent/tweet?text=" EncodeURIComponent(content)
     Run(composeUrl)
     
     if imagesToShare.Length > 0 {

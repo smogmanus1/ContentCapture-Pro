@@ -376,6 +376,7 @@
 ; ==============================================================================
 ; NOTE: #Requires and #SingleInstance are in the launcher (ContentCapture.ahk)
 #Requires AutoHotkey v2.0+
+#Warn VarUnset, Off  ; Suppress warnings about globals defined in other files
 #Include ImageCapture.ahk
 #Include ImageClipboard.ahk
 #Include ImageDatabase.ahk
@@ -1681,7 +1682,17 @@ CC_GenerateHotstringFile() {
         ; Action menu
         content .= "::" name "?::{`n    CC_ShowActionMenu(`"" name "`")`n}`n"
         
-        ; Suffix hotstrings
+        ; NEW v6.0 Core content suffixes
+        content .= "::" name "t::{`n    CC_HotstringTitle(`"" name "`")`n}`n"
+        content .= "::" name "url::{`n    CC_HotstringURL(`"" name "`")`n}`n"
+        content .= "::" name "body::{`n    CC_HotstringBody(`"" name "`")`n}`n"
+        content .= "::" name "cp::{`n    CC_HotstringCopyOnly(`"" name "`")`n}`n"
+        
+        ; NEW v6.0 Image suffixes
+        content .= "::" name "i::{`n    CC_HotstringImagePath(`"" name "`")`n}`n"
+        content .= "::" name "ti::{`n    CC_HotstringTitleImage(`"" name "`")`n}`n"
+        
+        ; Existing suffixes
         content .= "::" name "sh::{`n    CC_HotstringShort(`"" name "`")`n}`n"
         content .= "::" name "em::{`n    CC_HotstringEmail(`"" name "`")`n}`n"
         content .= "::" name "go::{`n    CC_HotstringGo(`"" name "`")`n}`n"
@@ -2373,6 +2384,170 @@ CC_HotstringMastodon(name, *) {
     
     cap := CaptureData[StrLower(name)]
     DynamicSuffixHandler.ActionMastodon(name, cap)
+}
+
+CC_HotstringCopyOnly(name, *) {
+    content := CC_GetCaptureContent(name)
+    if (content = "")
+        return
+    
+    A_Clipboard := content
+    ClipWait(2)
+    CC_Notify("Copied to clipboard!", name)
+}
+
+; ==============================================================================
+; NEW SUFFIX HANDLERS - Added in v6.0.0
+; ==============================================================================
+
+; Suffix: t | Example: ::recipet:: → Paste title only
+CC_HotstringTitle(name, *) {
+    global CaptureData
+    
+    if !CaptureData.Has(StrLower(name))
+        return
+    
+    cap := CaptureData[StrLower(name)]
+    title := cap.Has("title") && cap["title"] != "" ? cap["title"] : name
+    
+    savedClip := ClipboardAll()
+    A_Clipboard := title
+    ClipWait(2)
+    Send("^v")
+    Sleep(150)
+    A_Clipboard := savedClip
+}
+
+; Suffix: url | Example: ::recipeurl:: → Paste URL only
+CC_HotstringURL(name, *) {
+    global CaptureData
+    
+    if !CaptureData.Has(StrLower(name))
+        return
+    
+    cap := CaptureData[StrLower(name)]
+    
+    if (cap.Has("url") && cap["url"] != "") {
+        savedClip := ClipboardAll()
+        A_Clipboard := cap["url"]
+        ClipWait(2)
+        Send("^v")
+        Sleep(150)
+        A_Clipboard := savedClip
+    } else {
+        TrayTip("No URL saved for '" name "'", "No URL", "2")
+    }
+}
+
+; Suffix: body | Example: ::recipebody:: → Paste body only
+CC_HotstringBody(name, *) {
+    global CaptureData
+    
+    if !CaptureData.Has(StrLower(name))
+        return
+    
+    cap := CaptureData[StrLower(name)]
+    
+    body := ""
+    if (cap.Has("body") && cap["body"] != "")
+        body := cap["body"]
+    else if (cap.Has("content") && cap["content"] != "")
+        body := cap["content"]
+    
+    if (body != "") {
+        savedClip := ClipboardAll()
+        A_Clipboard := body
+        ClipWait(2)
+        Send("^v")
+        Sleep(150)
+        A_Clipboard := savedClip
+    } else {
+        TrayTip("No body content for '" name "'", "No Body", "2")
+    }
+}
+
+; Suffix: i | Example: ::recipei:: → Paste image path (for file dialogs)
+CC_HotstringImagePath(name, *) {
+    imagePath := CC_GetCaptureImagePath(name)
+    
+    if (imagePath = "") {
+        TrayTip("No image attached to '" name "'", "No Image", "2")
+        return
+    }
+    
+    if !FileExist(imagePath) {
+        TrayTip("Image file not found:`n" imagePath, "File Missing", "2")
+        return
+    }
+    
+    savedClip := ClipboardAll()
+    A_Clipboard := imagePath
+    ClipWait(2)
+    Send("^v")
+    Sleep(150)
+    A_Clipboard := savedClip
+    
+    SplitPath(imagePath, &fileName)
+    CC_Notify("Image path pasted", "📷 " fileName)
+}
+
+; Suffix: ti | Example: ::recipeti:: → Paste title, then image path
+CC_HotstringTitleImage(name, *) {
+    global CaptureData
+    
+    if !CaptureData.Has(StrLower(name))
+        return
+    
+    cap := CaptureData[StrLower(name)]
+    title := cap.Has("title") ? cap["title"] : name
+    imagePath := CC_GetCaptureImagePath(name)
+    
+    savedClip := ClipboardAll()
+    A_Clipboard := title
+    ClipWait(2)
+    Send("^v")
+    Sleep(200)
+    
+    Send("{Enter}")
+    Sleep(100)
+    
+    if (imagePath != "" && FileExist(imagePath)) {
+        A_Clipboard := imagePath
+        ClipWait(2)
+        Send("^v")
+        Sleep(150)
+        A_Clipboard := savedClip
+        CC_Notify("Title + Image path pasted", name)
+    } else {
+        A_Clipboard := savedClip
+        CC_Notify("Title pasted (no image found)", name)
+    }
+}
+
+; Helper: Get image path for a capture
+CC_GetCaptureImagePath(name) {
+    global CaptureData, BaseDir
+    
+    if IsSet(IDB_GetImages) {
+        images := IDB_GetImages(name)
+        if (images.Length > 0)
+            return images[1]
+    }
+    
+    if !CaptureData.Has(StrLower(name))
+        return ""
+    
+    cap := CaptureData[StrLower(name)]
+    
+    if (cap.Has("image") && cap["image"] != "") {
+        imgPath := cap["image"]
+        if (!InStr(imgPath, ":") && !InStr(imgPath, "\\"))
+            imgPath := BaseDir "\images\" imgPath
+        if FileExist(imgPath)
+            return imgPath
+    }
+    
+    return ""
 }
 
 ; ==============================================================================

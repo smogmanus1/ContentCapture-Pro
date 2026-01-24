@@ -1,141 +1,121 @@
-# ContentCapture Pro v5.9.2 Release Notes
+# ContentCapture Pro
 
-## 🖼️ Multi-Image Social Media Sharing
+**Professional Content Capture & Sharing System for Windows**
 
-This release adds comprehensive image attachment and sharing support across all social media platforms.
+Transform how you save, organize, and share web content. Capture any webpage with a single hotkey and recall it instantly by typing a short name — from ANY application.
 
----
+![AutoHotkey](https://img.shields.io/badge/AutoHotkey-v2.0+-green)
+![License](https://img.shields.io/badge/License-MIT-blue)
+![Version](https://img.shields.io/badge/Version-6.0.0-orange)
 
-## New Features
+## ✨ Key Features
 
-### Image Suffixes
+### 🚀 Instant Capture
+- Press `Ctrl+Alt+G` on any webpage to capture URL, title, and content
+- Highlight text before capturing to save specific excerpts
+- Add tags, notes, and your personal commentary
+- Works with Chrome, Firefox, Edge, Brave, and most browsers
 
-Share your captures with attached images using these new suffixes:
+### ⚡ Lightning-Fast Recall
+- Type `::recipe::` anywhere to instantly paste your saved "recipe" capture
+- No app switching, no searching — just type and it appears
+- Works in Word, email, social media, chat apps — everywhere you can type
+
+### 🔍 Powerful Search
+- **Quick Search** (`Ctrl+Alt+Space`): Alfred/Raycast-style instant popup
+- **Full Browser** (`Ctrl+Alt+B`): Search by name, tags, URL, date, or content
+- Filter by favorites, date range, or specific tags
+
+### 📱 Smart Social Sharing
+- Auto-detects when you're on Facebook, Twitter/X, Bluesky, LinkedIn
+- Warns when content exceeds platform character limits
+- Save shortened versions for one-click sharing
+
+### 🎯 Powerful Suffix System
+
+Every capture gets automatic hotstring variants:
 
 | Suffix | Action | Example |
 |--------|--------|---------|
-| `img` | Copy image to clipboard | `mypostimg` + space |
-| `imgo` | Open image in default viewer | `mypostimgo` + space |
-| `fbi` | Facebook + image(s) | `mypostfbi` + space |
-| `xi` | Twitter/X + image(s) | `mypostxi` + space |
-| `bsi` | Bluesky + image(s) | `mypostbsi` + space |
-| `lii` | LinkedIn + image(s) | `mypostlii` + space |
-| `mti` | Mastodon + image(s) | `mypostmti` + space |
-| `emi` | Email with image attachment(s) | `mypostemi` + space |
+| (none) | Paste full content | `::recipe::` |
+| `?` | Show action menu | `::recipe?::` |
+| `t` | Title only | `::recipet::` |
+| `url` | URL only | `::recipeurl::` |
+| `body` | Body only | `::recipebody::` |
+| `cp` | Copy (no paste) | `::recipecp::` |
+| `i` | Image path | `::recipei::` |
+| `ti` | Title + image | `::recipeti::` |
+| `go` | Open URL | `::recipego::` |
+| `em` | Email via Outlook | `::recipeem::` |
+| `fb` | Share to Facebook | `::recipefb::` |
+| `x` | Share to Twitter/X | `::recipex::` |
+| `bs` | Share to Bluesky | `::recipebs::` |
 
-### Multi-Image Support
+See [SUFFIX-REFERENCE.md](SUFFIX-REFERENCE.md) for the complete list.
 
-- Attach **multiple images** to a single capture
-- System respects platform limits automatically:
-  - Facebook posts: up to 10 images
-  - Twitter/X: up to 4 images
-  - Bluesky: up to 4 images
-  - LinkedIn: up to 9 images
-  - Mastodon: up to 4 images
+## 📦 Installation
 
-### Guided Sharing Workflow
+1. **Requirements**: [AutoHotkey v2.0+](https://www.autohotkey.com/)
 
-When sharing with images, you get a guided workflow:
-1. Choose image-first or text-first order
-2. **Ctrl+Alt+V** pastes pending text after image upload
-3. **Ctrl+Alt+I** cycles through additional images
+2. **Download**: Clone this repo or download the ZIP
 
----
+3. **Run**: Double-click `ContentCapture.ahk`
 
-## New Files
+4. **First Run**: Follow the setup wizard to choose your data location
 
-| File | Description |
-|------|-------------|
-| `ImageDatabase.ahk` | Manages multiple images per capture |
-| `ImageSharing.ahk` | Platform-specific image sharing logic |
-| `IMAGE_SHARING_GUIDE.md` | Complete usage documentation |
+See [INSTALL.md](INSTALL.md) for detailed instructions.
 
----
+## 🎹 Hotkeys
 
-## Updated Files
+| Hotkey | Action |
+|--------|--------|
+| `Ctrl+Alt+G` | Capture current webpage |
+| `Ctrl+Alt+Space` | Quick Search |
+| `Ctrl+Alt+B` | Open Capture Browser |
+| `Ctrl+Alt+M` | Main Menu |
+| `Ctrl+Alt+N` | Manual Capture (no browser) |
+| `Ctrl+Alt+E` | Email last capture |
+| `Ctrl+Alt+W` | Toggle recent widget |
 
-- **DynamicSuffixHandler.ahk** - Added image suffix routing
-- **ContentCapture-Pro.ahk** - Updated #Include order
-
----
-
-## Installation
-
-### New Users
-Run `install.bat` or follow instructions in `QUICKSTART.md`
-
-### Existing Users
-
-1. Download the new/updated files
-2. Update your `#Include` section in `ContentCapture-Pro.ahk`:
-
-```autohotkey
-#Include ImageCapture.ahk
-#Include ImageClipboard.ahk
-#Include ImageDatabase.ahk      ; NEW
-#Include ImageSharing.ahk       ; NEW
-#Include DynamicSuffixHandler.ahk
-#Include SocialShare.ahk
-#Include ResearchTools.ahk
-#Include CC_ShareModule.ahk
-#Include CC_HoverPreview.ahk
-```
-
-3. Reload the script (Ctrl+Alt+R)
-
----
-
-## Attaching Images to Captures
-
-### Method 1: Edit Dialog
-1. Open a capture with `vi` suffix (e.g., `mypostvi`)
-2. Click "Attach Doc..." or use the Image section
-3. Select your image file(s)
-4. Save
-
-### Method 2: images.dat
-Edit `images.dat` directly. Format:
-```
-capturename|image1.jpg|image2.png|image3.jpg
-```
-
-Example:
-```
-mypost|protest-sign.jpg|crowd-photo.png
-anotherpost|infographic.jpg
-```
-
----
-
-## Usage Examples
+## 📁 File Structure
 
 ```
-mypostimg     → Copies attached image to clipboard
-mypostfbi     → Opens Facebook sharing workflow with image
-mypostxi      → Opens Twitter with image ready to paste
-mypostemi     → Creates Outlook email with image attached
+ContentCapture-Pro/
+├── ContentCapture.ahk       # Launcher (run this)
+├── ContentCapture-Pro.ahk   # Main application
+├── DynamicSuffixHandler.ahk # Suffix routing system
+├── ImageCapture.ahk         # Image attachment system
+├── ImageClipboard.ahk       # GDI+ clipboard operations
+├── ImageDatabase.ahk        # Multi-image management
+├── ImageSharing.ahk         # Image sharing features
+├── SocialShare.ahk          # Social media integration
+├── ResearchTools.ahk        # Research & fact-checking
+├── CC_ShareModule.ahk       # Import/Export captures
+├── CC_HoverPreview.ahk      # Browser hover previews
+└── images/                  # Attached images folder
 ```
 
+## 🤝 Credits
+
+- **Creator**: Brad ([@smogmanus1](https://github.com/smogmanus1))
+- **Website**: [crisisoftruth.org](https://crisisoftruth.org)
+
+### Special Thanks
+- Joe Glines ([the-Automator.com](https://the-automator.com))
+- Isaias Baez (RaptorX)
+- Jack Dunning
+- The AutoHotkey Community
+
+## 📄 License
+
+MIT License - see [LICENSE](LICENSE)
+
+## 🐛 Issues & Contributions
+
+Found a bug? Have a feature request? 
+- Open an issue on [GitHub](https://github.com/smogmanus1/ContentCapture-Pro/issues)
+- See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines
+
 ---
 
-## Full Suffix Reference
-
-See `SUFFIX-REFERENCE.md` for the complete list of all available suffixes.
-
----
-
-## Bug Fixes
-
-- Fixed function naming conflict with `EncodeURIComponent`
-- Fixed #Include order dependency issues
-- Removed auto-load that ran before BaseDir was set
-
----
-
-## Contributors
-
-Thanks to the AutoHotkey community for feedback and testing!
-
----
-
-**Full Changelog**: v5.9.1...v5.9.2
+**ContentCapture Pro** — *Your personal knowledge base at your fingertips*
