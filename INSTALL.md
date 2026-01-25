@@ -2,104 +2,140 @@
 
 ## Requirements
 
-- **Windows 10/11**
+- **Windows 10 or 11**
 - **AutoHotkey v2.0+** - [Download here](https://www.autohotkey.com/)
 - **Microsoft Outlook** (optional, for email features)
 
-## Quick Start
+---
 
-1. **Install AutoHotkey v2**
-   - Download from https://www.autohotkey.com/
-   - Run the installer, select "AutoHotkey v2"
+## New Installation
 
-2. **Download ContentCapture Pro**
-   - Clone: `git clone https://github.com/smogmanus1/ContentCapture-Pro.git`
-   - Or download ZIP and extract
+### Step 1: Install AutoHotkey v2
 
-3. **Run the Application**
-   - Double-click `ContentCapture.ahk`
-   - First run will launch Setup Wizard
+1. Go to [autohotkey.com](https://www.autohotkey.com/)
+2. Download **AutoHotkey v2.0** (not v1.1)
+3. Run the installer and follow the prompts
 
-4. **Setup Wizard**
-   - Choose where to store your captures
-   - Recommended: Cloud folder (Dropbox, OneDrive, Google Drive) for sync
-   - Or use Documents folder for local-only storage
+### Step 2: Download ContentCapture Pro
 
-5. **Start Capturing!**
-   - Go to any webpage
-   - Press `Ctrl+Alt+G`
-   - Enter a short name (e.g., "recipe")
-   - Done! Now type `::recipe::` anywhere to paste it
+1. Download the latest release ZIP file
+2. Extract to a location of your choice, for example:
+   - `C:\ContentCapture-Pro\`
+   - `D:\Tools\ContentCapture-Pro\`
 
-## File Locations
+### Step 3: Run ContentCapture Pro
 
-After setup, ContentCapture Pro creates:
+1. Double-click `ContentCapture.ahk`
+2. Look for the green "H" icon in your system tray
+3. You're ready to capture!
 
-```
-[Your chosen folder]/
-├── captures.dat          # Your capture database
-├── images.dat            # Image associations
-├── images/               # Attached images
-├── config.ini            # Settings
-├── archive/              # Deleted captures
-└── backups/              # Automatic backups
-```
+### Step 4: (Optional) Start Automatically
 
-## Auto-Start with Windows
+To run ContentCapture Pro when Windows starts:
 
-To run ContentCapture Pro at startup:
-
-1. Press `Win+R`, type `shell:startup`, press Enter
+1. Press `Win+R` and type `shell:startup`
 2. Create a shortcut to `ContentCapture.ahk` in this folder
-
-Or use the tray menu: Right-click icon → Add to Startup
-
-## Portable Installation
-
-ContentCapture Pro is portable:
-
-1. Copy the entire folder to a USB drive
-2. Run `ContentCapture.ahk` from there
-3. Choose a data location on the USB drive
-4. Take your captures anywhere!
-
-## Troubleshooting
-
-### Script won't start
-- Make sure AutoHotkey v2 is installed (not v1)
-- Right-click the .ahk file → Open with → AutoHotkey
-
-### Hotstrings don't work
-- Check that `ContentCapture_Generated.ahk` exists
-- Reload: Right-click tray icon → Reload Script
-- Some apps block hotstrings (try Notepad first)
-
-### Capture doesn't grab content
-- Make sure the browser window is active
-- Some sites block clipboard access
-- Try highlighting text before capturing
-
-### Missing images
-- Check that the `images` folder exists
-- Verify image paths in `images.dat`
-
-## Updating
-
-1. Backup your data folder (captures.dat, images.dat, images/)
-2. Download new version
-3. Replace all .ahk files
-4. Delete `ContentCapture_Generated.ahk` (it will regenerate)
-5. Reload the script
-
-Your captures are safe - they're stored separately from the code!
-
-## Uninstalling
-
-1. Exit ContentCapture Pro (right-click tray → Exit)
-2. Delete the program folder
-3. (Optional) Delete your data folder
-4. Remove from Startup if added
 
 ---
 
-Need help? Open an issue on [GitHub](https://github.com/smogmanus1/ContentCapture-Pro/issues)
+## Upgrading from Previous Version
+
+### Backup First!
+Your data files are safe during upgrade, but it's good practice to backup:
+- `captures.dat` - Your captures
+- `capturesbackup.dat` - Automatic backup
+- `images/` folder - Your attached images
+
+### Upgrade Steps
+
+1. **Close** ContentCapture Pro (right-click tray icon → Exit)
+2. **Backup** your data files (see above)
+3. **Replace** these files with the new versions:
+   - `ContentCapture-Pro.ahk`
+   - `DynamicSuffixHandler.ahk`
+   - `ImageSharing.ahk`
+   - All other `.ahk` files
+4. **Keep** your data files:
+   - `captures.dat`
+   - `capturesbackup.dat`
+   - `capturesarchive.dat`
+   - `images.dat`
+   - `images/` folder
+   - `ContentCapture_Generated.ahk` (will be regenerated)
+5. **Run** `ContentCapture.ahk`
+6. The script will regenerate hotstrings automatically
+
+---
+
+## File Locations
+
+All files should be in the same folder:
+
+```
+ContentCapture-Pro/
+├── ContentCapture.ahk          ← Run this file
+├── ContentCapture-Pro.ahk
+├── DynamicSuffixHandler.ahk
+├── SocialShare.ahk
+├── ResearchTools.ahk
+├── ImageCapture.ahk
+├── ImageClipboard.ahk
+├── ImageDatabase.ahk
+├── ImageSharing.ahk
+├── CC_HoverPreview.ahk
+├── CC_ShareModule.ahk
+├── captures.dat                ← Created automatically
+├── capturesbackup.dat          ← Created automatically
+├── ContentCapture_Generated.ahk ← Created automatically
+└── images/                     ← Created automatically
+```
+
+---
+
+## Verifying Installation
+
+1. **Check tray icon**: You should see a green "H" icon
+2. **Test capture**: 
+   - Open a webpage in your browser
+   - Press `Ctrl+Alt+G`
+   - You should see the capture dialog
+3. **Test hotstring**:
+   - After saving a capture named "test"
+   - Type `test` followed by space
+   - Content should be pasted
+
+---
+
+## Troubleshooting
+
+### "Script not running"
+- Make sure AutoHotkey v2 is installed
+- Right-click `ContentCapture.ahk` → Run as administrator
+
+### "Hotstrings not working"
+- Press `Ctrl+Alt+L` to reload the script
+- Check that `ContentCapture_Generated.ahk` exists
+
+### "Capture dialog doesn't appear"
+- Make sure you're in a browser window
+- Try pressing `Ctrl+Alt+G` again
+- Check if another AHK script is blocking the hotkey
+
+### "Outlook features not working"
+- Make sure Outlook is installed and configured
+- Run Outlook at least once before using email features
+
+---
+
+## Getting Help
+
+- **GitHub Issues**: [Report bugs](https://github.com/smogmanus1/ContentCapture-Pro/issues)
+- **AutoHotkey Forums**: [Community support](https://www.autohotkey.com/boards/)
+
+---
+
+## Uninstallation
+
+1. Right-click tray icon → Exit
+2. Delete the ContentCapture-Pro folder
+3. (Optional) Remove from Startup folder if added

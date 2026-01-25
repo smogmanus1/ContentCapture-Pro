@@ -1,104 +1,167 @@
-# ContentCapture Pro
+# ContentCapture Pro v6.0.0
 
 **Professional Content Capture & Sharing System for Windows**
 
-Transform how you save, organize, and share web content. Capture any webpage with a single hotkey and recall it instantly by typing a short name — from ANY application.
+Capture web content with a single hotkey, save it with a memorable name, and instantly recall it using hotstrings. Share to social media, email, or research tools with simple suffix commands.
 
 ![AutoHotkey](https://img.shields.io/badge/AutoHotkey-v2.0+-green)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 ![Version](https://img.shields.io/badge/Version-6.0.0-orange)
 
-## ✨ Key Features
+---
 
-### 🚀 Instant Capture
-- Press `Ctrl+Alt+G` on any webpage to capture URL, title, and content
-- Highlight text before capturing to save specific excerpts
-- Add tags, notes, and your personal commentary
-- Works with Chrome, Firefox, Edge, Brave, and most browsers
+## ✨ Features
 
-### ⚡ Lightning-Fast Recall
-- Type `::recipe::` anywhere to instantly paste your saved "recipe" capture
-- No app switching, no searching — just type and it appears
-- Works in Word, email, social media, chat apps — everywhere you can type
+- **One-Key Capture**: Press `Ctrl+Alt+G` to capture URL, title, and highlighted text
+- **Instant Recall**: Type your capture name + suffix to paste content anywhere
+- **22 Suffix Variants**: Each capture generates 22 automatic hotstrings
+- **Social Media Integration**: Share directly to Facebook, Twitter/X, Bluesky, LinkedIn, Mastodon
+- **Image Support**: Attach and share images with your captures
+- **Research Tools**: YouTube transcripts, fact-checking, media bias analysis
+- **Email Integration**: Outlook compose with attachments
+- **Backup & Restore**: Import/export captures with date management
 
-### 🔍 Powerful Search
-- **Quick Search** (`Ctrl+Alt+Space`): Alfred/Raycast-style instant popup
-- **Full Browser** (`Ctrl+Alt+B`): Search by name, tags, URL, date, or content
-- Filter by favorites, date range, or specific tags
+---
 
-### 📱 Smart Social Sharing
-- Auto-detects when you're on Facebook, Twitter/X, Bluesky, LinkedIn
-- Warns when content exceeds platform character limits
-- Save shortened versions for one-click sharing
+## 🚀 Quick Start
 
-### 🎯 Powerful Suffix System
+1. **Install [AutoHotkey v2.0+](https://www.autohotkey.com/)**
+2. **Download** and extract this release
+3. **Run** `ContentCapture.ahk`
+4. **Capture**: Press `Ctrl+Alt+G` on any webpage
+5. **Use**: Type your capture name to paste content
 
-Every capture gets automatic hotstring variants:
+---
 
+## 📋 Complete Suffix Reference
+
+### Core Content
 | Suffix | Action | Example |
 |--------|--------|---------|
-| (none) | Paste full content | `::recipe::` |
-| `?` | Show action menu | `::recipe?::` |
-| `t` | Title only | `::recipet::` |
-| `url` | URL only | `::recipeurl::` |
-| `body` | Body only | `::recipebody::` |
-| `cp` | Copy (no paste) | `::recipecp::` |
-| `i` | Image path | `::recipei::` |
-| `ti` | Title + image | `::recipeti::` |
-| `go` | Open URL | `::recipego::` |
-| `em` | Email via Outlook | `::recipeem::` |
-| `fb` | Share to Facebook | `::recipefb::` |
-| `x` | Share to Twitter/X | `::recipex::` |
-| `bs` | Share to Bluesky | `::recipebs::` |
+| *(none)* | Paste full content | `myarticle` |
+| `t` | Title only | `myarticlet` |
+| `url` | URL only | `myarticleurl` |
+| `body` | Body text only | `myarticlebody` |
+| `sh` | Short version | `myarticlesh` |
+| `cp` | Copy to clipboard (no paste) | `myarticlecp` |
 
-See [SUFFIX-REFERENCE.md](SUFFIX-REFERENCE.md) for the complete list.
+### View & Edit
+| Suffix | Action | Example |
+|--------|--------|---------|
+| `?` | Show action menu | `myarticle?` |
+| `rd` | Read in popup | `myarticlerd` |
+| `vi` | View/Edit GUI | `myarticlevi` |
+| `go` | Open URL in browser | `myarticlego` |
 
-## 📦 Installation
+### Email
+| Suffix | Action | Example |
+|--------|--------|---------|
+| `em` | New Outlook email | `myarticleem` |
+| `oi` | Insert at cursor in Outlook | `myarticleoi` |
+| `ed` | Email with document | `myarticleed` |
+| `emi` | Email with image(s) | `myarticleemi` |
 
-1. **Requirements**: [AutoHotkey v2.0+](https://www.autohotkey.com/)
+### Social Media (Text)
+| Suffix | Action | Example |
+|--------|--------|---------|
+| `fb` | Share to Facebook | `myarticlefb` |
+| `x` | Share to Twitter/X | `myarticlex` |
+| `bs` | Share to Bluesky | `myarticlebs` |
+| `li` | Share to LinkedIn | `myarticleli` |
+| `mt` | Share to Mastodon | `myarticlemt` |
 
-2. **Download**: Clone this repo or download the ZIP
+### Images
+| Suffix | Action | Example |
+|--------|--------|---------|
+| `i` | Paste image path | `myarticlei` |
+| `img` | Copy image to clipboard | `myarticleimg` |
+| `imgo` | Open image in viewer | `myarticleimgo` |
+| `ti` | Title + image path | `myarticleti` |
 
-3. **Run**: Double-click `ContentCapture.ahk`
+### Social Media + Images
+| Suffix | Action | Example |
+|--------|--------|---------|
+| `fbi` | Facebook + image(s) | `myarticlefbi` |
+| `xi` | Twitter/X + image(s) | `myarticlexi` |
+| `bsi` | Bluesky + image(s) | `myarticlebsi` |
+| `lii` | LinkedIn + image(s) | `myarticlelii` |
+| `mti` | Mastodon + image(s) | `myarticlemti` |
 
-4. **First Run**: Follow the setup wizard to choose your data location
+---
 
-See [INSTALL.md](INSTALL.md) for detailed instructions.
+## ⌨️ Keyboard Shortcuts
 
-## 🎹 Hotkeys
-
-| Hotkey | Action |
-|--------|--------|
-| `Ctrl+Alt+G` | Capture current webpage |
-| `Ctrl+Alt+Space` | Quick Search |
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+Alt+G` | Capture current page |
 | `Ctrl+Alt+B` | Open Capture Browser |
-| `Ctrl+Alt+M` | Main Menu |
-| `Ctrl+Alt+N` | Manual Capture (no browser) |
-| `Ctrl+Alt+E` | Email last capture |
-| `Ctrl+Alt+W` | Toggle recent widget |
+| `Ctrl+Alt+M` | Manual capture (no browser needed) |
+| `Ctrl+Alt+L` | Reload script |
+
+### In Capture Browser
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+N` | New manual capture |
+| `Ctrl+E` | Edit selected |
+| `Ctrl+I` | Import from file |
+| `Ctrl+L` | Copy link |
+| `Ctrl+P` | Preview |
+| `F5` | Refresh list |
+| `Delete` | Delete selected |
+
+---
 
 ## 📁 File Structure
 
 ```
-ContentCapture-Pro/
-├── ContentCapture.ahk       # Launcher (run this)
-├── ContentCapture-Pro.ahk   # Main application
-├── DynamicSuffixHandler.ahk # Suffix routing system
-├── ImageCapture.ahk         # Image attachment system
-├── ImageClipboard.ahk       # GDI+ clipboard operations
-├── ImageDatabase.ahk        # Multi-image management
-├── ImageSharing.ahk         # Image sharing features
-├── SocialShare.ahk          # Social media integration
-├── ResearchTools.ahk        # Research & fact-checking
-├── CC_ShareModule.ahk       # Import/Export captures
-├── CC_HoverPreview.ahk      # Browser hover previews
-└── images/                  # Attached images folder
+ContentCapture-Pro-v6.0.0/
+├── ContentCapture.ahk          # Launcher (run this)
+├── ContentCapture-Pro.ahk      # Main application
+├── DynamicSuffixHandler.ahk    # Suffix routing system
+├── SocialShare.ahk             # Social media sharing
+├── ResearchTools.ahk           # Research & fact-checking
+├── ImageCapture.ahk            # Image attachment system
+├── ImageClipboard.ahk          # GDI+ clipboard operations
+├── ImageDatabase.ahk           # Multi-image management
+├── ImageSharing.ahk            # Social media + images
+├── CC_HoverPreview.ahk         # Tooltip previews
+├── CC_ShareModule.ahk          # Export/share captures
+├── README.md                   # This file
+├── CHANGELOG.md                # Version history
+└── LICENSE                     # MIT License
 ```
 
-## 🤝 Credits
+---
 
-- **Creator**: Brad ([@smogmanus1](https://github.com/smogmanus1))
-- **Website**: [crisisoftruth.org](https://crisisoftruth.org)
+## 💾 Data Files (Auto-Created)
+
+| File | Purpose |
+|------|---------|
+| `captures.dat` | Your captures database |
+| `capturesbackup.dat` | Automatic backup |
+| `capturesarchive.dat` | Archived captures |
+| `images.dat` | Image associations |
+| `ContentCapture_Generated.ahk` | Generated hotstrings |
+| `/images/` | Stored image files |
+
+---
+
+## 🔧 Requirements
+
+- Windows 10/11
+- [AutoHotkey v2.0+](https://www.autohotkey.com/)
+- Microsoft Outlook (for email features)
+- Web browser (Chrome, Firefox, Edge, etc.)
+
+---
+
+## 📝 Credits
+
+**Created by:** Brad  
+**Website:** [crisisoftruth.org](https://crisisoftruth.org)  
+**GitHub:** [github.com/smogmanus1/ContentCapture-Pro](https://github.com/smogmanus1/ContentCapture-Pro)
+
+**Built with assistance from Claude AI**
 
 ### Special Thanks
 - Joe Glines ([the-Automator.com](https://the-automator.com))
@@ -106,16 +169,19 @@ ContentCapture-Pro/
 - Jack Dunning
 - The AutoHotkey Community
 
+---
+
 ## 📄 License
 
-MIT License - see [LICENSE](LICENSE)
-
-## 🐛 Issues & Contributions
-
-Found a bug? Have a feature request? 
-- Open an issue on [GitHub](https://github.com/smogmanus1/ContentCapture-Pro/issues)
-- See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines
+MIT License - See [LICENSE](LICENSE) file for details.
 
 ---
 
-**ContentCapture Pro** — *Your personal knowledge base at your fingertips*
+## 🐛 Issues & Contributions
+
+Found a bug? Have a feature request?  
+[Open an issue on GitHub](https://github.com/smogmanus1/ContentCapture-Pro/issues)
+
+---
+
+**Happy Capturing!** 🎯

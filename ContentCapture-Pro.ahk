@@ -2,9 +2,29 @@
 ; ContentCapture Pro - Professional Content Capture & Sharing System
 ; ==============================================================================
 ; Author:      Brad
-; Version:     5.8 (AHK v2)
-; Updated:     2026-01-19
+; Version:     6.0.0 (AHK v2)
+; Updated:     2026-01-25
 ; License:     MIT
+;
+; CHANGELOG v6.0.0:
+;   - NEW: Complete suffix system with 22 variants per capture:
+;     * Core: (none), t, url, body, cp, sh
+;     * View: rd, vi, go
+;     * Email: em, oi, ed, emi
+;     * Social: fb, x, bs, li, mt
+;     * Image: i, img, imgo, ti
+;     * Social+Image: fbi, xi, bsi, lii, mti
+;   - NEW: Import captures from ANY .dat file (not just capturesbackup.dat)
+;     * Click "📥 Import" button in Capture Browser or press Ctrl+I
+;     * Browse and select any backup, archive, or export file
+;     * Preview entries before importing
+;     * Filter by search text or hide duplicates
+;   - NEW: "📅 Update date to today" checkbox in Import and Restore browsers
+;     * Checked by default - imported/restored captures get today's date
+;     * Makes them sort to top when sorted by date
+;     * Uncheck to preserve original capture dates
+;   - FIXED: Backspace count in DynamicSuffixHandler (+1 for trigger char)
+;   - FIXED: ImageSharing.ahk EncodeURIComponent call corrected
 ;
 ; CHANGELOG v5.8:
 ;   - NEW: Added 4 new buttons to Capture Browser:
@@ -4954,6 +4974,553 @@ CC_BrowserDeleteCapture(listView, browserGui) {
         CC_Notify(selectedNames.Length " captures deleted.", "Batch Delete")
 }
 
+; ------------------------------------------------------------------------------
+; CC_BrowserImportCapture()
+; ------------------------------------------------------------------------------
+; PURPOSE: Import captures from any .dat file (backups, archives, exports)
+; NOTES:   Opens a file picker, loads the captures, and shows the restore browser
+; ------------------------------------------------------------------------------
+CC_BrowserImportCapture() {
+    global BaseDir
+    
+    ; Open file picker for .dat files
+    selectedFile := FileSelect(1, BaseDir, "Select Capture File to Import", "Capture Files (*.dat)")
+    
+    if (selectedFile = "")
+        return  ; User cancelled
+    
+    if !FileExist(selectedFile) {
+        MsgBox("File not found:`n" selectedFile, "Error", "16")
+        return
+    }
+    
+    ; Open the import browser with the selected file
+    CC_OpenImportBrowser(selectedFile)
+}
+
+; ------------------------------------------------------------------------------
+; CC_OpenImportBrowser(filePath)
+; ------------------------------------------------------------------------------
+; PURPOSE: Browse and import captures from any specified .dat file
+; NOTES:   Similar to RestoreBrowser but works with any file path
+; ------------------------------------------------------------------------------
+CC_OpenImportBrowser(filePath) {
+    global BaseDir, CaptureData, CaptureNames
+    
+    ; Load data from the selected file
+    importData := Map()
+    importNames := []
+    
+    try {
+        content := FileRead(filePath, "UTF-8")
+        
+        currentCapture := Map()
+        currentName := ""
+        inBody := false
+        inShort := false
+        bodyLines := ""
+        shortLines := ""
+        
+        Loop Parse, content, "`n", "`r" {
+            line := A_LoopField
+            
+            if RegExMatch(line, "^\[([^\]]+)\]$", &match) {
+                if (currentName != "") {
+                    if (inBody && bodyLines != "")
+                        currentCapture["body"] := RTrim(bodyLines, "`n")
+                    if (inShort && shortLines != "")
+                        currentCapture["short"] := RTrim(shortLines, "`n")
+                    importData[StrLower(currentName)] := currentCapture
+                    importNames.Push(currentName)
+                }
+                
+                currentName := match[1]
+                currentCapture := Map()
+                currentCapture["name"] := currentName
+                inBody := false
+                inShort := false
+                bodyLines := ""
+                shortLines := ""
+                continue
+            }
+            
+            if (currentName = "")
+                continue
+            
+            ; Handle multi-line short version
+            if (line = "short=<<<SHORT") {
+                inShort := true
+                continue
+            } else if (line = "SHORT>>>") {
+                inShort := false
+                if (shortLines != "")
+                    currentCapture["short"] := RTrim(shortLines, "`n")
+                continue
+            } else if (inShort) {
+                shortLines .= line "`n"
+                continue
+            }
+            
+            if (SubStr(line, 1, 4) = "url=") {
+                currentCapture["url"] := SubStr(line, 5)
+            } else if (SubStr(line, 1, 6) = "title=") {
+                currentCapture["title"] := SubStr(line, 7)
+            } else if (SubStr(line, 1, 5) = "date=") {
+                currentCapture["date"] := SubStr(line, 6)
+            } else if (SubStr(line, 1, 5) = "tags=") {
+                currentCapture["tags"] := SubStr(line, 6)
+            } else if (SubStr(line, 1, 5) = "note=") {
+                currentCapture["note"] := SubStr(line, 6)
+            } else if (SubStr(line, 1, 8) = "opinion=") {
+                currentCapture["opinion"] := SubStr(line, 9)
+            } else if (SubStr(line, 1, 9) = "research=") {
+                currentCapture["research"] := SubStr(line, 10)
+            } else if (SubStr(line, 1, 8) = "docpath=") {
+                currentCapture["docpath"] := SubStr(line, 9)
+            } else if (SubStr(line, 1, 6) = "short=") {
+                currentCapture["short"] := SubStr(line, 7)
+            } else if (line = "body=<<<BODY") {
+                inBody := true
+            } else if (line = "BODY>>>") {
+                inBody := false
+                if (bodyLines != "")
+                    currentCapture["body"] := RTrim(bodyLines, "`n")
+            } else if (inBody) {
+                bodyLines .= line "`n"
+            }
+        }
+        
+        ; Don't forget the last entry
+        if (currentName != "") {
+            if (inBody && bodyLines != "")
+                currentCapture["body"] := RTrim(bodyLines, "`n")
+            if (inShort && shortLines != "")
+                currentCapture["short"] := RTrim(shortLines, "`n")
+            importData[StrLower(currentName)] := currentCapture
+            importNames.Push(currentName)
+        }
+    } catch as err {
+        MsgBox("Error reading file:`n" err.Message, "Error", "16")
+        return
+    }
+    
+    if (importNames.Length = 0) {
+        MsgBox("File is empty or has no valid capture entries.", "Empty File", "48")
+        return
+    }
+    
+    ; Get just the filename for the title
+    SplitPath(filePath, &fileName)
+    
+    ; Create the import browser GUI
+    importGui := Gui("+Resize +MinSize800x550", "📥 Import from " fileName " - " importNames.Length " entries")
+    importGui.SetFont("s10")
+    importGui.BackColor := "1e1e2e"
+    
+    ; Store import data in GUI for later access
+    importGui.importData := importData
+    importGui.importNames := importNames
+    importGui.sourceFile := filePath
+    
+    importGui.SetFont("s11 cWhite")
+    importGui.Add("Text", "x10 y10 w700", "📥 Import captures from: " fileName)
+    
+    importGui.SetFont("s10 cWhite")
+    importGui.Add("Text", "x10 y38", "Search:")
+    searchEdit := importGui.Add("Edit", "x65 y35 w300 vSearchText Background333355 cWhite")
+    
+    ; Filter to show only entries NOT already in working file
+    showNewOnly := importGui.Add("Checkbox", "x390 y38 cWhite vShowNewOnly", "Hide duplicates")
+    showNewOnly.OnEvent("Click", (*) => CC_FilterImportList(importGui))
+    
+    importGui.Add("Button", "x580 y33 w80 h26", "🔍 Filter").OnEvent("Click", (*) => CC_FilterImportList(importGui))
+    
+    ; Set up live search
+    importGui.filterFunc := CC_FilterImportList.Bind(importGui)
+    searchEdit.OnEvent("Change", (*) => SetTimer(importGui.filterFunc, -300))
+    
+    importGui.SetFont("s9 cAAAAAA")
+    importGui.Add("Text", "x10 y68", "✓ = Check items to import | Double-click to preview | 🔴 = Already exists | 🟢 = New")
+    
+    ; ListView with checkboxes
+    importGui.SetFont("s10 c000000")
+    listView := importGui.Add("ListView", "x10 y95 w520 h350 vImportList Checked Grid BackgroundFFFFFF", ["Status", "Name", "Title", "Date"])
+    listView.ModifyCol(1, 50)
+    listView.ModifyCol(2, 120)
+    listView.ModifyCol(3, 250)
+    listView.ModifyCol(4, 80)
+    
+    ; Populate list
+    for name in importNames {
+        if !importData.Has(StrLower(name))
+            continue
+        cap := importData[StrLower(name)]
+        
+        ; Check if already exists in working file
+        exists := CaptureData.Has(StrLower(name))
+        status := exists ? "🔴" : "🟢"
+        
+        listView.Add(, status, name,
+            cap.Has("title") ? cap["title"] : "",
+            cap.Has("date") ? cap["date"] : "")
+    }
+    
+    listView.OnEvent("DoubleClick", (*) => CC_PreviewImportEntry(importGui))
+    listView.OnEvent("ItemFocus", (*) => CC_UpdateImportPreview(importGui))
+    
+    ; Preview pane
+    importGui.SetFont("s10 bold cWhite")
+    importGui.Add("Text", "x545 y95", "Preview:")
+    
+    importGui.SetFont("s9 norm c000000")
+    previewEdit := importGui.Add("Edit", "x545 y115 w245 h280 vPreviewText ReadOnly Multi VScroll BackgroundFFFEF5")
+    
+    ; Buttons
+    importGui.SetFont("s10 cWhite")
+    importGui.Add("Button", "x10 y455 w100 h30", "✓ Select All").OnEvent("Click", (*) => CC_ImportSelectAll(importGui, true))
+    importGui.Add("Button", "x120 y455 w100 h30", "✗ Select None").OnEvent("Click", (*) => CC_ImportSelectAll(importGui, false))
+    importGui.Add("Button", "x230 y455 w110 h30", "👁 Preview").OnEvent("Click", (*) => CC_PreviewImportEntry(importGui))
+    
+    ; Update date checkbox - CHECKED BY DEFAULT
+    importGui.SetFont("s9 c00FF88")
+    updateDateCheck := importGui.Add("Checkbox", "x545 y400 w245 vUpdateDateToToday Checked", "📅 Update date to today")
+    updateDateCheck.ToolTip := "Sets the capture date to today`nso imported items sort to top by date"
+    
+    importBtn := importGui.Add("Button", "x545 y455 w120 h35 Default", "📥 IMPORT")
+    importBtn.OnEvent("Click", (*) => CC_ImportSelectedEntries(importGui))
+    
+    importGui.Add("Button", "x680 y455 w110 h35", "Cancel").OnEvent("Click", (*) => CC_CloseImportGui(importGui))
+    
+    ; Status bar
+    importGui.SetFont("s9 cAAAAAA")
+    newCount := 0
+    for name in importNames {
+        if !CaptureData.Has(StrLower(name))
+            newCount++
+    }
+    importGui.statusText := importGui.Add("Text", "x10 y495 w780", 
+        "File: " importNames.Length " entries | New (not in working file): " newCount " | Working file: " CaptureNames.Length " captures")
+    
+    importGui.OnEvent("Close", (*) => CC_CloseImportGui(importGui))
+    importGui.OnEvent("Escape", (*) => CC_CloseImportGui(importGui))
+    
+    importGui.Show("w800 h520")
+    searchEdit.Focus()
+}
+
+; Helper functions for Import Browser
+CC_FilterImportList(importGui) {
+    global CaptureData
+    
+    try {
+        if !WinExist("ahk_id " importGui.Hwnd)
+            return
+    } catch
+        return
+    
+    listView := importGui["ImportList"]
+    searchText := importGui["SearchText"].Value
+    showNewOnly := importGui["ShowNewOnly"].Value
+    
+    importData := importGui.importData
+    importNames := importGui.importNames
+    
+    listView.Delete()
+    
+    searchLower := StrLower(searchText)
+    matchCount := 0
+    newCount := 0
+    nameMatches := []
+    bodyMatches := []
+    
+    for name in importNames {
+        if !importData.Has(StrLower(name))
+            continue
+        
+        cap := importData[StrLower(name)]
+        exists := CaptureData.Has(StrLower(name))
+        
+        if (showNewOnly && exists)
+            continue
+        
+        if (searchText != "") {
+            nameLower := StrLower(name)
+            titleLower := StrLower(cap.Has("title") ? cap["title"] : "")
+            bodyLower := StrLower(cap.Has("body") ? cap["body"] : "")
+            
+            isNameMatch := InStr(nameLower, searchLower)
+            isTitleMatch := InStr(titleLower, searchLower)
+            isBodyMatch := InStr(bodyLower, searchLower)
+            
+            if !isNameMatch && !isTitleMatch && !isBodyMatch
+                continue
+            
+            entry := {name: name, cap: cap, exists: exists}
+            if isNameMatch
+                nameMatches.Push(entry)
+            else
+                bodyMatches.Push(entry)
+        } else {
+            entry := {name: name, cap: cap, exists: exists}
+            nameMatches.Push(entry)
+        }
+    }
+    
+    for entry in nameMatches {
+        status := entry.exists ? "🔴" : "🟢"
+        if !entry.exists
+            newCount++
+        listView.Add(, status, entry.name,
+            entry.cap.Has("title") ? entry.cap["title"] : "",
+            entry.cap.Has("date") ? entry.cap["date"] : "")
+        matchCount++
+    }
+    
+    for entry in bodyMatches {
+        status := entry.exists ? "🔴" : "🟢"
+        if !entry.exists
+            newCount++
+        listView.Add(, status, entry.name,
+            entry.cap.Has("title") ? entry.cap["title"] : "",
+            entry.cap.Has("date") ? entry.cap["date"] : "")
+        matchCount++
+    }
+    
+    importGui.statusText.Value := "Showing " matchCount " of " importGui.importNames.Length " | New entries: " newCount
+}
+
+CC_CloseImportGui(importGui) {
+    if importGui.HasOwnProp("filterFunc")
+        SetTimer(importGui.filterFunc, 0)
+    importGui.Destroy()
+}
+
+CC_UpdateImportPreview(importGui) {
+    listView := importGui["ImportList"]
+    previewEdit := importGui["PreviewText"]
+    
+    row := listView.GetNext(0, "F")
+    if (row = 0) {
+        previewEdit.Value := ""
+        return
+    }
+    
+    name := listView.GetText(row, 2)
+    importData := importGui.importData
+    
+    if !importData.Has(StrLower(name)) {
+        previewEdit.Value := "Entry not found"
+        return
+    }
+    
+    cap := importData[StrLower(name)]
+    
+    preview := "Name: " name "`n"
+    preview .= "─────────────────────`n"
+    if cap.Has("title") && cap["title"] != ""
+        preview .= "Title: " cap["title"] "`n"
+    if cap.Has("url") && cap["url"] != ""
+        preview .= "URL: " cap["url"] "`n"
+    if cap.Has("date") && cap["date"] != ""
+        preview .= "Date: " cap["date"] "`n"
+    if cap.Has("tags") && cap["tags"] != ""
+        preview .= "Tags: " cap["tags"] "`n"
+    if cap.Has("note") && cap["note"] != ""
+        preview .= "`nNote: " cap["note"] "`n"
+    if cap.Has("body") && cap["body"] != "" {
+        preview .= "`n─────────────────────`n"
+        preview .= "Body:`n" SubStr(cap["body"], 1, 500)
+        if StrLen(cap["body"]) > 500
+            preview .= "..."
+    }
+    
+    previewEdit.Value := preview
+}
+
+CC_PreviewImportEntry(importGui) {
+    listView := importGui["ImportList"]
+    row := listView.GetNext(0, "F")
+    if (row = 0) {
+        MsgBox("Select an entry first.", "No Selection", "48")
+        return
+    }
+    
+    name := listView.GetText(row, 2)
+    importData := importGui.importData
+    
+    if !importData.Has(StrLower(name))
+        return
+    
+    cap := importData[StrLower(name)]
+    
+    ; Show full preview in a popup
+    previewText := "═══════════════════════════════════`n"
+    previewText .= "CAPTURE: " name "`n"
+    previewText .= "═══════════════════════════════════`n`n"
+    
+    if cap.Has("title") && cap["title"] != ""
+        previewText .= "📄 Title: " cap["title"] "`n"
+    if cap.Has("url") && cap["url"] != ""
+        previewText .= "🔗 URL: " cap["url"] "`n"
+    if cap.Has("date") && cap["date"] != ""
+        previewText .= "📅 Date: " cap["date"] "`n"
+    if cap.Has("tags") && cap["tags"] != ""
+        previewText .= "🏷️ Tags: " cap["tags"] "`n"
+    if cap.Has("note") && cap["note"] != ""
+        previewText .= "`n📝 Note: " cap["note"] "`n"
+    if cap.Has("body") && cap["body"] != "" {
+        previewText .= "`n───────────────────────────────────`n"
+        previewText .= "BODY:`n" cap["body"]
+    }
+    
+    ; Create preview window
+    previewWin := Gui("+Resize", "Preview: " name)
+    previewWin.SetFont("s10")
+    previewWin.Add("Edit", "x10 y10 w580 h450 ReadOnly Multi VScroll HScroll", previewText)
+    previewWin.Add("Button", "x250 y470 w100", "Close").OnEvent("Click", (*) => previewWin.Destroy())
+    previewWin.Show("w600 h510")
+}
+
+CC_ImportSelectAll(importGui, selectAll) {
+    listView := importGui["ImportList"]
+    row := 0
+    Loop {
+        row++
+        if (row > listView.GetCount())
+            break
+        listView.Modify(row, selectAll ? "Check" : "-Check")
+    }
+}
+
+CC_ImportSelectedEntries(importGui) {
+    global CaptureData, CaptureNames
+    
+    listView := importGui["ImportList"]
+    importData := importGui.importData
+    updateDateToToday := importGui["UpdateDateToToday"].Value
+    
+    ; Collect checked items
+    selectedNames := []
+    duplicates := []
+    
+    row := 0
+    Loop {
+        row := listView.GetNext(row, "C")  ; C = Checked
+        if (row = 0)
+            break
+        
+        name := listView.GetText(row, 2)
+        
+        if CaptureData.Has(StrLower(name))
+            duplicates.Push(name)
+        else
+            selectedNames.Push(name)
+    }
+    
+    if (selectedNames.Length = 0 && duplicates.Length = 0) {
+        MsgBox("No entries selected.`n`nCheck the boxes next to entries you want to import.", "Nothing Selected", "48")
+        return
+    }
+    
+    ; Handle duplicates
+    if (duplicates.Length > 0) {
+        dupMsg := duplicates.Length " selected entries already exist:`n`n"
+        showCount := Min(duplicates.Length, 5)
+        Loop showCount {
+            dupMsg .= "• " duplicates[A_Index] "`n"
+        }
+        if (duplicates.Length > 5)
+            dupMsg .= "• ... and " (duplicates.Length - 5) " more`n"
+        
+        if (selectedNames.Length > 0) {
+            dupMsg .= "`n• YES = Overwrite duplicates AND import new`n"
+            dupMsg .= "• NO = Skip duplicates, import only " selectedNames.Length " new`n"
+            dupMsg .= "• CANCEL = Cancel import"
+        } else {
+            dupMsg .= "`nOverwrite existing entries?`n`n"
+            dupMsg .= "• YES = Overwrite`n"
+            dupMsg .= "• NO/CANCEL = Cancel"
+        }
+        
+        result := MsgBox(dupMsg, "Duplicates Found", "YesNoCancel Icon!")
+        if (result = "Cancel")
+            return
+        if (result = "Yes") {
+            for name in duplicates {
+                selectedNames.Push(name)
+            }
+        } else if (result = "No" && selectedNames.Length = 0)
+            return
+    }
+    
+    ; Confirm import
+    dateNote := updateDateToToday ? "`n📅 Date will be updated to today." : ""
+    confirmMsg := "Import " selectedNames.Length " entries?" dateNote "`n`n"
+    showCount := Min(selectedNames.Length, 8)
+    Loop showCount {
+        confirmMsg .= "• " selectedNames[A_Index] "`n"
+    }
+    if (selectedNames.Length > 8)
+        confirmMsg .= "• ... and " (selectedNames.Length - 8) " more`n"
+    
+    result := MsgBox(confirmMsg, "Confirm Import", "YesNo Iconi")
+    if (result = "No")
+        return
+    
+    ; Import entries
+    importedCount := 0
+    overwriteCount := 0
+    todayDate := FormatTime(, "yyyy-MM-dd HH:mm:ss")
+    
+    for name in selectedNames {
+        if !importData.Has(StrLower(name))
+            continue
+        
+        cap := importData[StrLower(name)]
+        
+        ; Update date to today if checkbox is checked
+        if (updateDateToToday)
+            cap["date"] := todayDate
+        
+        isOverwrite := CaptureData.Has(StrLower(name))
+        
+        CaptureData[StrLower(name)] := cap
+        
+        if (!isOverwrite)
+            CaptureNames.Push(name)
+        else
+            overwriteCount++
+        
+        importedCount++
+    }
+    
+    ; Save and regenerate
+    CC_SaveCaptureData()
+    CC_GenerateHotstringFile()
+    
+    ; Update DynamicSuffixHandler
+    DynamicSuffixHandler.Initialize(CaptureData, CaptureNames)
+    
+    CC_CloseImportGui(importGui)
+    
+    ; Build detailed message
+    newCount := importedCount - overwriteCount
+    detailMsg := ""
+    if (newCount > 0)
+        detailMsg .= newCount " new"
+    if (overwriteCount > 0) {
+        if (detailMsg != "")
+            detailMsg .= ", "
+        detailMsg .= overwriteCount " overwritten"
+    }
+    
+    dateMsg := updateDateToToday ? "`nDates updated to today." : ""
+    
+    result := MsgBox("Imported " importedCount " entries! (" detailMsg ")" dateMsg "`n`nReload script to activate new hotstrings?", "Import Complete", "YesNo Iconi")
+    if (result = "Yes")
+        Reload()
+}
+
 ; ==============================================================================
 ; RESTORE FROM BACKUP BROWSER
 ; ==============================================================================
@@ -5112,6 +5679,11 @@ CC_OpenRestoreBrowser() {
     restoreGui.Add("Button", "x120 y455 w100 h30", "✗ Select None").OnEvent("Click", (*) => CC_RestoreSelectAll(restoreGui, false))
     restoreGui.Add("Button", "x230 y455 w110 h30", "✏️ Edit Selected").OnEvent("Click", (*) => CC_PreviewBackupEntry(restoreGui))
     restoreGui.Add("Button", "x350 y455 w100 h30", "🗑️ Delete").OnEvent("Click", (*) => CC_DeleteFromBackup(restoreGui))
+    
+    ; Update date checkbox
+    restoreGui.SetFont("s9 c00FF88")
+    updateDateCheck := restoreGui.Add("Checkbox", "x545 y400 w245 vUpdateDateToToday Checked", "📅 Update date to today")
+    updateDateCheck.ToolTip := "Sets the capture date to today`nso restored items sort to top by date"
     
     ; Archive checkbox
     restoreGui.SetFont("s9 cFFCC00")
@@ -5827,6 +6399,7 @@ CC_RestoreSelectedEntries(restoreGui) {
     backupData := restoreGui.backupData
     backupNames := restoreGui.backupNames
     moveToArchive := restoreGui["MoveToArchive"].Value
+    updateDateToToday := restoreGui["UpdateDateToToday"].Value
     
     ; Collect checked items
     selectedNames := []
@@ -5917,6 +6490,10 @@ CC_RestoreSelectedEntries(restoreGui) {
             continue
         
         cap := backupData[StrLower(name)]
+        
+        ; Update date to today if checkbox is checked
+        if (updateDateToToday)
+            cap["date"] := FormatTime(, "yyyy-MM-dd HH:mm:ss")
         
         ; Check if this is an overwrite or new entry
         isOverwrite := CaptureData.Has(StrLower(name))

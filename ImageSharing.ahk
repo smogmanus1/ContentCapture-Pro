@@ -1,9 +1,14 @@
 ; ==============================================================================
 ; ImageSharing.ahk - Multi-Image Social Media Sharing Module for ContentCapture Pro
 ; ==============================================================================
-; Version: 2.0
+; Version: 2.1
+; Updated: 2026-01-25
 ; Supports: Facebook, Twitter/X, Bluesky, LinkedIn, Mastodon
 ; Features: Multiple image support, auto-paste, platform detection
+;
+; CHANGELOG v2.1:
+;   - Fixed: EncodeURIComponent call corrected to IS_EncodeURIComponent (line 505)
+;   - This bug would cause error when sharing to Twitter with images
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -502,7 +507,7 @@ IS_ShareToTwitter(content, images) {
         imagesToShare.Push(images[A_Index])
     
     ; Open Twitter compose
-    composeUrl := "https://twitter.com/intent/tweet?text=" EncodeURIComponent(content)
+    composeUrl := "https://twitter.com/intent/tweet?text=" IS_EncodeURIComponent(content)
     Run(composeUrl)
     
     if imagesToShare.Length > 0 {
