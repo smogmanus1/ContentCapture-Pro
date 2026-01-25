@@ -1,3 +1,7 @@
+![Content Capture Pro Banner](images/ccpimage.png)
+
+# ContentCapture Pro
+
 # ContentCapture Pro v6.0.0
 
 **Professional Content Capture & Sharing System for Windows**
