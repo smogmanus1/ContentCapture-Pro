@@ -6881,15 +6881,17 @@ CC_SaveEditedCapture(editGui, originalName) {
     if CaptureData.Has(originalNameLower) {
         updatedCapture := Map()
         updatedCapture["name"] := newName
-        updatedCapture["url"] := saved.EditURL
-        updatedCapture["title"] := saved.EditTitle
-        updatedCapture["tags"] := saved.EditTags
-        updatedCapture["opinion"] := saved.EditOpinion
-        updatedCapture["note"] := saved.EditNote
-        updatedCapture["research"] := saved.EditResearch  ; Save research notes
-        updatedCapture["short"] := saved.EditShort  ; Save the short version from the form
-        updatedCapture["body"] := saved.EditBody
-        updatedCapture["docpath"] := saved.EditDocPath  ; Save document attachment path
+        ; FIX: Get all values directly from controls to ensure latest values are captured
+        ; (Submit may miss updates if control hasn't lost focus)
+        updatedCapture["url"] := editGui["EditURL"].Value
+        updatedCapture["title"] := editGui["EditTitle"].Value
+        updatedCapture["tags"] := editGui["EditTags"].Value
+        updatedCapture["opinion"] := editGui["EditOpinion"].Value
+        updatedCapture["note"] := editGui["EditNote"].Value
+        updatedCapture["research"] := editGui["EditResearch"].Value
+        updatedCapture["short"] := editGui["EditShort"].Value
+        updatedCapture["body"] := editGui["EditBody"].Value
+        updatedCapture["docpath"] := editGui["EditDocPath"].Value
         
         ; Preserve original date
         if CaptureData[originalNameLower].Has("date")
