@@ -34,6 +34,8 @@
 - Click **"Yes"** when it asks questions
 - When it's done, look for a **green "H" icon** near your clock (bottom-right corner of screen)
 
+💡 *Having problems? Try right-clicking `install.bat` and selecting "Run as administrator"*
+
 **🎉 That's it! You're ready to save recipes!**
 
 ---
