@@ -2,9 +2,13 @@
 ; ContentCapture Pro - Professional Content Capture & Sharing System
 ; ==============================================================================
 ; Author:      Brad
-; Version:     6.0.0 (AHK v2)
-; Updated:     2026-01-25
+; Version:     6.0.1 (AHK v2)
+; Updated:     2026-01-28
 ; License:     MIT
+;
+; CHANGELOG v6.0.1:
+;   - NEW: ManualCaptureImageGUI.ahk - Image attachment in Manual Capture
+;   - FIX: "Control is destroyed" error when closing setup during folder select
 ;
 ; CHANGELOG v6.0.0:
 ;   - NEW: Complete suffix system with 22 variants per capture:
@@ -2745,8 +2749,9 @@ CC_BrowseForFolder(pathEdit, clouds) {
     }
 
     folder := DirSelect("*" startPath, 3, "Select folder for your captures:")
-    if (folder != "")
-        pathEdit.Value := folder
+    if (folder != "") {
+        try pathEdit.Value := folder
+    }
 }
 
 CC_FinishSetup(setupGui, pathEdit, cbEmail, cbFacebook, cbTwitter, cbBluesky) {

@@ -15,6 +15,9 @@ All notable changes to ContentCapture Pro will be documented in this file.
   - Multiple image support
   - Integrates with existing ImageDatabase.ahk (`IDB_*` functions)
 
+### Fixed
+- **"Control is destroyed" error** - Fixed crash when closing setup wizard while folder picker dialog is open
+
 ### Integration
 Add one line to your ManualCapture GUI build:
 ```autohotkey
