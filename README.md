@@ -1,5 +1,7 @@
 # ContentCapture Pro v6.0.1
 
+![ContentCapture Pro - Save Once, Share Everywhere](images/ccpimage.png)
+
 ## 🍪 Save Recipes and Articles from the Internet! 🍪
 
 ---
