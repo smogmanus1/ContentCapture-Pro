@@ -1,136 +1,106 @@
+#Requires AutoHotkey v2.0+
+
 ; ==============================================================================
-; DynamicSuffixHandler.ahk - Dynamic Hotstring Suffix Router
+; DynamicSuffixHandler.ahk - Dynamic Suffix Detection for ContentCapture Pro
 ; ==============================================================================
-; Version: 4.0 - Complete Suffix Support
-; Updated: 2026-01-24
-; ==============================================================================
+; Version:     2.2
+; Author:      Brad (with Claude AI assistance)
+; License:     MIT
 ;
-; COMPLETE SUFFIX REFERENCE:
-; ==============================================================================
+; CHANGELOG v2.2:
+;   - Added "u" suffix for pasting URL only (no title, no content)
+;   - Perfect for dropping clean links into chats/texts
 ;
-; CORE CONTENT SUFFIXES:
-;   (none) → Paste full content (URL + title + opinion + body)
-;   t      → Title only - paste just the title
-;   url    → URL only - paste just the URL  
-;   body   → Body only - paste just the body text
-;   cp     → Copy to clipboard (without pasting)
-;   sh     → Paste short version only (for comments/replies)
-;   ?      → Show action menu with all options
+; CHANGELOG v2.1:
+;   - Added "sum" suffix for on-demand AI summarization
+;   - Implements "Capture First, Process Later" workflow
 ;
-; VIEW/EDIT SUFFIXES:
-;   rd     → Read content in popup window
-;   vi     → View/Edit in GUI
-;   go     → Open URL in browser
+; CHANGELOG v2.0:
+;   - Fixed all clipboard operations to use CC_SafePaste/CC_SafeCopy
+;   - Clipboard is now properly cleared before setting content
+;   - User's original clipboard is preserved and restored
 ;
-; EMAIL SUFFIXES:
-;   em     → Email via Outlook (new email)
-;   oi     → Outlook Insert at cursor (in open email)
-;   ed     → Email with document attached
-;   emi    → Email with image attachment(s)
+; Monitors typing and intercepts suffix patterns dynamically instead of
+; generating thousands of separate hotstring entries.
 ;
-; SOCIAL MEDIA SUFFIXES (text only):
-;   fb     → Share to Facebook
-;   x      → Share to Twitter/X
-;   bs     → Share to Bluesky
-;   li     → Share to LinkedIn
-;   mt     → Share to Mastodon
-;
-; IMAGE SUFFIXES:
-;   i      → Paste image PATH (for file dialogs - copies path as text)
-;   img    → Copy image to clipboard as BITMAP (for pasting into apps)
-;   imgo   → Open image in default viewer
-;   ti     → Title + Image path (paste title, then image path)
-;
-; SOCIAL MEDIA + IMAGE SUFFIXES:
-;   fbi    → Facebook + image(s)
-;   xi     → Twitter/X + image(s)
-;   bsi    → Bluesky + image(s)
-;   lii    → LinkedIn + image(s)
-;   mti    → Mastodon + image(s)
-;
-; AI & RESEARCH SUFFIXES:
-;   sum    → Summarize with AI (on-demand)
-;   yt     → YouTube Transcript
-;   pp     → Perplexity AI research
-;   fc     → Fact check (Snopes)
-;   mb     → Media Bias check
-;   wb     → Wayback Machine
-;   gs     → Google Scholar
-;   av     → Archive.today
-;
-; DOCUMENT SUFFIXES:
-;   d.     → Open attached document
-;   pr     → Print formatted record
-;
-; ==============================================================================
+; Supported Suffixes (type scriptnameSUFFIX then space/enter):
+;   u   → Paste URL only (NEW!)
+;   em  → Email via Outlook
+;   vi  → View/Edit in GUI
+;   go  → Open URL in browser
+;   rd  → Read content in MsgBox
+;   sh  → Paste short version only (for comments/replies)
+;   t   → Paste title only
+;   fb  → Share to Facebook
+;   x   → Share to Twitter/X
+;   bs  → Share to Bluesky
+;   li  → Share to LinkedIn
+;   mt  → Share to Mastodon
+;   sum → Summarize with AI (on-demand)
+;   img → Copy image to clipboard as bitmap
+;   imgo → Open attached image
+;   i   → Paste image path
+;   ti  → Paste title + image path
+;   yt  → YouTube Transcript (Research)
+;   pp  → Perplexity AI (Research)
+;   fc  → Fact Check - Snopes (Research)
+;   mb  → Media Bias Check (Research)
+;   wb  → Wayback Machine (Research)
+;   gs  → Google Scholar (Research)
+;   av  → Archive Page (Research)
 ;
 ; Usage: #Include this file and call DynamicSuffixHandler.Initialize(CaptureData, CaptureNames)
 ; ==============================================================================
 
-#Warn VarUnset, Off  ; Suppress warnings - globals are defined in main script
-
 class DynamicSuffixHandler {
     ; ==== CONFIGURATION ====
     static SUFFIX_MAP := Map(
-        ; === CORE CONTENT SUFFIXES ===
-        "t", "title",            ; Title only
-        "url", "urlonly",        ; URL only
-        "body", "bodyonly",      ; Body only
-        "cp", "copy",            ; Copy to clipboard (no paste)
-        "sh", "short",           ; Paste short version only
+        ; Core actions
+        "u",   "url",         ; Paste URL only (NEW!)
+        "em",  "email",       ; Email via Outlook
+        "oi",  "outlookinsert", ; Insert into open Outlook email
+        "vi",  "view",        ; View/Edit in GUI
+        "go",  "openurl",     ; Open URL in browser
+        "rd",  "read",        ; Read in MsgBox
+        "sh",  "short",       ; Paste short version only
+        "t",   "title",       ; Paste title only
+        "cp",  "copy",        ; Copy to clipboard with notification
+        "pr",  "print",       ; Print formatted
         
-        ; === VIEW/EDIT SUFFIXES ===
-        "rd", "read",            ; Read in popup window
-        "vi", "view",            ; View/Edit in GUI
-        "go", "openurl",         ; Open URL in browser
+        ; Social media (text only)
+        "fb",  "facebook",    ; Share to Facebook
+        "x",   "twitter",     ; Share to Twitter/X
+        "bs",  "bluesky",     ; Share to Bluesky
+        "li",  "linkedin",    ; Share to LinkedIn
+        "mt",  "mastodon",    ; Share to Mastodon
         
-        ; === EMAIL SUFFIXES ===
-        "em", "email",           ; Email via Outlook
-        "oi", "outlookinsert",   ; Insert into open Outlook email
-        "ed", "emaildoc",        ; Email with document
-        "emi", "emailimg",       ; Email with image(s)
+        ; Social media with image
+        "fbi", "facebookimg", ; Facebook + image
+        "xi",  "twitterimg",  ; Twitter/X + image
+        "bsi", "blueskyimg",  ; Bluesky + image
+        "lii", "linkedinimg", ; LinkedIn + image
+        "mti", "mastodonimg", ; Mastodon + image
         
-        ; === SOCIAL MEDIA (text only) ===
-        "fb", "facebook",        ; Share to Facebook
-        "x", "twitter",          ; Share to Twitter/X
-        "bs", "bluesky",         ; Share to Bluesky
-        "li", "linkedin",        ; Share to LinkedIn
-        "mt", "mastodon",        ; Share to Mastodon
+        ; Image actions
+        "i",    "imagepath",  ; Paste image path
+        "img",  "copyimage",  ; Copy image to clipboard as bitmap
+        "imgo", "openimage",  ; Open attached image
+        "ti",   "titleimage", ; Title + image path
+        "d.",   "opendoc",    ; Open attached document
+        "ed",   "emaildoc",   ; Email with document attachment
         
-        ; === IMAGE SUFFIXES ===
-        "i", "imagepath",        ; Paste image PATH (text for file dialogs)
-        "img", "copyimage",      ; Copy image to clipboard as BITMAP
-        "imgo", "openimage",     ; Open image in viewer
-        "ti", "titleimage",      ; Title + Image path
+        ; AI actions
+        "sum", "summarize",   ; AI summarize on-demand
         
-        ; === SOCIAL + IMAGE ===
-        "fbi", "facebookimg",    ; Facebook + image(s)
-        "xi", "twitterimg",      ; Twitter/X + image(s)
-        "bsi", "blueskyimg",     ; Bluesky + image(s)
-        "lii", "linkedinimg",    ; LinkedIn + image(s)
-        "mti", "mastodonimg",    ; Mastodon + image(s)
-        
-        ; === AI & RESEARCH ===
-        "sum", "summarize",      ; Summarize with AI
-        "yt", "transcript",      ; YouTube Transcript
-        "pp", "perplexity",      ; Perplexity AI research
-        "fc", "factcheck",       ; Fact check (Snopes)
-        "mb", "mediabias",       ; Media Bias check
-        "wb", "wayback",         ; Wayback Machine
-        "gs", "scholar",         ; Google Scholar
-        "av", "archive",         ; Archive.today
-        
-        ; === DOCUMENT ===
-        "d.", "opendoc",         ; Open attached document
-        "pr", "print"            ; Print formatted record
+        ; Research tools
+        "yt",  "transcript",  ; YouTube Transcript
+        "pp",  "perplexity",  ; Perplexity AI
+        "fc",  "factcheck",   ; Snopes fact check
+        "mb",  "mediabias",   ; Media Bias/Fact Check
+        "wb",  "wayback",     ; Wayback Machine
+        "gs",  "scholar",     ; Google Scholar
+        "av",  "archive"      ; Archive.today
     )
-    
-    ; Character limits for social platforms
-    static LIMIT_TWITTER := 280
-    static LIMIT_BLUESKY := 300
-    static LIMIT_LINKEDIN := 3000
-    static LIMIT_MASTODON := 500
-    static LIMIT_FACEBOOK := 63206
     
     ; Internal state
     static inputHook := ""
@@ -143,147 +113,162 @@ class DynamicSuffixHandler {
     static captureNamesRef := ""
     
     ; ==== INITIALIZATION ====
-    static Initialize(captureData, captureNames) {
-        this.captureDataRef := captureData
-        this.captureNamesRef := captureNames
+    static Initialize(captureDataMap := "", captureNamesArray := "") {
+        if (this.isEnabled)
+            return true
+        
+        ; Store references
+        if (captureDataMap != "")
+            this.captureDataRef := captureDataMap
+        if (captureNamesArray != "")
+            this.captureNamesRef := captureNamesArray
+        
+        ; Create InputHook to monitor typing
+        this.inputHook := InputHook("V I1")
+        this.inputHook.KeyOpt("{All}", "N")
+        this.inputHook.OnChar := ObjBindMethod(this, "OnCharTyped")
+        this.inputHook.OnKeyDown := ObjBindMethod(this, "OnKeyDown")
+        this.inputHook.Start()
+        
         this.isEnabled := true
-        
-        ; Set up input hook for suffix detection
-        this.SetupInputHook()
-        
-        ; Load image database if available (after BaseDir is set)
-        try {
-            if IsSet(IDB_LoadImageDatabase)
-                IDB_LoadImageDatabase()
+        return true
+    }
+    
+    static Stop() {
+        if (this.inputHook && this.isEnabled) {
+            this.inputHook.Stop()
+            this.isEnabled := false
         }
     }
     
-    static SetupInputHook() {
-        ; Clean up existing hook
-        if (this.inputHook != "") {
-            try this.inputHook.Stop()
+    static SetCaptureData(dataMap, namesArray := "") {
+        this.captureDataRef := dataMap
+        if (namesArray != "")
+            this.captureNamesRef := namesArray
+    }
+    
+    ; ==== INPUT MONITORING ====
+    static OnCharTyped(ih, char) {
+        ; Check if this is an ending character (triggers hotstring)
+        endingChars := " `t`n.,;:!?()[]{}'" . '"<>/@#$%^&*-=+\|'
+        
+        if InStr(endingChars, char) {
+            ; Check buffer for suffix match BEFORE adding the ending char
+            this.CheckForSuffixMatch()
+            this.inputBuffer := ""  ; Reset after trigger
+        } else {
+            ; Add character to buffer
+            this.inputBuffer .= char
+            
+            ; Trim buffer if too long
+            if (StrLen(this.inputBuffer) > this.maxBufferLen)
+                this.inputBuffer := SubStr(this.inputBuffer, -this.maxBufferLen)
         }
-        
-        ; Create new input hook
-        this.inputHook := InputHook("V I1 L" this.maxBufferLen)
-        this.inputHook.OnChar := ObjBindMethod(this, "OnChar")
-        this.inputHook.OnEnd := ObjBindMethod(this, "OnEnd")
-        this.inputHook.KeyOpt("{Space}{Tab}{Enter}", "E")
-        this.inputHook.Start()
     }
     
-    static OnChar(ih, char) {
-        this.inputBuffer .= char
-        
-        ; Keep buffer manageable
-        if (StrLen(this.inputBuffer) > this.maxBufferLen)
-            this.inputBuffer := SubStr(this.inputBuffer, -this.maxBufferLen + 1)
-    }
-    
-    static OnEnd(ih) {
-        if (!this.isEnabled)
-            return
-        
-        ; Check if buffer matches a capture + suffix pattern
-        this.CheckForSuffix()
-        
-        ; Clear buffer and restart
-        this.inputBuffer := ""
-        this.inputHook.Start()
+    static OnKeyDown(ih, vk, sc) {
+        ; Handle special keys that should reset buffer
+        if (vk = 8) {  ; Backspace
+            if (StrLen(this.inputBuffer) > 0)
+                this.inputBuffer := SubStr(this.inputBuffer, 1, -1)
+        } else if (vk = 27) {  ; Escape
+            this.inputBuffer := ""
+        } else if (vk = 13 || vk = 9) {  ; Enter or Tab
+            this.CheckForSuffixMatch()
+            this.inputBuffer := ""
+        }
     }
     
     ; ==== SUFFIX DETECTION ====
-    static CheckForSuffix() {
-        buffer := this.inputBuffer
+    static CheckForSuffixMatch() {
+        if (this.inputBuffer = "" || !this.captureDataRef)
+            return
         
-        ; Sort suffixes by length (longest first) for proper matching
-        suffixes := this.GetSuffixesSortedByLength()
+        buffer := StrLower(this.inputBuffer)
         
-        for suffix in suffixes {
-            if (suffix = "")
-                continue
+        ; Check suffixes in order of length (longest first) to avoid partial matches
+        ; Sort suffixes by length descending
+        suffixList := []
+        for suffix, action in this.SUFFIX_MAP {
+            suffixList.Push({suffix: suffix, action: action, len: StrLen(suffix)})
+        }
+        
+        ; Sort by length descending (bubble sort for simplicity)
+        loop suffixList.Length - 1 {
+            i := A_Index
+            loop suffixList.Length - i {
+                j := A_Index + i - 1
+                if (suffixList[j].len < suffixList[j + 1].len) {
+                    temp := suffixList[j]
+                    suffixList[j] := suffixList[j + 1]
+                    suffixList[j + 1] := temp
+                }
+            }
+        }
+        
+        ; Check each suffix
+        for item in suffixList {
+            suffix := item.suffix
+            action := item.action
+            suffixLen := StrLen(suffix)
             
             ; Check if buffer ends with this suffix
-            suffixLen := StrLen(suffix)
-            if (SubStr(buffer, -suffixLen) = suffix) {
-                ; Extract potential capture name
-                captureName := SubStr(buffer, 1, StrLen(buffer) - suffixLen)
-                
-                ; Check if this is a valid capture
-                if (this.captureDataRef.Has(captureName)) {
-                    ; Found a match! Route to handler
-                    this.HandleSuffix(captureName, suffix)
-                    return
+            if (StrLen(buffer) > suffixLen) {
+                bufferEnd := SubStr(buffer, -(suffixLen - 1))  ; Get last N characters
+                if (bufferEnd = suffix) {
+                    ; Extract potential capture name (everything before suffix)
+                    potentialName := SubStr(buffer, 1, StrLen(buffer) - suffixLen)
+                    
+                    ; Check if this is a valid capture name
+                    if (this.captureDataRef.Has(potentialName)) {
+                        ; Found a match! Execute the action
+                        this.ExecuteAction(potentialName, action)
+                        return
+                    }
                 }
             }
         }
     }
     
-    static GetSuffixesSortedByLength() {
-        ; Get all suffixes and sort by length descending
-        suffixes := []
-        for suffix, action in this.SUFFIX_MAP
-            suffixes.Push({s: suffix, len: StrLen(suffix)})
-        
-        ; Simple bubble sort by length descending
-        Loop suffixes.Length - 1 {
-            Loop suffixes.Length - A_Index {
-                if (suffixes[A_Index].len < suffixes[A_Index + 1].len) {
-                    temp := suffixes[A_Index]
-                    suffixes[A_Index] := suffixes[A_Index + 1]
-                    suffixes[A_Index + 1] := temp
-                }
+    ; ==== ACTION EXECUTION ====
+    static ExecuteAction(captureName, action) {
+        ; Erase the typed text (name + suffix)
+        cap := this.captureDataRef[captureName]
+        suffix := ""
+        for s, a in this.SUFFIX_MAP {
+            if (a = action) {
+                suffix := s
+                break
             }
         }
-        
-        result := []
-        for item in suffixes
-            result.Push(item.s)
-        return result
-    }
-    
-    ; ==== ACTION ROUTING ====
-    static HandleSuffix(captureName, suffix) {
-        ; Backspace to remove typed text PLUS the ending character (space/tab/enter)
-        backspaces := StrLen(captureName) + StrLen(suffix) + 1
-        Send("{BS " backspaces "}")
+        eraseLen := StrLen(captureName) + StrLen(suffix)
+        SendInput("{Backspace " eraseLen "}")
         Sleep(50)
         
-        ; Get the action for this suffix
-        action := this.SUFFIX_MAP.Has(suffix) ? this.SUFFIX_MAP[suffix] : ""
-        
         switch action {
-            ; === CORE CONTENT ===
-            case "title":
-                this.ActionTitle(captureName)
-            case "urlonly":
-                this.ActionURLOnly(captureName)
-            case "bodyonly":
-                this.ActionBodyOnly(captureName)
-            case "copy":
-                this.ActionCopy(captureName)
-            case "short":
-                this.ActionShort(captureName)
-            
-            ; === VIEW/EDIT ===
-            case "read":
-                this.ActionRead(captureName)
-            case "view":
-                this.ActionView(captureName)
-            case "openurl":
-                this.ActionOpenURL(captureName)
-            
-            ; === EMAIL ===
+            ; === CORE ACTIONS ===
+            case "url":
+                this.ActionURL(captureName)
             case "email":
                 this.ActionEmail(captureName)
             case "outlookinsert":
                 this.ActionOutlookInsert(captureName)
-            case "emaildoc":
-                this.ActionEmailWithDoc(captureName)
-            case "emailimg":
-                this.ActionEmailWithImage(captureName)
+            case "view":
+                this.ActionView(captureName)
+            case "openurl":
+                this.ActionOpenURL(captureName)
+            case "read":
+                this.ActionRead(captureName)
+            case "short":
+                this.ActionShort(captureName)
+            case "title":
+                this.ActionTitle(captureName)
+            case "copy":
+                this.ActionCopy(captureName)
+            case "print":
+                this.ActionPrint(captureName)
             
-            ; === SOCIAL MEDIA (text only) ===
+            ; === SOCIAL MEDIA (TEXT ONLY) ===
             case "facebook":
                 this.ActionSocial(captureName, "facebook")
             case "twitter":
@@ -295,17 +280,7 @@ class DynamicSuffixHandler {
             case "mastodon":
                 this.ActionSocial(captureName, "mastodon")
             
-            ; === IMAGE ===
-            case "imagepath":
-                this.ActionImagePath(captureName)
-            case "copyimage":
-                this.ActionCopyImage(captureName)
-            case "openimage":
-                this.ActionOpenImage(captureName)
-            case "titleimage":
-                this.ActionTitleImage(captureName)
-            
-            ; === SOCIAL + IMAGE ===
+            ; === SOCIAL MEDIA WITH IMAGE ===
             case "facebookimg":
                 this.ActionSocialWithImage(captureName, "facebook")
             case "twitterimg":
@@ -317,9 +292,25 @@ class DynamicSuffixHandler {
             case "mastodonimg":
                 this.ActionSocialWithImage(captureName, "mastodon")
             
-            ; === AI & RESEARCH ===
+            ; === IMAGE ACTIONS ===
+            case "imagepath":
+                this.ActionImagePath(captureName)
+            case "copyimage":
+                this.ActionCopyImage(captureName)
+            case "openimage":
+                this.ActionOpenImage(captureName)
+            case "titleimage":
+                this.ActionTitleImage(captureName)
+            case "opendoc":
+                this.ActionOpenDoc(captureName)
+            case "emaildoc":
+                this.ActionEmailDoc(captureName)
+            
+            ; === AI ACTIONS ===
             case "summarize":
                 this.ActionSummarize(captureName)
+            
+            ; === RESEARCH TOOLS ===
             case "transcript":
                 this.ActionResearch(captureName, "transcript")
             case "perplexity":
@@ -335,100 +326,31 @@ class DynamicSuffixHandler {
             case "archive":
                 this.ActionResearch(captureName, "archive")
             
-            ; === DOCUMENT ===
-            case "opendoc":
-                this.ActionOpenDoc(captureName)
-            case "print":
-                this.ActionPrint(captureName)
+            default:
+                TrayTip("Unknown suffix action: " action, "ContentCapture Pro")
         }
     }
     
-    ; ==== CORE CONTENT ACTIONS ====
+    ; ==== CORE ACTION IMPLEMENTATIONS ====
     
-    ; Paste TITLE only
+    ; NEW: Paste URL only
+    static ActionURL(captureName) {
+        cap := this.captureDataRef[captureName]
+        if (cap.Has("url") && cap["url"] != "") {
+            DSH_SafePaste(cap["url"])
+        } else {
+            TrayTip("No URL stored for '" captureName "'", "URL Not Found", "17")
+        }
+    }
+    
     static ActionTitle(captureName) {
         cap := this.captureDataRef[captureName]
-        title := ""
-        
-        if (cap.Has("title") && cap["title"] != "")
-            title := cap["title"]
-        else
-            title := captureName  ; Fallback to name
-        
-        this.SafePaste(title)
-    }
-    
-    ; Paste URL only
-    static ActionURLOnly(captureName) {
-        cap := this.captureDataRef[captureName]
-        
-        if (cap.Has("url") && cap["url"] != "") {
-            this.SafePaste(cap["url"])
+        if (cap.Has("title") && cap["title"] != "") {
+            DSH_SafePaste(cap["title"])
         } else {
-            TrayTip("No URL for: " captureName, "No URL", "2")
+            TrayTip("No title stored for '" captureName "'", "Title Not Found", "17")
         }
     }
-    
-    ; Paste BODY only (no URL, no title)
-    static ActionBodyOnly(captureName) {
-        cap := this.captureDataRef[captureName]
-        
-        if (cap.Has("body") && cap["body"] != "") {
-            this.SafePaste(cap["body"])
-        } else if (cap.Has("content") && cap["content"] != "") {
-            this.SafePaste(cap["content"])
-        } else {
-            TrayTip("No body content for: " captureName, "No Body", "2")
-        }
-    }
-    
-    ; Copy to clipboard WITHOUT pasting
-    static ActionCopy(captureName) {
-        cap := this.captureDataRef[captureName]
-        content := this.BuildFullContent(cap)
-        
-        A_Clipboard := content
-        ClipWait(2)
-        TrayTip("Copied to clipboard!", captureName, "1")
-    }
-    
-    ; Paste short version only
-    static ActionShort(captureName) {
-        cap := this.captureDataRef[captureName]
-        if (cap.Has("short") && cap["short"] != "") {
-            this.SafePaste(cap["short"])
-        } else {
-            TrayTip("No short version saved for: " captureName, "No Short Version", "2")
-        }
-    }
-    
-    ; ==== VIEW/EDIT ACTIONS ====
-    
-    static ActionRead(captureName) {
-        cap := this.captureDataRef[captureName]
-        content := this.BuildFullContent(cap)
-        title := cap.Has("title") ? cap["title"] : captureName
-        MsgBox(content, title, "0x40000")
-    }
-    
-    static ActionView(captureName) {
-        ; Call main GUI's edit function
-        if IsSet(CC_EditCapture)
-            CC_EditCapture(captureName)
-        else
-            TrayTip("Edit function not available", "Error", "2")
-    }
-    
-    static ActionOpenURL(captureName) {
-        cap := this.captureDataRef[captureName]
-        if (cap.Has("url") && cap["url"] != "") {
-            Run(cap["url"])
-        } else {
-            TrayTip("No URL for: " captureName, "No URL", "2")
-        }
-    }
-    
-    ; ==== EMAIL ACTIONS ====
     
     static ActionEmail(captureName) {
         cap := this.captureDataRef[captureName]
@@ -437,327 +359,371 @@ class DynamicSuffixHandler {
         
         try {
             outlookApp := ComObject("Outlook.Application")
-            email := outlookApp.CreateItem(0)
-            email.Subject := subject
-            email.Body := body
-            email.Display()
-        } catch as err {
-            TrayTip("Outlook error: " err.Message, "Error", "2")
+            mail := outlookApp.CreateItem(0)
+            mail.Subject := subject
+            mail.Body := body
+            mail.Display()
+        } catch {
+            TrayTip("Could not open Outlook", "Email Error", "17")
         }
     }
     
     static ActionOutlookInsert(captureName) {
         cap := this.captureDataRef[captureName]
         content := this.BuildFullContent(cap)
-        
-        if IsSet(CC_OutlookInsertAtCursor)
-            CC_OutlookInsertAtCursor(content)
-        else
-            TrayTip("Outlook insert not available", "Error", "2")
+        DSH_SafePaste(content)
     }
     
-    static ActionEmailWithDoc(captureName) {
-        if IsSet(CC_EmailWithDocument)
-            CC_EmailWithDocument(captureName)
-        else
-            TrayTip("Email with document not available", "Error", "2")
-    }
-    
-    static ActionEmailWithImage(captureName) {
-        if IsSet(IS_EmailWithImage) {
-            IS_EmailWithImage(captureName)
-        } else {
-            ; Fallback to regular email
-            TrayTip("Image attachment not available", "Note", "1")
-            this.ActionEmail(captureName)
-        }
-    }
-    
-    ; ==== SOCIAL MEDIA (TEXT ONLY) ====
-    
-    ; Platform configurations
-    static PLATFORMS := Map(
-        "facebook", {name: "Facebook", limit: 63206, icon: "📘", url: "https://www.facebook.com/"},
-        "twitter", {name: "Twitter/X", limit: 280, icon: "🐦", url: "https://twitter.com/compose/tweet"},
-        "bluesky", {name: "Bluesky", limit: 300, icon: "🦋", url: "https://bsky.app/"},
-        "linkedin", {name: "LinkedIn", limit: 3000, icon: "💼", url: "https://www.linkedin.com/feed/"},
-        "mastodon", {name: "Mastodon", limit: 500, icon: "🐘", url: ""}
-    )
-    
-    static ActionSocial(captureName, platformKey) {
-        ; Get platform config object
-        platformObj := this.PLATFORMS.Has(platformKey) ? this.PLATFORMS[platformKey] : {name: platformKey, limit: 5000, icon: "📤", url: ""}
-        
-        ; Use SocialShare module if available
-        if IsSet(SS_ShareCapture) {
-            SS_ShareCapture(captureName, platformObj)
-            return
-        }
-        
-        ; Fallback: just copy content
+    static ActionView(captureName) {
         cap := this.captureDataRef[captureName]
-        content := this.BuildShareContent(cap, platformKey)
+        
+        ; Build display content
+        display := "=== " captureName " ===`n`n"
+        if cap.Has("title")
+            display .= "Title: " cap["title"] "`n"
+        if cap.Has("url")
+            display .= "URL: " cap["url"] "`n"
+        if cap.Has("tags")
+            display .= "Tags: " cap["tags"] "`n"
+        if cap.Has("date")
+            display .= "Date: " cap["date"] "`n"
+        if cap.Has("image")
+            display .= "Image: " cap["image"] "`n"
+        if cap.Has("doc")
+            display .= "Doc: " cap["doc"] "`n"
+        display .= "`n"
+        if cap.Has("opinion")
+            display .= "Opinion:`n" cap["opinion"] "`n`n"
+        if cap.Has("body")
+            display .= "Body:`n" cap["body"] "`n"
+        if cap.Has("short")
+            display .= "`nShort Version:`n" cap["short"] "`n"
+        if cap.Has("note")
+            display .= "`nPrivate Note:`n" cap["note"] "`n"
+        
+        MsgBox(display, "View: " captureName, "0")
+    }
+    
+    static ActionOpenURL(captureName) {
+        cap := this.captureDataRef[captureName]
+        if (cap.Has("url") && cap["url"] != "") {
+            Run(cap["url"])
+        } else {
+            TrayTip("No URL stored for '" captureName "'", "URL Not Found", "17")
+        }
+    }
+    
+    static ActionRead(captureName) {
+        cap := this.captureDataRef[captureName]
+        content := this.BuildFullContent(cap)
+        MsgBox(content, "Read: " captureName, "0")
+    }
+    
+    static ActionShort(captureName) {
+        cap := this.captureDataRef[captureName]
+        if (cap.Has("short") && cap["short"] != "") {
+            DSH_SafePaste(cap["short"])
+        } else {
+            TrayTip("No short version for '" captureName "'", "Short Not Found", "17")
+        }
+    }
+    
+    static ActionCopy(captureName) {
+        cap := this.captureDataRef[captureName]
+        content := this.BuildFullContent(cap)
         A_Clipboard := content
-        ClipWait(2)
-        TrayTip("Content copied for " platformObj.name, "📋 Ready", "1")
+        TrayTip("Content copied to clipboard!", captureName, "1")
     }
     
-    ; Individual platform methods for direct calls from main script
-    static ActionBluesky(captureName, cap := "") {
-        this.ActionSocial(captureName, "bluesky")
+    static ActionPrint(captureName) {
+        cap := this.captureDataRef[captureName]
+        content := this.BuildFullContent(cap)
+        
+        ; Create temp file and print
+        tempFile := A_Temp "\cc_print_" captureName ".txt"
+        try {
+            FileDelete(tempFile)
+        }
+        FileAppend(content, tempFile)
+        Run("notepad /p " tempFile)
     }
     
-    static ActionFacebook(captureName, cap := "") {
-        this.ActionSocial(captureName, "facebook")
+    ; ==== SOCIAL MEDIA ACTIONS ====
+    
+    static ActionSocial(captureName, platform) {
+        cap := this.captureDataRef[captureName]
+        
+        ; Build social content (opinion + URL typically)
+        content := ""
+        if cap.Has("opinion")
+            content .= cap["opinion"] "`n`n"
+        if cap.Has("title")
+            content .= cap["title"] "`n"
+        if cap.Has("url")
+            content .= cap["url"]
+        
+        ; Get character limit
+        limits := Map(
+            "facebook", 63206,
+            "twitter", 280,
+            "bluesky", 300,
+            "linkedin", 3000,
+            "mastodon", 500
+        )
+        limit := limits.Has(platform) ? limits[platform] : 500
+        
+        ; Check length and either paste or show edit window
+        if (StrLen(content) <= limit) {
+            DSH_SafePaste(content)
+        } else {
+            ; Show edit window for trimming
+            this.ShowSocialEditWindow(captureName, platform, content, limit)
+        }
     }
     
-    static ActionTwitter(captureName, cap := "") {
-        this.ActionSocial(captureName, "twitter")
+    static ActionSocialWithImage(captureName, platform) {
+        cap := this.captureDataRef[captureName]
+        
+        ; First paste the text content
+        this.ActionSocial(captureName, platform)
+        
+        ; Then add image path on new line if available
+        if (cap.Has("image") && cap["image"] != "") {
+            Sleep(100)
+            DSH_SafePaste("`n" cap["image"])
+        }
     }
     
-    static ActionLinkedIn(captureName, cap := "") {
-        this.ActionSocial(captureName, "linkedin")
-    }
-    
-    static ActionMastodon(captureName, cap := "") {
-        this.ActionSocial(captureName, "mastodon")
+    static ShowSocialEditWindow(captureName, platform, content, limit) {
+        ; Create edit GUI for trimming content
+        editGui := Gui("+Resize", platform " Share - " captureName)
+        editGui.SetFont("s10", "Segoe UI")
+        
+        editGui.Add("Text",, "Content exceeds " limit " characters. Edit below:")
+        editBox := editGui.Add("Edit", "w500 h300 vContent", content)
+        
+        charCount := editGui.Add("Text", "w500", "Characters: " StrLen(content) " / " limit)
+        
+        ; Update character count on change
+        editBox.OnEvent("Change", (*) => charCount.Value := "Characters: " StrLen(editBox.Value) " / " limit)
+        
+        btnRow := editGui.Add("Button", "w100", "Paste")
+        btnRow.OnEvent("Click", (*) => (DSH_SafePaste(editBox.Value), editGui.Destroy()))
+        
+        editGui.Add("Button", "x+10 w100", "Cancel").OnEvent("Click", (*) => editGui.Destroy())
+        
+        editGui.Show()
     }
     
     ; ==== IMAGE ACTIONS ====
     
-    ; Paste image PATH as text (for file dialogs)
     static ActionImagePath(captureName) {
-        imagePath := this.GetImagePath(captureName)
-        
-        if (imagePath = "") {
-            TrayTip("No image attached to: " captureName, "No Image", "2")
-            return
+        cap := this.captureDataRef[captureName]
+        if (cap.Has("image") && cap["image"] != "") {
+            DSH_SafePaste(cap["image"])
+        } else {
+            TrayTip("No image attached to '" captureName "'", "Image Not Found", "17")
         }
-        
-        if !FileExist(imagePath) {
-            TrayTip("Image file not found: " imagePath, "File Missing", "2")
-            return
-        }
-        
-        ; Paste the PATH as text (for file open dialogs)
-        this.SafePaste(imagePath)
-        TrayTip("Image path pasted", "📷 " this.GetFileName(imagePath), "1")
     }
     
-    ; Copy image to clipboard as BITMAP (for pasting into apps)
     static ActionCopyImage(captureName) {
-        ; Try ImageSharing module first
-        if IsSet(IS_CopyImageToClipboard) {
-            IS_CopyImageToClipboard(captureName)
-            return
-        }
-        
-        ; Fallback: use ImageDatabase
-        if IsSet(IDB_GetImages) {
-            images := IDB_GetImages(captureName)
-            if (images.Length > 0) {
-                if IsSet(IC_CopyImageToClipboardGDI)
-                    IC_CopyImageToClipboardGDI(images[1])
-                else if IsSet(IS_CopyImageFileToClipboard)
-                    IS_CopyImageFileToClipboard(images[1])
-                else
-                    TrayTip("Image clipboard not available", "Error", "2")
+        cap := this.captureDataRef[captureName]
+        if (cap.Has("image") && cap["image"] != "" && FileExist(cap["image"])) {
+            ; Use ImageClipboard if available
+            if IsSet(ImageClipboard) {
+                ImageClipboard.CopyToClipboard(cap["image"])
+                TrayTip("Image copied to clipboard!", captureName, "1")
             } else {
-                TrayTip("No images attached to: " captureName, "No Image", "2")
+                ; Fallback: just copy the path
+                A_Clipboard := cap["image"]
+                TrayTip("Image path copied (ImageClipboard not loaded)", captureName, "1")
             }
         } else {
-            TrayTip("Image database not loaded", "Error", "2")
+            TrayTip("No image attached to '" captureName "'", "Image Not Found", "17")
         }
     }
     
-    ; Open image in default viewer
     static ActionOpenImage(captureName) {
-        if IsSet(IS_OpenImage) {
-            IS_OpenImage(captureName)
-            return
+        cap := this.captureDataRef[captureName]
+        if (cap.Has("image") && cap["image"] != "" && FileExist(cap["image"])) {
+            Run(cap["image"])
+        } else {
+            TrayTip("No image attached to '" captureName "'", "Image Not Found", "17")
         }
-        
-        ; Fallback
-        imagePath := this.GetImagePath(captureName)
-        if (imagePath != "" && FileExist(imagePath))
-            Run(imagePath)
-        else
-            TrayTip("No image found for: " captureName, "No Image", "2")
     }
     
-    ; Paste TITLE, then IMAGE PATH
     static ActionTitleImage(captureName) {
         cap := this.captureDataRef[captureName]
+        output := ""
+        if cap.Has("title")
+            output .= cap["title"] "`n"
+        if (cap.Has("image") && cap["image"] != "")
+            output .= cap["image"]
         
-        ; First paste title
-        title := cap.Has("title") ? cap["title"] : captureName
-        this.SafePaste(title)
-        
-        ; Add newline
-        Sleep(100)
-        Send("{Enter}")
-        Sleep(100)
-        
-        ; Then paste image path
-        imagePath := this.GetImagePath(captureName)
-        if (imagePath != "" && FileExist(imagePath)) {
-            this.SafePaste(imagePath)
-            TrayTip("Title + Image path pasted", captureName, "1")
-        } else {
-            TrayTip("Title pasted (no image found)", captureName, "1")
-        }
-    }
-    
-    ; ==== SOCIAL + IMAGE ====
-    
-    static ActionSocialWithImage(captureName, platformKey) {
-        if IsSet(IS_ShareWithImage) {
-            ; ImageSharing expects a string like "facebook", "bluesky", etc.
-            IS_ShareWithImage(captureName, platformKey)
-        } else {
-            ; Fallback to text-only sharing
-            TrayTip("Image sharing not available, using text only", "Note", "1")
-            this.ActionSocial(captureName, platformKey)
-        }
-    }
-    
-    ; ==== AI & RESEARCH ====
-    
-    static ActionSummarize(captureName) {
-        if IsSet(RT_SummarizeCapture)
-            RT_SummarizeCapture(captureName)
+        if (output != "")
+            DSH_SafePaste(output)
         else
-            TrayTip("Research tools not available", "Error", "2")
+            TrayTip("No title or image for '" captureName "'", "Not Found", "17")
     }
-    
-    static ActionResearch(captureName, tool) {
-        if IsSet(RT_LaunchResearchTool)
-            RT_LaunchResearchTool(captureName, tool)
-        else
-            TrayTip("Research tools not available", "Error", "2")
-    }
-    
-    ; ==== DOCUMENT ACTIONS ====
     
     static ActionOpenDoc(captureName) {
-        if IsSet(CC_OpenDocument)
-            CC_OpenDocument(captureName)
-        else
-            TrayTip("Document open not available", "Error", "2")
+        cap := this.captureDataRef[captureName]
+        if (cap.Has("doc") && cap["doc"] != "" && FileExist(cap["doc"])) {
+            Run(cap["doc"])
+        } else {
+            TrayTip("No document attached to '" captureName "'", "Document Not Found", "17")
+        }
     }
     
-    static ActionPrint(captureName) {
-        if IsSet(CC_PrintCapture)
-            CC_PrintCapture(captureName)
-        else
-            TrayTip("Print not available", "Error", "2")
+    static ActionEmailDoc(captureName) {
+        cap := this.captureDataRef[captureName]
+        if (!cap.Has("doc") || cap["doc"] = "" || !FileExist(cap["doc"])) {
+            TrayTip("No document attached to '" captureName "'", "Document Not Found", "17")
+            return
+        }
+        
+        subject := cap.Has("title") ? cap["title"] : captureName
+        body := this.BuildFullContent(cap)
+        
+        try {
+            outlookApp := ComObject("Outlook.Application")
+            mail := outlookApp.CreateItem(0)
+            mail.Subject := subject
+            mail.Body := body
+            mail.Attachments.Add(cap["doc"])
+            mail.Display()
+        } catch {
+            TrayTip("Could not open Outlook", "Email Error", "17")
+        }
     }
     
-    ; ==== CONTENT BUILDING ====
+    ; ==== AI ACTIONS ====
     
-    static BuildFullContent(cap) {
-        content := ""
+    static ActionSummarize(captureName) {
+        cap := this.captureDataRef[captureName]
         
-        if (cap.Has("body") && cap["body"] != "")
-            content := cap["body"]
-        else if (cap.Has("content") && cap["content"] != "")
-            content := cap["content"]
-        
-        if (cap.Has("url") && cap["url"] != "") {
-            url := cap["url"]
-            if (!InStr(content, url)) {
-                if (content != "")
-                    content .= "`n`n"
-                content .= url
+        ; Check if ResearchTools is available
+        if IsSet(ResearchTools) {
+            ResearchTools.Summarize(captureName, cap)
+        } else {
+            ; Fallback: open in Perplexity
+            if (cap.Has("url") && cap["url"] != "") {
+                Run("https://www.perplexity.ai/search?q=summarize " cap["url"])
+            } else {
+                TrayTip("ResearchTools not loaded and no URL available", "Summarize Error", "17")
             }
         }
-        
-        return content
     }
     
-    static BuildShareContent(cap, platform) {
-        content := this.BuildFullContent(cap)
+    ; ==== RESEARCH ACTIONS ====
+    
+    static ActionResearch(captureName, tool) {
+        cap := this.captureDataRef[captureName]
+        url := cap.Has("url") ? cap["url"] : ""
+        title := cap.Has("title") ? cap["title"] : ""
         
-        ; Get character limit
-        limit := 5000
-        switch platform {
-            case "twitter", "x":
-                limit := this.LIMIT_TWITTER
-            case "bluesky":
-                limit := this.LIMIT_BLUESKY
-            case "linkedin":
-                limit := this.LIMIT_LINKEDIN
-            case "mastodon":
-                limit := this.LIMIT_MASTODON
+        if (url = "" && title = "") {
+            TrayTip("No URL or title to research for '" captureName "'", "Research Error", "17")
+            return
         }
         
-        ; Truncate if needed
-        if (StrLen(content) > limit)
-            content := SubStr(content, 1, limit - 3) "..."
-        
-        return content
+        switch tool {
+            case "transcript":
+                ; YouTube transcript - use YouTubeToTranscript.com
+                if InStr(url, "youtube.com") || InStr(url, "youtu.be")
+                    Run("https://youtubetotranscript.com/?v=" url)
+                else
+                    TrayTip("Not a YouTube URL", "Transcript Error", "17")
+            case "perplexity":
+                searchTerm := url != "" ? url : title
+                Run("https://www.perplexity.ai/search?q=" DSH_UrlEncode(searchTerm))
+            case "factcheck":
+                searchTerm := title != "" ? title : url
+                Run("https://www.snopes.com/search/" DSH_UrlEncode(searchTerm))
+            case "mediabias":
+                ; Extract domain from URL
+                domain := RegExReplace(url, "^https?://(?:www\.)?([^/]+).*", "$1")
+                Run("https://mediabiasfactcheck.com/search/?q=" DSH_UrlEncode(domain))
+            case "wayback":
+                Run("https://web.archive.org/web/*/" url)
+            case "scholar":
+                searchTerm := title != "" ? title : url
+                Run("https://scholar.google.com/scholar?q=" DSH_UrlEncode(searchTerm))
+            case "archive":
+                Run("https://archive.today/?" url)
+        }
     }
     
     ; ==== HELPER FUNCTIONS ====
     
-    ; Get image path for a capture
-    static GetImagePath(captureName) {
-        global BaseDir
+    static BuildFullContent(cap) {
+        content := ""
         
-        ; Try ImageDatabase first
-        if IsSet(IDB_GetImages) {
-            images := IDB_GetImages(captureName)
-            if (images.Length > 0)
-                return images[1]
-        }
+        if cap.Has("title") && cap["title"] != ""
+            content .= cap["title"] "`n"
+        if cap.Has("url") && cap["url"] != ""
+            content .= cap["url"] "`n"
+        if cap.Has("opinion") && cap["opinion"] != ""
+            content .= "`n" cap["opinion"] "`n"
+        if cap.Has("body") && cap["body"] != ""
+            content .= "`n" cap["body"]
         
-        ; Try capture data
-        cap := this.captureDataRef[captureName]
-        if (cap.Has("image") && cap["image"] != "") {
-            imgPath := cap["image"]
-            ; Handle relative paths
-            if (!InStr(imgPath, ":") && !InStr(imgPath, "\\"))
-                imgPath := BaseDir "\images\" imgPath
-            if FileExist(imgPath)
-                return imgPath
-        }
-        
-        return ""
+        return RTrim(content, "`n")
     }
-    
-    ; Get filename from path
-    static GetFileName(path) {
-        SplitPath(path, &name)
-        return name
+}
+
+; ==== SAFE CLIPBOARD FUNCTIONS ====
+; These are fallbacks - only used if not already defined in the main script
+; The main ContentCapture-Pro.ahk should define these functions
+
+; Internal fallback versions (prefixed with underscore to avoid conflicts)
+_DSH_SafePaste(text) {
+    savedClip := ClipboardAll()
+    A_Clipboard := ""
+    A_Clipboard := text
+    ClipWait(2)
+    SendInput("^v")
+    Sleep(100)
+    A_Clipboard := savedClip
+}
+
+_DSH_SafeCopy() {
+    savedClip := ClipboardAll()
+    A_Clipboard := ""
+    SendInput("^c")
+    ClipWait(2)
+    result := A_Clipboard
+    A_Clipboard := savedClip
+    return result
+}
+
+_DSH_DSH_UrlEncode(str) {
+    static doc := ""
+    if !doc {
+        doc := ComObject("HTMLFile")
+        doc.write('<meta http-equiv="X-UA-Compatible" content="IE=edge">')
     }
-    
-    ; Safe paste with clipboard handling
-    static SafePaste(text) {
-        ; Save clipboard
-        savedClip := ClipboardAll()
-        
-        ; Set and paste
-        A_Clipboard := text
-        if ClipWait(2) {
-            Send("^v")
-            Sleep(100)
-        }
-        
-        ; Restore clipboard
-        SetTimer(() => (A_Clipboard := savedClip), -500)
-    }
-    
-    ; ==== UTILITY ====
-    
-    static Stop() {
-        this.isEnabled := false
-        if (this.inputHook != "") {
-            try this.inputHook.Stop()
-        }
-    }
-    
-    static Restart() {
-        this.isEnabled := true
-        this.SetupInputHook()
-    }
+    return doc.parentWindow.encodeURIComponent(str)
+}
+
+; Wrapper functions that use main script's version if available, otherwise fallback
+DSH_SafePaste(text) {
+    if IsSet(CC_SafePaste)
+        DSH_SafePaste(text)
+    else
+        _DSH_SafePaste(text)
+}
+
+DSH_SafeCopy() {
+    if IsSet(CC_SafeCopy)
+        return DSH_SafeCopy()
+    else
+        return _DSH_SafeCopy()
+}
+
+DSH_DSH_UrlEncode(str) {
+    if IsSet(UrlEncode)
+        return DSH_UrlEncode(str)
+    else
+        return _DSH_DSH_UrlEncode(str)
 }
