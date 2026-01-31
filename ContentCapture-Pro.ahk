@@ -3906,7 +3906,10 @@ CC_CaptureContent() {
 
     CC_UpdateRecentWidget()
 
-    A_Clipboard := oldClip
+    ; v6.1.1 FIX: Clear clipboard instead of restoring old content
+    ; The old clipboard might contain body text from this capture, which would
+    ; cause "stale content" issues when using hotstrings later
+    A_Clipboard := ""
 }
 
 ; ==============================================================================
