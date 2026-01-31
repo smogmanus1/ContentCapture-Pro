@@ -1,5 +1,4 @@
-# ContentCapture Pro v6.0.1
-
+# ContentCapture Pro v6.1.1
 ![ContentCapture Pro - Save Once, Share Everywhere](images/ccpimage.png)
 
 ## 🍪 Save Recipes and Articles from the Internet! 🍪
@@ -49,7 +48,7 @@
    - Hold **Ctrl** (corner of keyboard)
    - Hold **Alt** (next to spacebar)
    - Tap the letter **G**
-5. Type a short name like **`soup1`** (no spaces!)
+5. Type a short name like `soup1` (no spaces!)
 6. Click **Save**
 
 ---
@@ -59,7 +58,7 @@
 Want your recipe back? Easy!
 
 1. Click where you want to type (Word, email, anywhere)
-2. Type: **`soup1`** then press **Space**
+2. Type: `soup1` then press **Space**
 3. ✨ Your recipe appears! ✨
 
 ---
@@ -77,6 +76,9 @@ Want your recipe back? Easy!
 | `soup1` then Space | Paste your saved content |
 | `soup1go` then Space | Open the original website |
 | `soup1em` then Space | Email it to someone |
+| `soup1fb` then Space | Share to Facebook |
+| `soup1x` then Space | Share to Twitter/X |
+| `soup1bs` then Space | Share to Bluesky |
 
 ---
 
@@ -122,6 +124,18 @@ Copy these to a USB drive or email them to yourself:
 - `Grandma's Cookies` ❌ (no spaces or apostrophes!)
 - `a` ❌ (too short, you'll forget what it is)
 - `recipe` ❌ (too generic)
+
+---
+
+## 🆕 What's New in v6.1.1
+
+**Bug Fixes:**
+- ✅ Fixed stale content appearing when sharing to social media
+- ✅ Fixed clipboard not clearing properly between shares
+- ✅ Fixed social media hotstrings (`fb`, `x`, `bs`, `li`, `mt`)
+- ✅ Improved reliability of multi-image sharing workflow
+
+See [RELEASE-6.1.1.md](RELEASE-6.1.1.md) for full details.
 
 ---
 
