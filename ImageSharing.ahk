@@ -1,10 +1,17 @@
 ; ==============================================================================
 ; ImageSharing.ahk - Multi-Image Social Media Sharing Module for ContentCapture Pro
 ; ==============================================================================
-; Version: 2.1
-; Updated: 2026-01-25
+; Version: 2.2
+; Updated: 2026-01-31
 ; Supports: Facebook, Twitter/X, Bluesky, LinkedIn, Mastodon
 ; Features: Multiple image support, auto-paste, platform detection
+;
+; CHANGELOG v2.2:
+;   - FIXED: Global state variables (IS_PendingContent, IS_PendingImages, etc.)
+;     are now properly cleared after operations complete or on errors
+;   - ADDED: IS_ClearPendingState() function to reset all global state
+;   - ADDED: Clipboard clearing before setting new content (prevents stale data)
+;   - FIXED: All clipboard operations now clear first, then set content
 ;
 ; CHANGELOG v2.1:
 ;   - Fixed: EncodeURIComponent call corrected to IS_EncodeURIComponent (line 505)
@@ -34,6 +41,55 @@ global IS_ImageLimits := Map(
     "mastodon", 4,
     "email", 10
 )
+
+; ==============================================================================
+; GLOBAL STATE VARIABLES
+; ==============================================================================
+; These track pending operations for multi-step sharing workflows
+; IMPORTANT: Always call IS_ClearPendingState() after operations complete!
+; ==============================================================================
+
+global IS_PendingContent := ""
+global IS_PendingImages := []
+global IS_CurrentImageIndex := 0
+
+; ==============================================================================
+; STATE CLEANUP FUNCTION
+; ==============================================================================
+; Call this after sharing operations complete or on errors to prevent stale data
+; ==============================================================================
+
+IS_ClearPendingState() {
+    global IS_PendingContent, IS_PendingImages, IS_CurrentImageIndex
+    IS_PendingContent := ""
+    IS_PendingImages := []
+    IS_CurrentImageIndex := 0
+    
+    ; Also turn off any pending hotkeys
+    try {
+        Hotkey("^!v", "Off")
+    }
+    try {
+        Hotkey("^!i", "Off")
+    }
+}
+
+; ==============================================================================
+; SAFE CLIPBOARD HELPER
+; ==============================================================================
+; Clears clipboard before setting to prevent stale content issues
+; ==============================================================================
+
+IS_SafeClipboardSet(content) {
+    A_Clipboard := ""
+    Sleep(50)
+    A_Clipboard := content
+    if !ClipWait(2) {
+        ShowNotification("Clipboard operation failed", "Error", 2000)
+        return false
+    }
+    return true
+}
 
 ; ==============================================================================
 ; MAIN ENTRY POINTS - Called by DynamicSuffixHandler
@@ -84,6 +140,9 @@ IS_OpenImage(captureName) {
 ; Share to platform WITH image (fbi, xi, bsi, li, mti suffixes)
 IS_ShareWithImage(captureName, platform) {
     global CaptureData
+    
+    ; Clear any previous pending state first
+    IS_ClearPendingState()
     
     if !CaptureData.Has(captureName) {
         ShowNotification("Capture not found: " captureName, "Error", 2000)
@@ -361,6 +420,8 @@ IS_JoinArray(arr, delimiter) {
 
 ; Facebook sharing with images
 IS_ShareToFacebook(content, images) {
+    global IS_PendingContent, IS_PendingImages, IS_CurrentImageIndex
+    
     ; Detect if we're in a Facebook post or comment
     isComment := IS_DetectFacebookContext()
     maxImages := isComment ? IS_ImageLimits["facebook_comment"] : IS_ImageLimits["facebook_post"]
@@ -379,10 +440,10 @@ IS_ShareToFacebook(content, images) {
                         "📷 Facebook Share", "YesNoCancel Icon?")
         
         if result = "Cancel" {
-            ; Text only
-            A_Clipboard := content
-            ClipWait(2)
+            ; Text only - use safe clipboard set
+            IS_SafeClipboardSet(content)
             ShowNotification("Text copied - paste with Ctrl+V", "📋 Ready", 2000)
+            IS_ClearPendingState()  ; Clean up
             return true
         }
         
@@ -394,15 +455,17 @@ IS_ShareToFacebook(content, images) {
             return IS_FacebookTextFirst(content, imagesToShare)
         }
     } else {
-        ; No images, just copy text
-        A_Clipboard := content
-        ClipWait(2)
+        ; No images, just copy text - use safe clipboard set
+        IS_SafeClipboardSet(content)
         ShowNotification("Text copied - paste with Ctrl+V", "📋 Ready", 2000)
+        IS_ClearPendingState()  ; Clean up
         return true
     }
 }
 
 IS_FacebookImagesFirst(content, images) {
+    global IS_PendingContent, IS_PendingImages, IS_CurrentImageIndex
+    
     ; Copy first image to clipboard
     if images.Length > 0 {
         IS_CopyImageFileToClipboard(images[1])
@@ -415,9 +478,9 @@ IS_FacebookImagesFirst(content, images) {
                         "📷 Step 1: Paste Image", 5000)
         
         ; Store content for second paste
-        global IS_PendingContent := content
-        global IS_PendingImages := images
-        global IS_CurrentImageIndex := 2
+        IS_PendingContent := content
+        IS_PendingImages := images
+        IS_CurrentImageIndex := 2
         
         ; Set up hotkey for text paste
         Hotkey("^!v", IS_FacebookPasteText, "On")
@@ -433,9 +496,8 @@ IS_FacebookPasteText(*) {
     ; Disable hotkey
     Hotkey("^!v", IS_FacebookPasteText, "Off")
     
-    ; Paste the text
-    A_Clipboard := IS_PendingContent
-    ClipWait(2)
+    ; Paste the text using safe clipboard
+    IS_SafeClipboardSet(IS_PendingContent)
     Send("^v")
     
     ; If more images, offer to add them
@@ -448,6 +510,7 @@ IS_FacebookPasteText(*) {
         Hotkey("^!i", IS_FacebookNextImage, "On")
     } else {
         ShowNotification("Share complete!", "✅ Done", 2000)
+        IS_ClearPendingState()  ; Clean up when done
     }
 }
 
@@ -467,14 +530,17 @@ IS_FacebookNextImage(*) {
             Hotkey("^!i", IS_FacebookNextImage, "Off")
             ShowNotification("Last image ready!`nPress Ctrl+V to paste",
                             "📷 Final Image", 3000)
+            ; Clear state after last image is ready
+            SetTimer(() => IS_ClearPendingState(), -5000)
         }
     }
 }
 
 IS_FacebookTextFirst(content, images) {
-    ; Copy text first
-    A_Clipboard := content
-    ClipWait(2)
+    global IS_PendingImages, IS_CurrentImageIndex
+    
+    ; Copy text first using safe clipboard
+    IS_SafeClipboardSet(content)
     
     ShowNotification("Text on clipboard!`n"
                     "1. Click in Facebook post area`n"
@@ -483,8 +549,8 @@ IS_FacebookTextFirst(content, images) {
                     "📝 Step 1: Paste Text", 4000)
     
     ; Store images for later
-    global IS_PendingImages := images
-    global IS_CurrentImageIndex := 1
+    IS_PendingImages := images
+    IS_CurrentImageIndex := 1
     
     ; Set up hotkey for image paste
     Hotkey("^!i", IS_FacebookNextImage, "On")
@@ -501,6 +567,8 @@ IS_DetectFacebookContext() {
 
 ; Twitter/X sharing
 IS_ShareToTwitter(content, images) {
+    global IS_PendingImages, IS_CurrentImageIndex
+    
     maxImages := IS_ImageLimits["twitter"]
     imagesToShare := []
     Loop Min(images.Length, maxImages)
@@ -517,9 +585,11 @@ IS_ShareToTwitter(content, images) {
                         "Press Ctrl+Alt+I to copy each image",
                         "🐦 Add Images", 4000)
         
-        global IS_PendingImages := imagesToShare
-        global IS_CurrentImageIndex := 1
+        IS_PendingImages := imagesToShare
+        IS_CurrentImageIndex := 1
         Hotkey("^!i", IS_GenericNextImage, "On")
+    } else {
+        IS_ClearPendingState()  ; No images, clean up
     }
     
     return true
@@ -527,6 +597,8 @@ IS_ShareToTwitter(content, images) {
 
 ; Bluesky sharing  
 IS_ShareToBluesky(content, images) {
+    global IS_PendingImages, IS_CurrentImageIndex
+    
     maxImages := IS_ImageLimits["bluesky"]
     imagesToShare := []
     Loop Min(images.Length, maxImages)
@@ -538,9 +610,8 @@ IS_ShareToBluesky(content, images) {
     
     Sleep(2000)
     
-    ; Copy content
-    A_Clipboard := content
-    ClipWait(2)
+    ; Copy content using safe clipboard
+    IS_SafeClipboardSet(content)
     
     if imagesToShare.Length > 0 {
         ShowNotification("Bluesky opened!`n"
@@ -549,12 +620,13 @@ IS_ShareToBluesky(content, images) {
                         "Press Ctrl+Alt+I after pasting text",
                         "🦋 Bluesky Share", 4000)
         
-        global IS_PendingImages := imagesToShare
-        global IS_CurrentImageIndex := 1
+        IS_PendingImages := imagesToShare
+        IS_CurrentImageIndex := 1
         Hotkey("^!i", IS_GenericNextImage, "On")
     } else {
         ShowNotification("Bluesky opened!`nText on clipboard - paste with Ctrl+V",
                         "🦋 Bluesky Share", 3000)
+        IS_ClearPendingState()  ; No images, clean up
     }
     
     return true
@@ -562,6 +634,8 @@ IS_ShareToBluesky(content, images) {
 
 ; LinkedIn sharing
 IS_ShareToLinkedIn(content, images) {
+    global IS_PendingImages, IS_CurrentImageIndex
+    
     maxImages := IS_ImageLimits["linkedin_post"]
     imagesToShare := []
     Loop Min(images.Length, maxImages)
@@ -574,8 +648,7 @@ IS_ShareToLinkedIn(content, images) {
     Run("https://www.linkedin.com/feed/")
     
     Sleep(2000)
-    A_Clipboard := content
-    ClipWait(2)
+    IS_SafeClipboardSet(content)
     
     if imagesToShare.Length > 0 {
         ShowNotification("LinkedIn opened!`n"
@@ -584,12 +657,13 @@ IS_ShareToLinkedIn(content, images) {
                         "Press Ctrl+Alt+I for images",
                         "💼 LinkedIn Share", 4000)
         
-        global IS_PendingImages := imagesToShare
-        global IS_CurrentImageIndex := 1
+        IS_PendingImages := imagesToShare
+        IS_CurrentImageIndex := 1
         Hotkey("^!i", IS_GenericNextImage, "On")
     } else {
         ShowNotification("LinkedIn opened!`nText on clipboard - paste with Ctrl+V",
                         "💼 LinkedIn Share", 3000)
+        IS_ClearPendingState()  ; No images, clean up
     }
     
     return true
@@ -597,15 +671,16 @@ IS_ShareToLinkedIn(content, images) {
 
 ; Mastodon sharing
 IS_ShareToMastodon(content, images) {
+    global IS_PendingImages, IS_CurrentImageIndex
+    
     maxImages := IS_ImageLimits["mastodon"]
     imagesToShare := []
     Loop Min(images.Length, maxImages)
         imagesToShare.Push(images[A_Index])
     
     ; Mastodon doesn't have universal intent - user needs to be on their instance
-    ; Copy content and notify
-    A_Clipboard := content
-    ClipWait(2)
+    ; Copy content using safe clipboard
+    IS_SafeClipboardSet(content)
     
     if imagesToShare.Length > 0 {
         ShowNotification("Text on clipboard!`n"
@@ -614,12 +689,13 @@ IS_ShareToMastodon(content, images) {
                         "Press Ctrl+Alt+I for images",
                         "🐘 Mastodon Share", 4000)
         
-        global IS_PendingImages := imagesToShare
-        global IS_CurrentImageIndex := 1
+        IS_PendingImages := imagesToShare
+        IS_CurrentImageIndex := 1
         Hotkey("^!i", IS_GenericNextImage, "On")
     } else {
         ShowNotification("Text on clipboard!`nOpen your Mastodon instance and paste",
                         "🐘 Mastodon Share", 3000)
+        IS_ClearPendingState()  ; No images, clean up
     }
     
     return true
@@ -644,10 +720,13 @@ IS_GenericNextImage(*) {
             Hotkey("^!i", IS_GenericNextImage, "Off")
             ShowNotification("Final image ready!`nPress Ctrl+V to paste",
                             "📷 Last Image", 3000)
+            ; Clear state after a delay (give user time to paste)
+            SetTimer(() => IS_ClearPendingState(), -5000)
         }
     } else {
         Hotkey("^!i", IS_GenericNextImage, "Off")
         ShowNotification("All images shared!", "✅ Complete", 2000)
+        IS_ClearPendingState()  ; Clean up
     }
 }
 

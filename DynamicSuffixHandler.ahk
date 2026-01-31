@@ -3,9 +3,16 @@
 ; ==============================================================================
 ; DynamicSuffixHandler.ahk - Dynamic Suffix Detection for ContentCapture Pro
 ; ==============================================================================
-; Version:     2.2
+; Version:     2.3
 ; Author:      Brad (with Claude AI assistance)
 ; License:     MIT
+;
+; CHANGELOG v2.3:
+;   - FIXED: DSH_SafePaste was calling itself (infinite recursion) - now correctly calls CC_SafePaste
+;   - FIXED: DSH_SafeCopy was calling itself (infinite recursion) - now correctly calls CC_SafeCopy  
+;   - FIXED: DSH_UrlEncode had wrong function names - corrected all references
+;   - ADDED: ActionFacebook, ActionTwitter, ActionBluesky, ActionLinkedIn, ActionMastodon static methods
+;   - ADDED: Proper clipboard cleanup in ActionCopy (clear before set)
 ;
 ; CHANGELOG v2.2:
 ;   - Added "u" suffix for pasting URL only (no title, no content)
@@ -428,10 +435,16 @@ class DynamicSuffixHandler {
         }
     }
     
+    ; FIXED: Now clears clipboard before setting content
     static ActionCopy(captureName) {
         cap := this.captureDataRef[captureName]
         content := this.BuildFullContent(cap)
+        
+        ; Clear clipboard before setting (prevents stale content issues)
+        A_Clipboard := ""
+        Sleep(50)
         A_Clipboard := content
+        ClipWait(2)
         TrayTip("Content copied to clipboard!", captureName, "1")
     }
     
@@ -449,6 +462,32 @@ class DynamicSuffixHandler {
     }
     
     ; ==== SOCIAL MEDIA ACTIONS ====
+    ; These static methods are called by ContentCapture-Pro.ahk CC_Hotstring* functions
+    
+    ; Wrapper for CC_HotstringFacebook
+    static ActionFacebook(captureName, cap := "") {
+        this.ActionSocial(captureName, "facebook")
+    }
+    
+    ; Wrapper for CC_HotstringTwitter
+    static ActionTwitter(captureName, cap := "") {
+        this.ActionSocial(captureName, "twitter")
+    }
+    
+    ; Wrapper for CC_HotstringBluesky
+    static ActionBluesky(captureName, cap := "") {
+        this.ActionSocial(captureName, "bluesky")
+    }
+    
+    ; Wrapper for CC_HotstringLinkedIn
+    static ActionLinkedIn(captureName, cap := "") {
+        this.ActionSocial(captureName, "linkedin")
+    }
+    
+    ; Wrapper for CC_HotstringMastodon
+    static ActionMastodon(captureName, cap := "") {
+        this.ActionSocial(captureName, "mastodon")
+    }
     
     static ActionSocial(captureName, platform) {
         cap := this.captureDataRef[captureName]
@@ -534,8 +573,11 @@ class DynamicSuffixHandler {
                 ImageClipboard.CopyToClipboard(cap["image"])
                 TrayTip("Image copied to clipboard!", captureName, "1")
             } else {
-                ; Fallback: just copy the path
+                ; Fallback: just copy the path (with proper clear first)
+                A_Clipboard := ""
+                Sleep(50)
                 A_Clipboard := cap["image"]
+                ClipWait(2)
                 TrayTip("Image path copied (ImageClipboard not loaded)", captureName, "1")
             }
         } else {
@@ -672,18 +714,26 @@ class DynamicSuffixHandler {
     }
 }
 
-; ==== SAFE CLIPBOARD FUNCTIONS ====
+; ==============================================================================
+; SAFE CLIPBOARD FUNCTIONS
+; ==============================================================================
 ; These are fallbacks - only used if not already defined in the main script
 ; The main ContentCapture-Pro.ahk should define these functions
+; ==============================================================================
 
 ; Internal fallback versions (prefixed with underscore to avoid conflicts)
 _DSH_SafePaste(text) {
     savedClip := ClipboardAll()
     A_Clipboard := ""
+    Sleep(50)
     A_Clipboard := text
-    ClipWait(2)
+    if !ClipWait(2) {
+        A_Clipboard := savedClip
+        TrayTip("Clipboard operation failed", "Error", "2")
+        return
+    }
     SendInput("^v")
-    Sleep(100)
+    Sleep(150)
     A_Clipboard := savedClip
 }
 
@@ -691,13 +741,16 @@ _DSH_SafeCopy() {
     savedClip := ClipboardAll()
     A_Clipboard := ""
     SendInput("^c")
-    ClipWait(2)
+    if !ClipWait(2) {
+        A_Clipboard := savedClip
+        return ""
+    }
     result := A_Clipboard
     A_Clipboard := savedClip
     return result
 }
 
-_DSH_DSH_UrlEncode(str) {
+_DSH_UrlEncode(str) {
     static doc := ""
     if !doc {
         doc := ComObject("HTMLFile")
@@ -706,24 +759,33 @@ _DSH_DSH_UrlEncode(str) {
     return doc.parentWindow.encodeURIComponent(str)
 }
 
-; Wrapper functions that use main script's version if available, otherwise fallback
+; ==============================================================================
+; WRAPPER FUNCTIONS
+; ==============================================================================
+; These use the main script's version if available, otherwise use fallbacks
+; FIXED v2.3: Previously these were calling themselves (infinite recursion)
+; ==============================================================================
+
 DSH_SafePaste(text) {
+    ; Check if CC_SafePaste exists and use it, otherwise use internal fallback
     if IsSet(CC_SafePaste)
-        DSH_SafePaste(text)
+        CC_SafePaste(text)  ; FIXED: Was calling DSH_SafePaste (itself) - now calls CC_SafePaste
     else
         _DSH_SafePaste(text)
 }
 
 DSH_SafeCopy() {
+    ; Check if CC_SafeCopy exists and use it, otherwise use internal fallback
     if IsSet(CC_SafeCopy)
-        return DSH_SafeCopy()
+        return CC_SafeCopy()  ; FIXED: Was calling DSH_SafeCopy (itself) - now calls CC_SafeCopy
     else
         return _DSH_SafeCopy()
 }
 
-DSH_DSH_UrlEncode(str) {
-    if IsSet(UrlEncode)
-        return DSH_UrlEncode(str)
+DSH_UrlEncode(str) {
+    ; Check if CC_UrlEncode exists and use it, otherwise use internal fallback
+    if IsSet(CC_UrlEncode)
+        return CC_UrlEncode(str)  ; FIXED: Was calling non-existent DSH_UrlEncode
     else
-        return _DSH_DSH_UrlEncode(str)
+        return _DSH_UrlEncode(str)
 }

@@ -2,9 +2,22 @@
 ; ContentCapture Pro - Professional Content Capture & Sharing System
 ; ==============================================================================
 ; Author:      Brad
-; Version:     6.0.1 (AHK v2)
-; Updated:     2026-01-28
+; Version:     6.1.1 (AHK v2)
+; Updated:     2026-01-31
 ; License:     MIT
+;
+; CHANGELOG v6.1.1:
+;   - FIXED: DynamicSuffixHandler wrapper functions had infinite recursion bug
+;     * DSH_SafePaste was calling itself instead of CC_SafePaste
+;     * DSH_SafeCopy was calling itself instead of CC_SafeCopy  
+;     * DSH_UrlEncode had incorrect function name references
+;   - FIXED: ImageSharing global state (IS_PendingContent, IS_PendingImages)
+;     was never cleared, causing stale content to appear in subsequent shares
+;   - ADDED: IS_ClearPendingState() function to properly reset sharing state
+;   - FIXED: CC_HotstringCopyOnly now clears clipboard before setting
+;   - ADDED: Missing ActionFacebook/Twitter/Bluesky/LinkedIn/Mastodon methods
+;     to DynamicSuffixHandler class (were being called but didn't exist)
+;   - IMPROVED: All clipboard operations now clear before set (prevents stale data)
 ;
 ; CHANGELOG v6.0.1:
 ;   - NEW: ManualCaptureImageGUI.ahk - Image attachment in Manual Capture
@@ -2415,6 +2428,9 @@ CC_HotstringCopyOnly(name, *) {
     if (content = "")
         return
     
+    ; Clear clipboard before setting (prevents stale content issues)
+    A_Clipboard := ""
+    Sleep(50)
     A_Clipboard := content
     ClipWait(2)
     CC_Notify("Copied to clipboard!", name)
