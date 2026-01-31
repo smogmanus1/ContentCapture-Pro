@@ -775,11 +775,10 @@ DSH_SafePaste(text) {
 }
 
 DSH_SafeCopy() {
-    ; Check if CC_SafeCopy exists and use it, otherwise use internal fallback
-    if IsSet(CC_SafeCopy)
-        return CC_SafeCopy()  ; FIXED: Was calling DSH_SafeCopy (itself) - now calls CC_SafeCopy
-    else
-        return _DSH_SafeCopy()
+    ; NOTE: CC_SafeCopy(content) copies content TO clipboard (different purpose)
+    ; _DSH_SafeCopy() copies FROM selection via Ctrl+C (what we need here)
+    ; So we always use the internal version
+    return _DSH_SafeCopy()
 }
 
 DSH_UrlEncode(str) {
