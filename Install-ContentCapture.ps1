@@ -1,306 +1,629 @@
+<# 
+.SYNOPSIS
+    ContentCapture Pro Installer v6.2.1
+    
+.DESCRIPTION
+    One-click installer that handles everything:
+    - Checks/installs AutoHotkey v2
+    - Creates install directory
+    - Copies all files
+    - Preserves existing data on upgrades
+    - Creates shortcuts
+    - Launches the application
+    
+.NOTES
+    Author: Brad
+    Version: 6.2.1
+    Right-click this file → "Run with PowerShell"
+#>
+
 # ============================================================================
-# ContentCapture Pro - PowerShell Installer v2.2
+# CONFIGURATION
 # ============================================================================
-# Fixed: Installs to LOCAL Documents, not OneDrive
+
+$AppName = "ContentCapture Pro"
+$AppVersion = "6.2.1"
+$AppExe = "ContentCapture.ahk"
+$DefaultInstallPath = "$env:USERPROFILE\ContentCapture-Pro"
+$AHKInstallerName = "AutoHotkey-v2-setup.exe"
+$MinAHKVersion = "2.0"
+
+# Files that contain user data (preserve on upgrade)
+$UserDataFiles = @(
+    "captures.dat",
+    "capturesarchive.dat", 
+    "capturesbackup.dat",
+    "capture_index.txt",
+    "captures_export.html",
+    "config.ini",
+    "contentcapture_log.txt",
+    "personal-shortcuts.ahk"
+)
+
+$UserDataFolders = @(
+    "images",
+    "backups"
+)
+
+# ============================================================================
+# GUI SETUP
 # ============================================================================
 
 Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName PresentationFramework
+Add-Type -AssemblyName System.Drawing
 
-$AppName = "ContentCapture Pro"
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
 
-# Use LOCAL Documents folder, NOT OneDrive
-# $env:USERPROFILE\Documents is always local
-$InstallFolder = Join-Path $env:USERPROFILE "Documents\ContentCapture Pro"
-
-$RequiredFiles = @("ContentCapture-Pro.ahk", "DynamicSuffixHandler.ahk")
-$OptionalFiles = @(
-    "ContentCapture.ahk", "SocialShare.ahk", "ResearchTools.ahk",
-    "ImageCapture.ahk", "ImageClipboard.ahk", "ImageDatabase.ahk", "ImageSharing.ahk",
-    "CC_HoverPreview.ahk", "CC_ShareModule.ahk", "ManualCaptureImageGUI.ahk",
-    "README.md", "CHANGELOG.md", "LICENSE", "INSTALL.md"
-)
-
-function Show-Message {
-    param ([string]$Title, [string]$Message, [string]$Type = "Info")
-    $icon = switch ($Type) {
-        "Info" { [System.Windows.Forms.MessageBoxIcon]::Information }
-        "Warning" { [System.Windows.Forms.MessageBoxIcon]::Warning }
-        "Error" { [System.Windows.Forms.MessageBoxIcon]::Error }
-        default { [System.Windows.Forms.MessageBoxIcon]::Information }
-    }
-    [System.Windows.Forms.MessageBox]::Show($Message, $Title, [System.Windows.Forms.MessageBoxButtons]::OK, $icon)
+function Write-Log {
+    param([string]$Message, [string]$Color = "White")
+    $timestamp = Get-Date -Format "HH:mm:ss"
+    Write-Host "[$timestamp] $Message" -ForegroundColor $Color
 }
 
-function Show-YesNo {
-    param ([string]$Title, [string]$Message)
-    $result = [System.Windows.Forms.MessageBox]::Show($Message, $Title, [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Question)
-    return $result -eq [System.Windows.Forms.DialogResult]::Yes
-}
-
-function Write-Status { param ([string]$Message) Write-Host "`n  $Message" -ForegroundColor Cyan }
-function Write-Success { param ([string]$Message) Write-Host "  [OK] $Message" -ForegroundColor Green }
-function Write-Fail { param ([string]$Message) Write-Host "  [!] $Message" -ForegroundColor Red }
-function Write-Info { param ([string]$Message) Write-Host "       $Message" -ForegroundColor Gray }
-
-function Find-AutoHotkey {
-    Write-Status "Searching for AutoHotkey v2..."
-    
-    # Method 1: Registry HKLM
-    Write-Host "  Checking registry (HKLM)..." -ForegroundColor Gray
-    try {
-        $regPath = Get-ItemProperty -Path "HKLM:\SOFTWARE\AutoHotkey" -ErrorAction SilentlyContinue
-        if ($regPath -and $regPath.InstallDir) {
-            $paths = @("$($regPath.InstallDir)\v2\AutoHotkey64.exe", "$($regPath.InstallDir)\v2\AutoHotkey32.exe", "$($regPath.InstallDir)\AutoHotkey64.exe", "$($regPath.InstallDir)\AutoHotkey.exe")
-            foreach ($p in $paths) { if (Test-Path $p) { Write-Success "Found: $p"; return $p } }
-        }
-    } catch {}
-    
-    # Method 2: Registry HKCU
-    Write-Host "  Checking registry (HKCU)..." -ForegroundColor Gray
-    try {
-        $regPath = Get-ItemProperty -Path "HKCU:\SOFTWARE\AutoHotkey" -ErrorAction SilentlyContinue
-        if ($regPath -and $regPath.InstallDir) {
-            $paths = @("$($regPath.InstallDir)\v2\AutoHotkey64.exe", "$($regPath.InstallDir)\v2\AutoHotkey32.exe")
-            foreach ($p in $paths) { if (Test-Path $p) { Write-Success "Found: $p"; return $p } }
-        }
-    } catch {}
-    
-    # Method 3: File associations
-    Write-Host "  Checking file associations..." -ForegroundColor Gray
-    try {
-        $assoc = Get-ItemProperty -Path "Registry::HKEY_CLASSES_ROOT\AutoHotkeyScript\Shell\Open\Command" -ErrorAction SilentlyContinue
-        if ($assoc.'(default)') {
-            $exePath = ($assoc.'(default)' -split '"')[1]
-            if ($exePath -and (Test-Path $exePath)) { Write-Success "Found: $exePath"; return $exePath }
-        }
-    } catch {}
-    
-    # Method 4: Common paths
-    Write-Host "  Checking common install locations..." -ForegroundColor Gray
-    $commonPaths = @(
-        "$env:ProgramFiles\AutoHotkey\v2\AutoHotkey64.exe",
-        "$env:ProgramFiles\AutoHotkey\v2\AutoHotkey32.exe",
-        "$env:ProgramFiles\AutoHotkey\AutoHotkey64.exe",
-        "$env:ProgramFiles\AutoHotkey\AutoHotkey.exe",
-        "$env:LocalAppData\Programs\AutoHotkey\v2\AutoHotkey64.exe",
-        "$env:LocalAppData\Programs\AutoHotkey\v2\AutoHotkey32.exe"
+function Test-AutoHotkeyV2 {
+    # Check registry for AHK v2
+    $ahkPaths = @(
+        "HKLM:\SOFTWARE\AutoHotkey",
+        "HKCU:\SOFTWARE\AutoHotkey",
+        "HKLM:\SOFTWARE\WOW6432Node\AutoHotkey"
     )
-    foreach ($p in $commonPaths) { if (Test-Path $p) { Write-Success "Found: $p"; return $p } }
     
-    # Method 5: PATH
-    Write-Host "  Checking system PATH..." -ForegroundColor Gray
-    foreach ($exe in @("AutoHotkey64.exe", "AutoHotkey.exe", "AutoHotkey32.exe")) {
-        $found = Get-Command $exe -ErrorAction SilentlyContinue
-        if ($found) { Write-Success "Found: $($found.Source)"; return $found.Source }
+    foreach ($path in $ahkPaths) {
+        if (Test-Path $path) {
+            try {
+                $version = (Get-ItemProperty $path -ErrorAction SilentlyContinue).Version
+                if ($version -and $version -match "^2\.") {
+                    return $true
+                }
+            } catch {}
+        }
     }
     
-    Write-Fail "AutoHotkey v2 not found"
-    return $null
-}
-
-function Install-AutoHotkey {
-    Write-Status "Installing AutoHotkey v2..."
+    # Check if AutoHotkey64.exe exists and is v2
+    $ahkExe = "${env:ProgramFiles}\AutoHotkey\v2\AutoHotkey64.exe"
+    if (Test-Path $ahkExe) {
+        return $true
+    }
     
-    $tempDir = "$env:TEMP\ContentCaptureInstall"
-    $installerPath = "$tempDir\ahk-setup.exe"
-    
-    if (-not (Test-Path $tempDir)) { New-Item -ItemType Directory -Path $tempDir -Force | Out-Null }
-    
-    # Check for bundled installer
-    $bundledInstaller = Join-Path $PSScriptRoot "AutoHotkey-v2-setup.exe"
-    
-    if (Test-Path $bundledInstaller) {
-        Write-Host "  Using bundled installer..." -ForegroundColor Gray
-        Copy-Item $bundledInstaller $installerPath -Force
-    } else {
-        Write-Host "  Downloading AutoHotkey v2..." -ForegroundColor Gray
+    $ahkExe = "${env:ProgramFiles}\AutoHotkey\AutoHotkey64.exe"
+    if (Test-Path $ahkExe) {
+        # Could be v1 or v2, check version
         try {
-            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-            $ProgressPreference = 'SilentlyContinue'
-            Invoke-WebRequest -Uri "https://www.autohotkey.com/download/ahk-v2.exe" -OutFile $installerPath -UseBasicParsing
-        } catch {
-            Write-Fail "Download failed"
-            return $null
-        }
+            $versionInfo = (Get-Item $ahkExe).VersionInfo.ProductVersion
+            if ($versionInfo -match "^2\.") {
+                return $true
+            }
+        } catch {}
     }
     
-    if (-not (Test-Path $installerPath)) { Write-Fail "Installer not found"; return $null }
+    return $false
+}
+
+function Install-AutoHotkeyV2 {
+    param([string]$InstallerPath)
     
-    Write-Host "  Launching AutoHotkey installer..." -ForegroundColor Yellow
-    Write-Host "  Please follow the installation prompts." -ForegroundColor Yellow
+    if (-not (Test-Path $InstallerPath)) {
+        return $false
+    }
     
-    $process = Start-Process -FilePath $installerPath -Wait -PassThru
+    Write-Log "Installing AutoHotkey v2..." "Yellow"
     
-    # Cleanup
-    Start-Sleep -Seconds 2
-    Remove-Item $installerPath -Force -ErrorAction SilentlyContinue
-    Remove-Item $tempDir -Force -Recurse -ErrorAction SilentlyContinue
+    try {
+        # Silent install
+        $process = Start-Process -FilePath $InstallerPath -ArgumentList "/silent" -Wait -PassThru
+        
+        if ($process.ExitCode -eq 0) {
+            Write-Log "AutoHotkey v2 installed successfully!" "Green"
+            return $true
+        } else {
+            Write-Log "AutoHotkey installer returned code: $($process.ExitCode)" "Yellow"
+            # Try UI install as fallback
+            Start-Process -FilePath $InstallerPath -Wait
+            return (Test-AutoHotkeyV2)
+        }
+    } catch {
+        Write-Log "Error during AHK install: $_" "Red"
+        return $false
+    }
+}
+
+function Get-InstallPath {
+    # Show folder picker dialog
+    $folderBrowser = New-Object System.Windows.Forms.FolderBrowserDialog
+    $folderBrowser.Description = "Choose where to install $AppName"
+    $folderBrowser.SelectedPath = $DefaultInstallPath
+    $folderBrowser.ShowNewFolderButton = $true
     
-    # Verify
-    $ahkPath = Find-AutoHotkey
-    if ($ahkPath) { Write-Success "AutoHotkey v2 installed!"; return $ahkPath }
+    # Create a hidden form to own the dialog (fixes focus issues)
+    $form = New-Object System.Windows.Forms.Form
+    $form.TopMost = $true
+    $form.WindowState = 'Minimized'
+    $form.Show()
+    $form.Hide()
     
-    Write-Fail "Installation could not be verified"
+    $result = $folderBrowser.ShowDialog($form)
+    $form.Dispose()
+    
+    if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
+        return $folderBrowser.SelectedPath
+    }
+    
     return $null
 }
 
-function Install-ContentCaptureFiles {
-    param ([string]$SourceDir, [string]$DestDir)
+function Backup-UserData {
+    param([string]$InstallPath)
     
-    Write-Status "Installing ContentCapture Pro files..."
-    Write-Info "From: $SourceDir"
-    Write-Info "To: $DestDir"
+    $backupPath = "$env:TEMP\ContentCapture-Backup-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+    $hasData = $false
     
-    if (-not (Test-Path $DestDir)) {
-        try { New-Item -ItemType Directory -Path $DestDir -Force | Out-Null; Write-Success "Created folder" }
-        catch { Write-Fail "Could not create folder"; return $false }
-    }
-    
-    # Create subdirectories
-    foreach ($sub in @("backups", "docs", "images")) {
-        $subPath = Join-Path $DestDir $sub
-        if (-not (Test-Path $subPath)) { New-Item -ItemType Directory -Path $subPath -Force | Out-Null }
-    }
-    
-    # Copy files
-    $copied = 0
-    foreach ($file in ($RequiredFiles + $OptionalFiles)) {
-        $src = Join-Path $SourceDir $file
-        $dst = Join-Path $DestDir $file
-        if (Test-Path $src) {
-            try { Copy-Item $src $dst -Force; Write-Host "  Copied: $file" -ForegroundColor Gray; $copied++ }
-            catch { if ($file -in $RequiredFiles) { Write-Fail "Failed: $file"; return $false } }
+    # Check if there's data to backup
+    foreach ($file in $UserDataFiles) {
+        if (Test-Path "$InstallPath\$file") {
+            $hasData = $true
+            break
         }
     }
     
-    # Copy docs folder
-    $docsSource = Join-Path $SourceDir "docs"
-    if (Test-Path $docsSource) { Copy-Item "$docsSource\*" (Join-Path $DestDir "docs") -Recurse -Force -ErrorAction SilentlyContinue }
+    foreach ($folder in $UserDataFolders) {
+        if (Test-Path "$InstallPath\$folder") {
+            $hasData = $true
+            break
+        }
+    }
     
-    Write-Success "Copied $copied files"
-    return $true
+    if (-not $hasData) {
+        return $null
+    }
+    
+    Write-Log "Backing up user data..." "Cyan"
+    New-Item -ItemType Directory -Path $backupPath -Force | Out-Null
+    
+    foreach ($file in $UserDataFiles) {
+        $sourcePath = "$InstallPath\$file"
+        if (Test-Path $sourcePath) {
+            Copy-Item $sourcePath "$backupPath\" -Force
+            Write-Log "  Backed up: $file" "Gray"
+        }
+    }
+    
+    foreach ($folder in $UserDataFolders) {
+        $sourcePath = "$InstallPath\$folder"
+        if (Test-Path $sourcePath) {
+            Copy-Item $sourcePath "$backupPath\" -Recurse -Force
+            Write-Log "  Backed up: $folder\" "Gray"
+        }
+    }
+    
+    return $backupPath
+}
+
+function Restore-UserData {
+    param([string]$BackupPath, [string]$InstallPath)
+    
+    if (-not $BackupPath -or -not (Test-Path $BackupPath)) {
+        return
+    }
+    
+    Write-Log "Restoring user data..." "Cyan"
+    
+    foreach ($file in $UserDataFiles) {
+        $sourcePath = "$BackupPath\$file"
+        if (Test-Path $sourcePath) {
+            Copy-Item $sourcePath "$InstallPath\" -Force
+            Write-Log "  Restored: $file" "Gray"
+        }
+    }
+    
+    foreach ($folder in $UserDataFolders) {
+        $sourcePath = "$BackupPath\$folder"
+        if (Test-Path $sourcePath) {
+            Copy-Item $sourcePath "$InstallPath\" -Recurse -Force
+            Write-Log "  Restored: $folder\" "Gray"
+        }
+    }
+}
+
+function Create-Shortcut {
+    param(
+        [string]$ShortcutPath,
+        [string]$TargetPath,
+        [string]$Arguments = "",
+        [string]$WorkingDir = "",
+        [string]$IconPath = "",
+        [string]$Description = ""
+    )
+    
+    try {
+        $shell = New-Object -ComObject WScript.Shell
+        $shortcut = $shell.CreateShortcut($ShortcutPath)
+        $shortcut.TargetPath = $TargetPath
+        
+        if ($Arguments) { $shortcut.Arguments = $Arguments }
+        if ($WorkingDir) { $shortcut.WorkingDirectory = $WorkingDir }
+        if ($IconPath) { $shortcut.IconLocation = $IconPath }
+        if ($Description) { $shortcut.Description = $Description }
+        
+        $shortcut.Save()
+        return $true
+    } catch {
+        Write-Log "Failed to create shortcut: $_" "Red"
+        return $false
+    }
+}
+
+function Show-WelcomeDialog {
+    $form = New-Object System.Windows.Forms.Form
+    $form.Text = "$AppName Installer"
+    $form.Size = New-Object System.Drawing.Size(500, 350)
+    $form.StartPosition = "CenterScreen"
+    $form.FormBorderStyle = "FixedDialog"
+    $form.MaximizeBox = $false
+    $form.MinimizeBox = $false
+    $form.TopMost = $true
+    $form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 46)
+    
+    # Title
+    $titleLabel = New-Object System.Windows.Forms.Label
+    $titleLabel.Text = "ContentCapture Pro"
+    $titleLabel.Font = New-Object System.Drawing.Font("Segoe UI", 20, [System.Drawing.FontStyle]::Bold)
+    $titleLabel.ForeColor = [System.Drawing.Color]::White
+    $titleLabel.AutoSize = $true
+    $titleLabel.Location = New-Object System.Drawing.Point(30, 20)
+    $form.Controls.Add($titleLabel)
+    
+    # Version
+    $versionLabel = New-Object System.Windows.Forms.Label
+    $versionLabel.Text = "Version $AppVersion"
+    $versionLabel.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+    $versionLabel.ForeColor = [System.Drawing.Color]::FromArgb(166, 173, 200)
+    $versionLabel.AutoSize = $true
+    $versionLabel.Location = New-Object System.Drawing.Point(32, 58)
+    $form.Controls.Add($versionLabel)
+    
+    # Description
+    $descLabel = New-Object System.Windows.Forms.Label
+    $descLabel.Text = "Capture web content with one hotkey (Ctrl+Alt+G)`nRecall it instantly by typing a memorable name`n`nThis installer will:`n  • Check/install AutoHotkey v2 if needed`n  • Install ContentCapture Pro`n  • Create Start Menu shortcut`n  • Preserve your existing data (if upgrading)"
+    $descLabel.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+    $descLabel.ForeColor = [System.Drawing.Color]::FromArgb(205, 214, 244)
+    $descLabel.AutoSize = $true
+    $descLabel.Location = New-Object System.Drawing.Point(32, 95)
+    $form.Controls.Add($descLabel)
+    
+    # Install button
+    $installBtn = New-Object System.Windows.Forms.Button
+    $installBtn.Text = "Install"
+    $installBtn.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
+    $installBtn.Size = New-Object System.Drawing.Size(120, 40)
+    $installBtn.Location = New-Object System.Drawing.Point(150, 255)
+    $installBtn.BackColor = [System.Drawing.Color]::FromArgb(137, 180, 250)
+    $installBtn.ForeColor = [System.Drawing.Color]::FromArgb(30, 30, 46)
+    $installBtn.FlatStyle = "Flat"
+    $installBtn.DialogResult = [System.Windows.Forms.DialogResult]::OK
+    $form.Controls.Add($installBtn)
+    
+    # Cancel button
+    $cancelBtn = New-Object System.Windows.Forms.Button
+    $cancelBtn.Text = "Cancel"
+    $cancelBtn.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+    $cancelBtn.Size = New-Object System.Drawing.Size(100, 40)
+    $cancelBtn.Location = New-Object System.Drawing.Point(280, 255)
+    $cancelBtn.BackColor = [System.Drawing.Color]::FromArgb(69, 71, 90)
+    $cancelBtn.ForeColor = [System.Drawing.Color]::White
+    $cancelBtn.FlatStyle = "Flat"
+    $cancelBtn.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
+    $form.Controls.Add($cancelBtn)
+    
+    $form.AcceptButton = $installBtn
+    $form.CancelButton = $cancelBtn
+    
+    return $form.ShowDialog()
+}
+
+function Show-CompleteDialog {
+    param([string]$InstallPath, [bool]$LaunchNow = $true)
+    
+    $form = New-Object System.Windows.Forms.Form
+    $form.Text = "Installation Complete"
+    $form.Size = New-Object System.Drawing.Size(450, 280)
+    $form.StartPosition = "CenterScreen"
+    $form.FormBorderStyle = "FixedDialog"
+    $form.MaximizeBox = $false
+    $form.MinimizeBox = $false
+    $form.TopMost = $true
+    $form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 46)
+    
+    # Success icon (checkmark)
+    $successLabel = New-Object System.Windows.Forms.Label
+    $successLabel.Text = "✓"
+    $successLabel.Font = New-Object System.Drawing.Font("Segoe UI", 36)
+    $successLabel.ForeColor = [System.Drawing.Color]::FromArgb(166, 227, 161)
+    $successLabel.AutoSize = $true
+    $successLabel.Location = New-Object System.Drawing.Point(30, 20)
+    $form.Controls.Add($successLabel)
+    
+    # Title
+    $titleLabel = New-Object System.Windows.Forms.Label
+    $titleLabel.Text = "Installation Complete!"
+    $titleLabel.Font = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawing.FontStyle]::Bold)
+    $titleLabel.ForeColor = [System.Drawing.Color]::White
+    $titleLabel.AutoSize = $true
+    $titleLabel.Location = New-Object System.Drawing.Point(85, 30)
+    $form.Controls.Add($titleLabel)
+    
+    # Info
+    $infoLabel = New-Object System.Windows.Forms.Label
+    $infoLabel.Text = "ContentCapture Pro has been installed to:`n$InstallPath`n`nPress Ctrl+Alt+G to capture any webpage!`nType your capture name + space to paste it."
+    $infoLabel.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+    $infoLabel.ForeColor = [System.Drawing.Color]::FromArgb(205, 214, 244)
+    $infoLabel.AutoSize = $true
+    $infoLabel.Location = New-Object System.Drawing.Point(32, 85)
+    $form.Controls.Add($infoLabel)
+    
+    # Launch checkbox
+    $launchCheck = New-Object System.Windows.Forms.CheckBox
+    $launchCheck.Text = "Launch ContentCapture Pro now"
+    $launchCheck.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+    $launchCheck.ForeColor = [System.Drawing.Color]::White
+    $launchCheck.Checked = $LaunchNow
+    $launchCheck.AutoSize = $true
+    $launchCheck.Location = New-Object System.Drawing.Point(32, 175)
+    $form.Controls.Add($launchCheck)
+    
+    # Finish button
+    $finishBtn = New-Object System.Windows.Forms.Button
+    $finishBtn.Text = "Finish"
+    $finishBtn.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
+    $finishBtn.Size = New-Object System.Drawing.Size(120, 40)
+    $finishBtn.Location = New-Object System.Drawing.Point(160, 210)
+    $finishBtn.BackColor = [System.Drawing.Color]::FromArgb(137, 180, 250)
+    $finishBtn.ForeColor = [System.Drawing.Color]::FromArgb(30, 30, 46)
+    $finishBtn.FlatStyle = "Flat"
+    $finishBtn.DialogResult = [System.Windows.Forms.DialogResult]::OK
+    $form.Controls.Add($finishBtn)
+    
+    $form.AcceptButton = $finishBtn
+    $form.ShowDialog() | Out-Null
+    
+    return $launchCheck.Checked
+}
+
+function Show-ErrorDialog {
+    param([string]$Message)
+    
+    [System.Windows.Forms.MessageBox]::Show(
+        $Message,
+        "Installation Error",
+        [System.Windows.Forms.MessageBoxButtons]::OK,
+        [System.Windows.Forms.MessageBoxIcon]::Error
+    )
 }
 
 # ============================================================================
-# MAIN
+# MAIN INSTALLATION LOGIC
 # ============================================================================
 
 Clear-Host
-Write-Host "`n  ============================================================" -ForegroundColor Cyan
-Write-Host "     CONTENTCAPTURE PRO - INSTALLER v2.2" -ForegroundColor White
-Write-Host "  ============================================================" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "  ContentCapture Pro Installer v$AppVersion" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host ""
 
-$SourceDir = $PSScriptRoot
-if (-not $SourceDir) { $SourceDir = Split-Path -Parent $MyInvocation.MyCommand.Path }
-if (-not $SourceDir) { $SourceDir = (Get-Location).Path }
+# Get script directory (where installer is running from)
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+if (-not $ScriptDir) { $ScriptDir = Get-Location }
 
-# Check location
-if ($SourceDir -like "*\Downloads\*") {
-    Write-Host "`n  [!] Running from: Downloads folder" -ForegroundColor Yellow
-    Write-Host "  The installer will copy files to:" -ForegroundColor White
-    Write-Host "  $InstallFolder" -ForegroundColor Green
-}
+Write-Log "Installer location: $ScriptDir"
 
-# Check for main script
-if (-not (Test-Path (Join-Path $SourceDir "ContentCapture-Pro.ahk"))) {
-    Show-Message -Title "Files Not Found" -Message "Could not find ContentCapture-Pro.ahk`n`nMake sure you extracted the ZIP file." -Type "Error"
-    exit 1
-}
-
-# Welcome
-$msg = "Welcome to ContentCapture Pro!`n`nThis installer will:`n"
-$msg += "  1. Install files to:`n       $InstallFolder`n"
-$msg += "  2. Install AutoHotkey v2 if needed`n"
-$msg += "  3. Launch ContentCapture Pro`n"
-$msg += "  4. Optionally add to Windows startup`n`nContinue?"
-
-if (-not (Show-YesNo -Title "ContentCapture Pro Installer" -Message $msg)) {
-    Write-Host "  Cancelled." -ForegroundColor Yellow
+# Show welcome dialog
+$welcomeResult = Show-WelcomeDialog
+if ($welcomeResult -ne [System.Windows.Forms.DialogResult]::OK) {
+    Write-Log "Installation cancelled by user." "Yellow"
     exit 0
 }
 
-# Step 1: Copy files
-Write-Host "`n  Step 1 of 4: Installing Files" -ForegroundColor White
-Write-Host "  ------------------------------" -ForegroundColor Gray
+# Step 1: Check AutoHotkey v2
+Write-Log "Checking for AutoHotkey v2..." "Cyan"
 
-if ($SourceDir -eq $InstallFolder) {
-    Write-Success "Already in install location"
+if (Test-AutoHotkeyV2) {
+    Write-Log "AutoHotkey v2 is installed ✓" "Green"
 } else {
-    if (-not (Install-ContentCaptureFiles -SourceDir $SourceDir -DestDir $InstallFolder)) {
-        Show-Message -Title "Failed" -Message "Could not copy files.`nTry running as administrator." -Type "Error"
+    Write-Log "AutoHotkey v2 not found." "Yellow"
+    
+    $ahkInstaller = Join-Path $ScriptDir $AHKInstallerName
+    
+    if (Test-Path $ahkInstaller) {
+        $msgResult = [System.Windows.Forms.MessageBox]::Show(
+            "AutoHotkey v2 is required but not installed.`n`nWould you like to install it now?",
+            "AutoHotkey Required",
+            [System.Windows.Forms.MessageBoxButtons]::YesNo,
+            [System.Windows.Forms.MessageBoxIcon]::Question
+        )
+        
+        if ($msgResult -eq [System.Windows.Forms.DialogResult]::Yes) {
+            if (-not (Install-AutoHotkeyV2 -InstallerPath $ahkInstaller)) {
+                Show-ErrorDialog "Failed to install AutoHotkey v2.`n`nPlease install it manually from:`nhttps://www.autohotkey.com/download/"
+                exit 1
+            }
+        } else {
+            Show-ErrorDialog "AutoHotkey v2 is required to run ContentCapture Pro.`n`nPlease install it from:`nhttps://www.autohotkey.com/download/"
+            exit 1
+        }
+    } else {
+        Show-ErrorDialog "AutoHotkey v2 is required but the installer was not found.`n`nPlease download and install AutoHotkey v2 from:`nhttps://www.autohotkey.com/download/`n`nThen run this installer again."
         exit 1
     }
 }
 
-$AppDir = $InstallFolder
+# Step 2: Choose install location
+Write-Log "Choose installation folder..." "Cyan"
 
-# Step 2: AutoHotkey
-Write-Host "`n  Step 2 of 4: AutoHotkey v2" -ForegroundColor White
-Write-Host "  --------------------------" -ForegroundColor Gray
-
-$ahkPath = Find-AutoHotkey
-
-if (-not $ahkPath) {
-    if (Show-YesNo -Title "AutoHotkey Required" -Message "AutoHotkey v2 is not installed.`n`nInstall it now?") {
-        $ahkPath = Install-AutoHotkey
+# Check if running from an existing install (upgrade scenario)
+$existingInstall = Test-Path (Join-Path $ScriptDir "captures.dat")
+if ($existingInstall) {
+    $msgResult = [System.Windows.Forms.MessageBox]::Show(
+        "It looks like ContentCapture Pro is already installed here.`n`nWould you like to upgrade in place?`n`nYour captures and settings will be preserved.",
+        "Upgrade Detected",
+        [System.Windows.Forms.MessageBoxButtons]::YesNo,
+        [System.Windows.Forms.MessageBoxIcon]::Question
+    )
+    
+    if ($msgResult -eq [System.Windows.Forms.DialogResult]::Yes) {
+        $InstallPath = $ScriptDir
+    } else {
+        $InstallPath = Get-InstallPath
     }
-    if (-not $ahkPath) {
-        Show-Message -Title "Required" -Message "Please install AutoHotkey v2 from:`nhttps://www.autohotkey.com/download/`n`nThen run this installer again." -Type "Warning"
-        Start-Process "https://www.autohotkey.com/download/"
-        exit 1
+} else {
+    # Fresh install - ask for location
+    $msgResult = [System.Windows.Forms.MessageBox]::Show(
+        "Install to default location?`n`n$DefaultInstallPath`n`nClick 'No' to choose a different folder.",
+        "Install Location",
+        [System.Windows.Forms.MessageBoxButtons]::YesNoCancel,
+        [System.Windows.Forms.MessageBoxIcon]::Question
+    )
+    
+    if ($msgResult -eq [System.Windows.Forms.DialogResult]::Yes) {
+        $InstallPath = $DefaultInstallPath
+    } elseif ($msgResult -eq [System.Windows.Forms.DialogResult]::No) {
+        $InstallPath = Get-InstallPath
+    } else {
+        Write-Log "Installation cancelled." "Yellow"
+        exit 0
     }
 }
 
-# Step 3: Launch
-Write-Host "`n  Step 3 of 4: Launching" -ForegroundColor White
-Write-Host "  ----------------------" -ForegroundColor Gray
-
-$mainScript = Join-Path $AppDir "ContentCapture-Pro.ahk"
-if (-not (Test-Path $mainScript)) { $mainScript = Join-Path $AppDir "ContentCapture.ahk" }
-
-if (-not (Test-Path $mainScript)) {
-    Show-Message -Title "Error" -Message "Could not find script in:`n$AppDir" -Type "Error"
-    exit 1
+if (-not $InstallPath) {
+    Write-Log "No install path selected. Installation cancelled." "Yellow"
+    exit 0
 }
 
-Write-Success "Found: $mainScript"
-try {
-    Start-Process -FilePath $ahkPath -ArgumentList "`"$mainScript`"" -WorkingDirectory $AppDir
-    Start-Sleep -Seconds 2
-    Write-Success "ContentCapture Pro is running!"
-    Write-Info "Look for the green H icon in your system tray"
-} catch {
-    Write-Fail "Launch failed: $_"
-    exit 1
+Write-Log "Install path: $InstallPath" "Green"
+
+# Step 3: Backup existing data
+$BackupPath = Backup-UserData -InstallPath $InstallPath
+
+# Step 4: Create install directory
+if (-not (Test-Path $InstallPath)) {
+    Write-Log "Creating install directory..." "Cyan"
+    New-Item -ItemType Directory -Path $InstallPath -Force | Out-Null
 }
 
-# Step 4: Startup
-Write-Host "`n  Step 4 of 4: Windows Startup" -ForegroundColor White
-Write-Host "  ----------------------------" -ForegroundColor Gray
+# Step 5: Copy files
+Write-Log "Copying files..." "Cyan"
 
-if (Show-YesNo -Title "Startup" -Message "Add ContentCapture Pro to Windows startup?`n`n(Recommended: Yes)") {
-    try {
-        $startupFolder = [Environment]::GetFolderPath('Startup')
-        $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut("$startupFolder\ContentCapture Pro.lnk")
-        $shortcut.TargetPath = $ahkPath
-        $shortcut.Arguments = "`"$mainScript`""
-        $shortcut.WorkingDirectory = $AppDir
-        $shortcut.Save()
-        Write-Success "Added to startup!"
-    } catch { Write-Fail "Could not add to startup" }
+$filesToCopy = @(
+    "CC_Clipboard.ahk",
+    "CC_HoverPreview.ahk",
+    "CC_ShareModule.ahk",
+    "ContentCapture.ahk",
+    "ContentCapture-Pro.ahk",
+    "DynamicSuffixHandler.ahk",
+    "ImageCapture.ahk",
+    "ImageClipboard.ahk",
+    "ImageDatabase.ahk",
+    "ImageSharing.ahk",
+    "ResearchTools.ahk",
+    "SocialShare.ahk",
+    "ContentCapture_Generated.ahk"
+)
+
+$copiedCount = 0
+foreach ($file in $filesToCopy) {
+    $sourcePath = Join-Path $ScriptDir $file
+    if (Test-Path $sourcePath) {
+        Copy-Item $sourcePath $InstallPath -Force
+        Write-Log "  Copied: $file" "Gray"
+        $copiedCount++
+    }
 }
 
-# Done
-Write-Host "`n  ============================================================" -ForegroundColor Green
-Write-Host "     INSTALLATION COMPLETE!" -ForegroundColor White
-Write-Host "  ============================================================" -ForegroundColor Green
-Write-Host "`n  Installed to: $AppDir"
-Write-Host "`n  QUICK START:" -ForegroundColor Cyan
-Write-Host "    Ctrl+Alt+P      Capture webpage" -ForegroundColor Gray
-Write-Host "    Ctrl+Alt+B      Browse captures" -ForegroundColor Gray
-Write-Host "    Ctrl+Alt+H      Show help" -ForegroundColor Gray
+# Copy documentation if present
+$docFiles = @("README.md", "CHANGELOG.md", "LICENSE", "INSTALL.md", "QUICK-START.md", "TROUBLESHOOTING.md", "SUFFIX-REFERENCE.md", "USER_MANUAL.md", "ROADMAP.md")
+foreach ($file in $docFiles) {
+    $sourcePath = Join-Path $ScriptDir $file
+    if (Test-Path $sourcePath) {
+        Copy-Item $sourcePath $InstallPath -Force
+    }
+}
 
-Show-Message -Title "Complete!" -Message "ContentCapture Pro is running!`n`nLook for the green H icon in your system tray.`n`nQuick Start:`n  Ctrl+Alt+P - Capture`n  Ctrl+Alt+B - Browse`n  Ctrl+Alt+H - Help" -Type "Info"
+# Copy AHK installer for future use
+$ahkInstaller = Join-Path $ScriptDir $AHKInstallerName
+if (Test-Path $ahkInstaller) {
+    Copy-Item $ahkInstaller $InstallPath -Force
+}
 
-Start-Process "explorer.exe" -ArgumentList $AppDir
+Write-Log "Copied $copiedCount application files" "Green"
+
+# Step 6: Restore user data
+Restore-UserData -BackupPath $BackupPath -InstallPath $InstallPath
+
+# Step 7: Create images folder if it doesn't exist
+$imagesPath = Join-Path $InstallPath "images"
+if (-not (Test-Path $imagesPath)) {
+    New-Item -ItemType Directory -Path $imagesPath -Force | Out-Null
+    Write-Log "Created images folder" "Gray"
+}
+
+# Step 8: Create Start Menu shortcut
+Write-Log "Creating shortcuts..." "Cyan"
+
+$startMenuPath = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs"
+$shortcutPath = Join-Path $startMenuPath "ContentCapture Pro.lnk"
+
+# Find AutoHotkey executable
+$ahkExe = "${env:ProgramFiles}\AutoHotkey\v2\AutoHotkey64.exe"
+if (-not (Test-Path $ahkExe)) {
+    $ahkExe = "${env:ProgramFiles}\AutoHotkey\AutoHotkey64.exe"
+}
+if (-not (Test-Path $ahkExe)) {
+    $ahkExe = "${env:ProgramFiles}\AutoHotkey\AutoHotkey.exe"
+}
+
+$targetScript = Join-Path $InstallPath $AppExe
+
+if (Test-Path $ahkExe) {
+    Create-Shortcut -ShortcutPath $shortcutPath `
+                    -TargetPath $ahkExe `
+                    -Arguments "`"$targetScript`"" `
+                    -WorkingDir $InstallPath `
+                    -Description "ContentCapture Pro - Capture and recall web content instantly"
+    Write-Log "Created Start Menu shortcut ✓" "Green"
+} else {
+    # Fallback: create shortcut directly to .ahk file (requires AHK file association)
+    Create-Shortcut -ShortcutPath $shortcutPath `
+                    -TargetPath $targetScript `
+                    -WorkingDir $InstallPath `
+                    -Description "ContentCapture Pro - Capture and recall web content instantly"
+    Write-Log "Created Start Menu shortcut ✓" "Green"
+}
+
+# Step 9: Show completion dialog and optionally launch
+Write-Host ""
+Write-Log "Installation complete!" "Green"
+Write-Host ""
+
+$shouldLaunch = Show-CompleteDialog -InstallPath $InstallPath -LaunchNow $true
+
+if ($shouldLaunch) {
+    Write-Log "Launching ContentCapture Pro..." "Cyan"
+    
+    if (Test-Path $ahkExe) {
+        Start-Process -FilePath $ahkExe -ArgumentList "`"$targetScript`"" -WorkingDirectory $InstallPath
+    } else {
+        Start-Process -FilePath $targetScript -WorkingDirectory $InstallPath
+    }
+    
+    Write-Log "ContentCapture Pro is now running!" "Green"
+    Write-Log "Look for the icon in your system tray." "Gray"
+}
+
+Write-Host ""
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "  Installation Complete!" -ForegroundColor Green
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "Press any key to exit..."
+$null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
