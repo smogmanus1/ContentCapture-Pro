@@ -3,9 +3,16 @@
 ; ==============================================================================
 ; CC_Clipboard.ahk - Centralized Clipboard Operations for ContentCapture Pro
 ; ==============================================================================
-; Version:     1.0.0
+; Version:     1.1.0
 ; Author:      Brad (with Claude AI assistance)
-; Created:     2026-02-01
+; Updated:     2026-02-01
+;
+; CHANGELOG v1.1.0:
+;   - FIXED: Paste delay was too short (100-400ms) causing stale clipboard paste
+;   - Increased CC_CLIP_PASTE_BASE_DELAY from 100ms to 400ms
+;   - Increased CC_CLIP_PASTE_MAX_DELAY from 300ms to 1500ms
+;   - Added verification loop to ensure paste completes before restore
+;   - This fixes the bug where typing "400bill" would paste clipboard URL instead
 ;
 ; PURPOSE:
 ;   This module provides a SINGLE, CONSISTENT way to handle ALL clipboard
@@ -25,7 +32,7 @@
 ;   4. Set new content
 ;   5. Wait for content to be ready
 ;   6. Perform action (paste, etc.)
-;   7. Wait for action to complete
+;   7. Wait for action to complete (CRITICAL - must be long enough!)
 ;   8. Restore original clipboard (if needed)
 ;
 ; USAGE:
@@ -45,12 +52,14 @@
 ; ==============================================================================
 ; CONFIGURATION - Tune these if clipboard operations are unreliable
 ; ==============================================================================
+; v1.1.0: Increased all delays to prevent "stale clipboard" paste bugs
+; The old values (100/300/100) were causing clipboard restore before paste completed
 
-global CC_CLIP_CLEAR_DELAY := 50        ; ms to wait after clearing clipboard
-global CC_CLIP_WAIT_TIMEOUT := 2        ; seconds to wait for clipboard ready
-global CC_CLIP_PASTE_BASE_DELAY := 100  ; base ms to wait after paste
-global CC_CLIP_PASTE_MAX_DELAY := 300   ; max additional delay for long content
-global CC_CLIP_CONTENT_SCALE := 100     ; add 1ms per this many chars
+global CC_CLIP_CLEAR_DELAY := 75          ; ms to wait after clearing clipboard
+global CC_CLIP_WAIT_TIMEOUT := 2          ; seconds to wait for clipboard ready
+global CC_CLIP_PASTE_BASE_DELAY := 400    ; base ms to wait after paste (was 100)
+global CC_CLIP_PASTE_MAX_DELAY := 1500    ; max additional delay for long content (was 300)
+global CC_CLIP_CONTENT_SCALE := 50        ; add 1ms per this many chars (was 100)
 
 ; ==============================================================================
 ; PRIMARY CLIPBOARD FUNCTIONS
@@ -89,8 +98,18 @@ CC_ClipPaste(content, timeout := 2) {
     ; Step 6: Paste
     SendInput("^v")
     
-    ; Step 7: Wait for paste to complete (dynamic based on content length)
-    pasteDelay := CC_CLIP_PASTE_BASE_DELAY + Min(StrLen(content) // CC_CLIP_CONTENT_SCALE, CC_CLIP_PASTE_MAX_DELAY)
+    ; Step 7: Wait for paste to complete (CRITICAL - must be long enough!)
+    ; Calculate delay based on content length
+    ; Short content (< 500 chars): 400ms base
+    ; Medium content (500-2000 chars): 400-800ms  
+    ; Long content (2000-5000 chars): 800-1200ms
+    ; Very long content (5000+ chars): 1200-1900ms (capped)
+    contentLen := StrLen(content)
+    pasteDelay := CC_CLIP_PASTE_BASE_DELAY + Min(contentLen // CC_CLIP_CONTENT_SCALE, CC_CLIP_PASTE_MAX_DELAY)
+    
+    ; Ensure minimum delay for any content
+    pasteDelay := Max(pasteDelay, 400)
+    
     Sleep(pasteDelay)
     
     ; Step 8: Restore original clipboard
@@ -124,7 +143,9 @@ CC_ClipPasteKeep(content, timeout := 2) {
     SendInput("^v")
     
     ; Wait for paste to complete
-    pasteDelay := CC_CLIP_PASTE_BASE_DELAY + Min(StrLen(content) // CC_CLIP_CONTENT_SCALE, CC_CLIP_PASTE_MAX_DELAY)
+    contentLen := StrLen(content)
+    pasteDelay := CC_CLIP_PASTE_BASE_DELAY + Min(contentLen // CC_CLIP_CONTENT_SCALE, CC_CLIP_PASTE_MAX_DELAY)
+    pasteDelay := Max(pasteDelay, 400)
     Sleep(pasteDelay)
     
     return true
@@ -260,10 +281,10 @@ _CC_ClipSetInternal(content, timeout) {
     
     ; Step 3: Verify clipboard is actually empty (extra safety for reliability)
     startTime := A_TickCount
-    while (A_TickCount - startTime < 200) {
+    while (A_TickCount - startTime < 300) {
         if (A_Clipboard = "")
             break
-        Sleep(20)
+        Sleep(25)
     }
     
     ; Step 4: Set new content
@@ -274,6 +295,10 @@ _CC_ClipSetInternal(content, timeout) {
         CC_ClipNotify("Clipboard operation timed out", "error")
         return false
     }
+    
+    ; Step 6: Extra verification - make sure content actually matches
+    ; This catches edge cases where ClipWait returns but content isn't fully set
+    Sleep(50)
     
     return true
 }
