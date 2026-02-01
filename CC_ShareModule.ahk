@@ -91,8 +91,11 @@ class CC_ShareModule {
         ; Convert to JSON
         jsonStr := this.MapToJSON(exportObj)
         
-        ; Copy to clipboard
-        A_Clipboard := jsonStr
+        ; Copy to clipboard using centralized function
+        if !CC_ClipCopy(jsonStr) {
+            TrayTip("Failed to copy to clipboard", "Error", "2")
+            return false
+        }
         
         ; Build status message
         extras := []
@@ -153,8 +156,11 @@ class CC_ShareModule {
         ; Convert to JSON
         jsonStr := this.MapToJSON(exportObj)
         
-        ; Copy to clipboard
-        A_Clipboard := jsonStr
+        ; Copy to clipboard using centralized function
+        if !CC_ClipCopy(jsonStr) {
+            TrayTip("Failed to copy to clipboard", "Error", "2")
+            return false
+        }
         
         ; Build status message
         extras := []

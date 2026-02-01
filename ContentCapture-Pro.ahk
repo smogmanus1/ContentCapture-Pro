@@ -2,9 +2,24 @@
 ; ContentCapture Pro - Professional Content Capture & Sharing System
 ; ==============================================================================
 ; Author:      Brad
-; Version:     6.1.1 (AHK v2)
-; Updated:     2026-01-31
+; Version:     6.2.1 (AHK v2) - STABLE RELEASE
+; Updated:     2026-02-01
 ; License:     MIT
+;
+; CHANGELOG v6.2.1:
+;   - NEW: CC_Clipboard.ahk - Centralized clipboard operations module
+;   - ARCHITECTURE: All clipboard operations now use CC_Clip* functions
+;   - ARCHITECTURE: Eliminated entire class of "stale clipboard" bugs
+;   - FIXED: 19 clipboard operations that could paste wrong content
+;   - REFACTORED: Consistent error handling via CC_ClipNotify
+;   - REFACTORED: Legacy CC_SafePaste/CC_SafeCopy now in CC_Clipboard.ahk
+;
+; CLIPBOARD ARCHITECTURE (v6.2.1+):
+;   - CC_Clipboard.ahk handles ALL clipboard operations
+;   - Use CC_ClipPaste() to paste with clipboard restore
+;   - Use CC_ClipCopy() to copy without paste
+;   - Use CC_ClipPasteKeep() to paste and keep content on clipboard
+;   - NEVER set A_Clipboard directly (except for restoring saved clipboard)
 ;
 ; CHANGELOG v6.1.1:
 ;   - FIXED: DynamicSuffixHandler wrapper functions had infinite recursion bug
@@ -414,6 +429,9 @@
 ; NOTE: #Requires and #SingleInstance are in the launcher (ContentCapture.ahk)
 #Requires AutoHotkey v2.0+
 #Warn VarUnset, Off  ; Suppress warnings about globals defined in other files
+
+; CC_Clipboard.ahk MUST be included first - it provides all clipboard functions
+#Include CC_Clipboard.ahk
 #Include ImageCapture.ahk
 #Include ImageClipboard.ahk
 #Include ImageDatabase.ahk
@@ -1200,7 +1218,7 @@ CC_AIShowResult(actionName, result, captureName, action) {
     
     ; Buttons
     copyBtn := resultGui.Add("Button", "x20 y270 w100 h35", "📋 Copy")
-    copyBtn.OnEvent("Click", (*) => (A_Clipboard := result, ToolTip("Copied!"), SetTimer((*) => ToolTip(), -1500)))
+    copyBtn.OnEvent("Click", (*) => (CC_ClipCopy(result), ToolTip("Copied!"), SetTimer((*) => ToolTip(), -1500)))
     
     pasteBtn := resultGui.Add("Button", "x130 y270 w100 h35", "📝 Paste")
     pasteBtn.OnEvent("Click", (*) => (resultGui.Destroy(), CC_TypeText(result)))
@@ -1352,113 +1370,19 @@ CC_TypeText(text) {
 ; 4. Providing error feedback if something fails
 ; ==============================================================================
 
-; ------------------------------------------------------------------------------
-; CC_SafePaste(content, timeout)
-; ------------------------------------------------------------------------------
-; Safely paste content while preserving the user's original clipboard.
-; RETURNS: true on success, false on failure
-; ------------------------------------------------------------------------------
-CC_SafePaste(content, timeout := 2) {
-    ; Save original clipboard (ClipboardAll preserves all formats including images)
-    savedClip := ClipboardAll()
-    
-    ; Clear clipboard completely - must wait for it to actually clear
-    A_Clipboard := ""
-    Sleep(100)
-    
-    ; Double-check it's clear by waiting for empty state
-    ; ClipWait with 0 timeout returns false if clipboard is empty (which we want)
-    startTime := A_TickCount
-    while (A_TickCount - startTime < 500) {
-        if (A_Clipboard = "")
-            break
-        Sleep(50)
-    }
-    
-    ; Set new content
-    A_Clipboard := content
-    
-    ; Wait for clipboard to be ready with TEXT (type 1)
-    ; This ensures we're waiting for text, not any format
-    if !ClipWait(timeout, 1) {
-        ; Failed - restore original and notify user
-        A_Clipboard := savedClip
-        TrayTip("Clipboard operation failed - try again", "Error", "2")
-        return false
-    }
-    
-    ; Paste
-    SendInput("^v")
-    
-    ; CRITICAL: Wait for paste to complete BEFORE restoring clipboard
-    ; Scale delay based on content length - longer content needs more time
-    ; Base: 400ms + ~100ms per 1000 chars (minimum 400ms, maximum 2000ms)
-    contentLen := StrLen(content)
-    pasteDelay := 400 + (contentLen // 10)  ; ~100ms per 1000 chars
-    pasteDelay := Min(pasteDelay, 2000)      ; Cap at 2 seconds
-    Sleep(pasteDelay)
-    
-    ; Restore original clipboard
-    A_Clipboard := savedClip
-    return true
-}
-
-; ------------------------------------------------------------------------------
-; CC_SafeCopy(content, timeout)
-; ------------------------------------------------------------------------------
-; Safely copy content to clipboard (does NOT paste, does NOT restore).
-; Use this when you want to put something on the clipboard for the user.
-; RETURNS: true on success, false on failure
-; ------------------------------------------------------------------------------
-CC_SafeCopy(content, timeout := 2) {
-    ; Clear clipboard completely first
-    A_Clipboard := ""
-    Sleep(50)
-    
-    ; Set new content
-    A_Clipboard := content
-    
-    ; Wait for clipboard to be ready
-    if !ClipWait(timeout) {
-        TrayTip("Failed to copy to clipboard", "Error", "2")
-        return false
-    }
-    
-    return true
-}
-
-; ------------------------------------------------------------------------------
-; CC_SafePasteNoRestore(content, timeout)
-; ------------------------------------------------------------------------------
-; Paste content but don't restore the original clipboard.
-; Use this when you WANT the content to stay on the clipboard after pasting.
-; RETURNS: true on success, false on failure
-; ------------------------------------------------------------------------------
-CC_SafePasteNoRestore(content, timeout := 2) {
-    ; Clear clipboard completely first
-    A_Clipboard := ""
-    Sleep(50)
-    
-    ; Set new content
-    A_Clipboard := content
-    
-    ; Wait for clipboard to be ready
-    if !ClipWait(timeout) {
-        TrayTip("Clipboard operation failed - try again", "Error", "2")
-        return false
-    }
-    
-    ; Paste
-    SendInput("^v")
-    
-    ; Wait for paste to complete - scale by content length
-    contentLen := StrLen(content)
-    pasteDelay := 300 + (contentLen // 10)  ; ~100ms per 1000 chars
-    pasteDelay := Min(pasteDelay, 1500)      ; Cap at 1.5 seconds
-    Sleep(pasteDelay)
-    
-    return true
-}
+; ==============================================================================
+; CLIPBOARD FUNCTIONS - MOVED TO CC_Clipboard.ahk (v6.2.1)
+; ==============================================================================
+; All clipboard operations are now centralized in CC_Clipboard.ahk
+;
+; The following functions are available (with backward-compatible wrappers):
+;   CC_ClipPaste(content)      - Paste and restore clipboard (was CC_SafePaste)
+;   CC_ClipCopy(content)       - Copy to clipboard (was CC_SafeCopy)
+;   CC_ClipPasteKeep(content)  - Paste without restore (was CC_SafePasteNoRestore)
+;   CC_ClipNotify(msg, type)   - Show notification
+;
+; Legacy names still work: CC_SafePaste, CC_SafeCopy, CC_SafePasteNoRestore
+; ==============================================================================
 
 ; ------------------------------------------------------------------------------
 ; CC_OutlookInsertAtCursor(content)
@@ -2423,21 +2347,25 @@ CC_HotstringMastodon(name, *) {
     DynamicSuffixHandler.ActionMastodon(name, cap)
 }
 
+; ==============================================================================
+; HOTSTRING COPY/PASTE HANDLERS - v6.2.1 Refactored
+; ==============================================================================
+; All handlers now use CC_Clipboard.ahk for centralized clipboard management.
+; This GUARANTEES the correct clear→wait→set→wait→paste→wait→restore sequence.
+; ==============================================================================
+
+; Suffix: cp | Example: ::recipecp:: → Copy content to clipboard (no paste)
 CC_HotstringCopyOnly(name, *) {
     content := CC_GetCaptureContent(name)
     if (content = "")
         return
     
-    ; Clear clipboard before setting (prevents stale content issues)
-    A_Clipboard := ""
-    Sleep(50)
-    A_Clipboard := content
-    ClipWait(2)
-    CC_Notify("Copied to clipboard!", name)
+    if CC_ClipCopy(content)
+        CC_Notify("Copied to clipboard!", name)
 }
 
 ; ==============================================================================
-; NEW SUFFIX HANDLERS - Added in v6.0.0
+; FIELD-SPECIFIC PASTE HANDLERS
 ; ==============================================================================
 
 ; Suffix: t | Example: ::recipet:: → Paste title only
@@ -2450,12 +2378,7 @@ CC_HotstringTitle(name, *) {
     cap := CaptureData[StrLower(name)]
     title := cap.Has("title") && cap["title"] != "" ? cap["title"] : name
     
-    savedClip := ClipboardAll()
-    A_Clipboard := title
-    ClipWait(2)
-    Send("^v")
-    Sleep(150)
-    A_Clipboard := savedClip
+    CC_ClipPaste(title)
 }
 
 ; Suffix: url | Example: ::recipeurl:: → Paste URL only
@@ -2468,14 +2391,9 @@ CC_HotstringURL(name, *) {
     cap := CaptureData[StrLower(name)]
     
     if (cap.Has("url") && cap["url"] != "") {
-        savedClip := ClipboardAll()
-        A_Clipboard := cap["url"]
-        ClipWait(2)
-        Send("^v")
-        Sleep(150)
-        A_Clipboard := savedClip
+        CC_ClipPaste(cap["url"])
     } else {
-        TrayTip("No URL saved for '" name "'", "No URL", "2")
+        CC_ClipNotify("No URL saved for '" name "'", "warning")
     }
 }
 
@@ -2495,14 +2413,9 @@ CC_HotstringBody(name, *) {
         body := cap["content"]
     
     if (body != "") {
-        savedClip := ClipboardAll()
-        A_Clipboard := body
-        ClipWait(2)
-        Send("^v")
-        Sleep(150)
-        A_Clipboard := savedClip
+        CC_ClipPaste(body)
     } else {
-        TrayTip("No body content for '" name "'", "No Body", "2")
+        CC_ClipNotify("No body content for '" name "'", "warning")
     }
 }
 
@@ -2511,24 +2424,19 @@ CC_HotstringImagePath(name, *) {
     imagePath := CC_GetCaptureImagePath(name)
     
     if (imagePath = "") {
-        TrayTip("No image attached to '" name "'", "No Image", "2")
+        CC_ClipNotify("No image attached to '" name "'", "warning")
         return
     }
     
     if !FileExist(imagePath) {
-        TrayTip("Image file not found:`n" imagePath, "File Missing", "2")
+        CC_ClipNotify("Image file not found", "error")
         return
     }
     
-    savedClip := ClipboardAll()
-    A_Clipboard := imagePath
-    ClipWait(2)
-    Send("^v")
-    Sleep(150)
-    A_Clipboard := savedClip
-    
-    SplitPath(imagePath, &fileName)
-    CC_Notify("Image path pasted", "📷 " fileName)
+    if CC_ClipPaste(imagePath) {
+        SplitPath(imagePath, &fileName)
+        CC_Notify("Image path pasted", "📷 " fileName)
+    }
 }
 
 ; Suffix: ti | Example: ::recipeti:: → Paste title, then image path
@@ -2542,24 +2450,17 @@ CC_HotstringTitleImage(name, *) {
     title := cap.Has("title") ? cap["title"] : name
     imagePath := CC_GetCaptureImagePath(name)
     
-    savedClip := ClipboardAll()
-    A_Clipboard := title
-    ClipWait(2)
-    Send("^v")
-    Sleep(200)
+    ; Paste title (keep on clipboard since we're doing two pastes)
+    CC_ClipPasteKeep(title)
     
     Send("{Enter}")
     Sleep(100)
     
+    ; Paste image path if available
     if (imagePath != "" && FileExist(imagePath)) {
-        A_Clipboard := imagePath
-        ClipWait(2)
-        Send("^v")
-        Sleep(150)
-        A_Clipboard := savedClip
+        CC_ClipPaste(imagePath)  ; This one restores clipboard
         CC_Notify("Title + Image path pasted", name)
     } else {
-        A_Clipboard := savedClip
         CC_Notify("Title pasted (no image found)", name)
     }
 }
@@ -2684,9 +2585,8 @@ CC_ShowReadWindow(name, *) {
 
 CC_CopyReadContent(name) {
     content := CC_GetCaptureContent(name)
-    A_Clipboard := content
-    ClipWait(1)
-    CC_Notify("Copied to clipboard!", name)
+    if CC_ClipCopy(content)
+        CC_Notify("Copied to clipboard!", name)
 }
 
 ; ==============================================================================
@@ -4513,9 +4413,8 @@ CC_BrowserCopyContent(listView) {
 
     name := listView.GetText(row, 3)
     content := CC_GetCaptureContent(name)
-    A_Clipboard := content
-    ClipWait(1)
-    CC_Notify("Copied!", name)
+    if CC_ClipCopy(content)
+        CC_Notify("Copied!", name)
 }
 
 ; Show Copy menu with options
@@ -4564,10 +4463,10 @@ CC_BrowserCopyLinkOnly(listView) {
     if CaptureData.Has(StrLower(name)) {
         cap := CaptureData[StrLower(name)]
         if cap.Has("url") && cap["url"] != "" {
-            A_Clipboard := cap["url"]
-            ClipWait(1)
-            ToolTip("🔗 Link copied!`n" cap["url"])
-            SetTimer(() => ToolTip(), -2000)
+            if CC_ClipCopy(cap["url"]) {
+                ToolTip("🔗 Link copied!`n" cap["url"])
+                SetTimer(() => ToolTip(), -2000)
+            }
         } else {
             MsgBox("This capture has no URL.", "No URL", "48")
         }
@@ -4646,11 +4545,11 @@ CC_ShowPreviewWindow(name, content, cap) {
     btnClose.OnEvent("Click", (*) => previewGui.Destroy())
     
     btnCopyAll := previewGui.Add("Button", "x100 y370 w100", "📋 Copy All")
-    btnCopyAll.OnEvent("Click", (*) => (A_Clipboard := content, ToolTip("Copied!"), SetTimer(() => ToolTip(), -1500)))
+    btnCopyAll.OnEvent("Click", (*) => (CC_ClipCopy(content), ToolTip("Copied!"), SetTimer(() => ToolTip(), -1500)))
     
     btnCopyURL := previewGui.Add("Button", "x210 y370 w100", "🔗 Copy URL")
     if cap.Has("url") && cap["url"] != ""
-        btnCopyURL.OnEvent("Click", (*) => (A_Clipboard := cap["url"], ToolTip("URL Copied!"), SetTimer(() => ToolTip(), -1500)))
+        btnCopyURL.OnEvent("Click", (*) => (CC_ClipCopy(cap["url"]), ToolTip("URL Copied!"), SetTimer(() => ToolTip(), -1500)))
     else
         btnCopyURL.Enabled := false
     
@@ -7259,8 +7158,8 @@ CC_SummarizeWithOllama() {
                 summary := StrReplace(summary, "\n", "`n")
                 summary := StrReplace(summary, '\"', '"')
                 
-                ; Put summary on clipboard
-                A_Clipboard := summary
+                ; Put summary on clipboard using centralized function
+                CC_ClipCopy(summary)
                 
                 progressGui.Destroy()
                 MsgBox("Summary generated and copied to clipboard!`n`nClick OK to continue with capture.`n`nThe summary will go in your Body field.", "Ollama Summary ✅", "64")
@@ -8167,7 +8066,7 @@ CC_SendOutlookEmail(content, title := "") {
 CC_ShareToFacebook(content) {
     url := StrSplit(content, "`n")[1]
     Run("https://www.facebook.com/sharer/sharer.php?u=" CC_UrlEncode(url))
-    A_Clipboard := content
+    CC_ClipCopy(content)
     CC_Notify("Content copied!", "Facebook")
 }
 
@@ -8183,7 +8082,7 @@ CC_ShareToBluesky(content) {
     url := lines.Has(1) ? lines[1] : ""
     title := lines.Has(2) ? lines[2] : ""
     Run("https://bsky.app/intent/compose?text=" CC_UrlEncode(title " " url))
-    A_Clipboard := content
+    CC_ClipCopy(content)
     CC_Notify("Content copied!", "Bluesky")
 }
 

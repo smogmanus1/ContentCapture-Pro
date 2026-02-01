@@ -157,12 +157,11 @@ class ResearchTools {
             return
         }
         
-        ; Copy to clipboard
-        A_Clipboard := content
-        
-        ; Show confirmation
-        charCount := StrLen(content)
-        TrayTip(label " copied to clipboard!", charCount " characters ready to paste", "1")
+        ; Copy to clipboard using centralized function
+        if CC_ClipCopy(content) {
+            charCount := StrLen(content)
+            TrayTip(label " copied to clipboard!", charCount " characters ready to paste", "1")
+        }
     }
     
     ; Copy content and open AI tool
@@ -203,8 +202,8 @@ class ResearchTools {
         prompt .= "`n`n---`n`n"
         prompt .= "Please analyze this content and provide a summary of the key points."
         
-        ; Copy to clipboard
-        A_Clipboard := prompt
+        ; Copy to clipboard using centralized function
+        CC_ClipCopy(prompt)
         
         ; Open the AI tool
         switch aiTool {
