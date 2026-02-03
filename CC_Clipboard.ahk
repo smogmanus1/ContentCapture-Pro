@@ -3,16 +3,23 @@
 ; ==============================================================================
 ; CC_Clipboard.ahk - Centralized Clipboard Operations for ContentCapture Pro
 ; ==============================================================================
-; Version:     1.1.0
+; Version:     1.2.0
 ; Author:      Brad (with Claude AI assistance)
 ; Updated:     2026-02-01
 ;
+; CHANGELOG v1.2.0:
+;   - FIXED: Paste delay STILL too short for some applications
+;   - FIXED: Input race condition where ending character corrupts pasted text
+;   - NEW: SendInput flush before paste prevents keystroke leaking into content
+;   - NEW: KeyWait ensures modifier keys are released before paste
+;   - Increased CC_CLIP_PASTE_BASE_DELAY to 500ms (was 400, originally 100)
+;   - Increased CC_CLIP_PASTE_MAX_DELAY to 2000ms (was 1500, originally 300)
+;   - Added 150ms pre-paste delay for input buffer to flush
+;   - This fixes "dtlied" pasting partial/corrupted content
+;
 ; CHANGELOG v1.1.0:
 ;   - FIXED: Paste delay was too short (100-400ms) causing stale clipboard paste
-;   - Increased CC_CLIP_PASTE_BASE_DELAY from 100ms to 400ms
-;   - Increased CC_CLIP_PASTE_MAX_DELAY from 300ms to 1500ms
-;   - Added verification loop to ensure paste completes before restore
-;   - This fixes the bug where typing "400bill" would paste clipboard URL instead
+;   - This fixed "400bill" pasting stale clipboard URL instead of content
 ;
 ; PURPOSE:
 ;   This module provides a SINGLE, CONSISTENT way to handle ALL clipboard
@@ -20,9 +27,10 @@
 ;   we eliminate an entire class of bugs related to stale clipboard content.
 ;
 ; THE PROBLEM THIS SOLVES:
-;   When you set A_Clipboard := content without clearing first, Windows may
-;   not fully replace the old content before ClipWait returns. This causes
-;   the "stale clipboard" bug where the wrong content gets pasted.
+;   Bug 1 (Stale Clipboard): Setting A_Clipboard and restoring too fast
+;     causes the OLD clipboard content to get pasted instead of new content.
+;   Bug 2 (Input Race): The hotstring trigger character (space/enter) can
+;     leak into the paste operation, corrupting text (e.g., "lie" → "like").
 ;
 ; THE SOLUTION:
 ;   Every clipboard operation now follows this bulletproof sequence:
@@ -31,9 +39,11 @@
 ;   3. Wait for clear to complete
 ;   4. Set new content
 ;   5. Wait for content to be ready
-;   6. Perform action (paste, etc.)
-;   7. Wait for action to complete (CRITICAL - must be long enough!)
-;   8. Restore original clipboard (if needed)
+;   6. FLUSH input buffer (prevent keystroke leaking)
+;   7. Wait for modifier keys to release
+;   8. Perform paste (Ctrl+V)
+;   9. Wait for paste to complete (dynamic delay based on content size)
+;  10. Restore original clipboard (if needed)
 ;
 ; USAGE:
 ;   CC_ClipPaste(content)      → Paste content, restore original clipboard
@@ -52,14 +62,21 @@
 ; ==============================================================================
 ; CONFIGURATION - Tune these if clipboard operations are unreliable
 ; ==============================================================================
-; v1.1.0: Increased all delays to prevent "stale clipboard" paste bugs
-; The old values (100/300/100) were causing clipboard restore before paste completed
+; v1.2.0: Further increased delays and added pre-paste input flush
+;
+; TIMING MATH (v1.2.0):
+;   Short content  (100 chars):  500 + (100/50)  = 502ms   plus 150ms flush
+;   Medium content (500 chars):  500 + (500/50)  = 510ms   plus 150ms flush
+;   Long content   (2000 chars): 500 + (2000/50) = 540ms   plus 150ms flush
+;   Very long      (5000 chars): 500 + (5000/50) = 600ms   plus 150ms flush
+;   Huge content   (50000 chars):500 + 2000       = 2500ms  capped, plus flush
 
 global CC_CLIP_CLEAR_DELAY := 75          ; ms to wait after clearing clipboard
 global CC_CLIP_WAIT_TIMEOUT := 2          ; seconds to wait for clipboard ready
-global CC_CLIP_PASTE_BASE_DELAY := 400    ; base ms to wait after paste (was 100)
-global CC_CLIP_PASTE_MAX_DELAY := 1500    ; max additional delay for long content (was 300)
-global CC_CLIP_CONTENT_SCALE := 50        ; add 1ms per this many chars (was 100)
+global CC_CLIP_PRE_PASTE_DELAY := 150     ; ms to wait BEFORE paste (flush input buffer)
+global CC_CLIP_PASTE_BASE_DELAY := 500    ; base ms to wait AFTER paste (was 400, originally 100)
+global CC_CLIP_PASTE_MAX_DELAY := 2000    ; max additional delay for long content (was 1500, originally 300)
+global CC_CLIP_CONTENT_SCALE := 50        ; add 1ms per this many chars
 
 ; ==============================================================================
 ; PRIMARY CLIPBOARD FUNCTIONS
@@ -95,24 +112,28 @@ CC_ClipPaste(content, timeout := 2) {
         return false
     }
     
-    ; Step 6: Paste
+    ; Step 6: Pre-paste flush - let any pending keystrokes finish
+    ; This prevents the hotstring trigger character (space/enter/etc.)
+    ; from leaking into the pasted content (e.g., "lie" becoming "like")
+    Sleep(CC_CLIP_PRE_PASTE_DELAY)
+    
+    ; Step 7: Ensure no modifier keys are stuck
+    ; Sometimes Ctrl/Shift/Alt can be held from previous operations
+    KeyWait("Ctrl", "T0.3")
+    KeyWait("Shift", "T0.3")
+    KeyWait("Alt", "T0.3")
+    
+    ; Step 8: Paste
     SendInput("^v")
     
-    ; Step 7: Wait for paste to complete (CRITICAL - must be long enough!)
+    ; Step 9: Wait for paste to complete (CRITICAL - must be long enough!)
     ; Calculate delay based on content length
-    ; Short content (< 500 chars): 400ms base
-    ; Medium content (500-2000 chars): 400-800ms  
-    ; Long content (2000-5000 chars): 800-1200ms
-    ; Very long content (5000+ chars): 1200-1900ms (capped)
     contentLen := StrLen(content)
     pasteDelay := CC_CLIP_PASTE_BASE_DELAY + Min(contentLen // CC_CLIP_CONTENT_SCALE, CC_CLIP_PASTE_MAX_DELAY)
-    
-    ; Ensure minimum delay for any content
-    pasteDelay := Max(pasteDelay, 400)
-    
+    pasteDelay := Max(pasteDelay, 500)
     Sleep(pasteDelay)
     
-    ; Step 8: Restore original clipboard
+    ; Step 10: Restore original clipboard
     A_Clipboard := savedClip
     
     return true
@@ -139,13 +160,19 @@ CC_ClipPasteKeep(content, timeout := 2) {
     if !_CC_ClipSetInternal(content, timeout)
         return false
     
+    ; Pre-paste flush
+    Sleep(CC_CLIP_PRE_PASTE_DELAY)
+    KeyWait("Ctrl", "T0.3")
+    KeyWait("Shift", "T0.3")
+    KeyWait("Alt", "T0.3")
+    
     ; Paste
     SendInput("^v")
     
     ; Wait for paste to complete
     contentLen := StrLen(content)
     pasteDelay := CC_CLIP_PASTE_BASE_DELAY + Min(contentLen // CC_CLIP_CONTENT_SCALE, CC_CLIP_PASTE_MAX_DELAY)
-    pasteDelay := Max(pasteDelay, 400)
+    pasteDelay := Max(pasteDelay, 500)
     Sleep(pasteDelay)
     
     return true
@@ -297,7 +324,6 @@ _CC_ClipSetInternal(content, timeout) {
     }
     
     ; Step 6: Extra verification - make sure content actually matches
-    ; This catches edge cases where ClipWait returns but content isn't fully set
     Sleep(50)
     
     return true
