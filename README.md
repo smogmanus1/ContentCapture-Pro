@@ -1,4 +1,4 @@
-# ContentCapture Pro v6.1.1
+# ContentCapture Pro v6.3.0
 ![ContentCapture Pro - Save Once, Share Everywhere](images/ccpimage.png)
 
 ## 🍪 Save Recipes and Articles from the Internet! 🍪
@@ -69,7 +69,7 @@ Want your recipe back? Easy!
 |---------------|------------------|
 | **Save from website** | **Ctrl + Alt + G** |
 | **See all your saves** | **Ctrl + Alt + B** |
-| **Get help** | **Ctrl + Alt + H** |
+| **Get help** | **F1** (inside the browser) or click **❓** |
 
 | Type This... | To Do This... |
 |--------------|---------------|
@@ -127,15 +127,20 @@ Copy these to a USB drive or email them to yourself:
 
 ---
 
-## 🆕 What's New in v6.1.1
+## 🆕 What's New in v6.3.0
 
-**Bug Fixes:**
-- ✅ Fixed stale content appearing when sharing to social media
-- ✅ Fixed clipboard not clearing properly between shares
-- ✅ Fixed social media hotstrings (`fb`, `x`, `bs`, `li`, `mt`)
-- ✅ Improved reliability of multi-image sharing workflow
+**New: Built-In Help System! 🎓**
+- ✅ Click the **❓** button in the Capture Browser for instant help
+- ✅ Press **F1** anytime the Browser is open
+- ✅ Help window stays visible while you keep working
+- ✅ 5 tabs: Quick Start, all 22 Suffixes, Browser Buttons, Hotkeys, Tips & Tricks
+- ✅ Perfect for learning at your own pace
 
-See [RELEASE-6.1.1.md](RELEASE-6.1.1.md) for full details.
+**Previous Fixes (v6.2.1):**
+- ✅ Fixed stale clipboard bug - correct content always pastes now
+- ✅ Centralized clipboard system for rock-solid reliability
+
+See [RELEASE-6.3.0.md](RELEASE-6.3.0.md) for full details.
 
 ---
 

@@ -441,6 +441,7 @@
 #Include ResearchTools.ahk
 #Include CC_ShareModule.ahk
 #Include CC_HoverPreview.ahk
+#Include CC_HelpWindow.ahk
 
 global ContentCaptureDir := ""
 
@@ -4213,7 +4214,8 @@ CC_OpenCaptureBrowser() {
     browserGui.Add("Button", "x430 y405 w45", "🗑️ Del").OnEvent("Click", (*) => CC_BrowserDeleteCapture(listView, browserGui))
     browserGui.Add("Button", "x480 y405 w50", "📷 Img").OnEvent("Click", (*) => CC_BrowserAttachImage(listView, browserGui))
     browserGui.Add("Button", "x535 y405 w70", "🔬 Research").OnEvent("Click", (*) => ResearchTools.ShowResearchMenu(browserGui, listView))
-    browserGui.Add("Button", "x610 y405 w80", "Close").OnEvent("Click", (*) => browserGui.Destroy())
+    browserGui.Add("Button", "x610 y405 w30", "❓").OnEvent("Click", (*) => CC_ShowHelp())
+    browserGui.Add("Button", "x645 y405 w65", "Close").OnEvent("Click", (*) => browserGui.Destroy())
 
     ; Button row 2 - New utility buttons
     browserGui.Add("Button", "x10 y440 w55", "➕ New").OnEvent("Click", (*) => CC_BrowserNewCapture(browserGui))
@@ -4223,7 +4225,7 @@ CC_OpenCaptureBrowser() {
     browserGui.Add("Button", "x270 y440 w55", "📤 Share").OnEvent("Click", (*) => CC_BrowserShareCapture(listView, browserGui))
     browserGui.Add("Button", "x330 y440 w60", "📥 Import").OnEvent("Click", (*) => CC_BrowserImportCapture())
 
-    browserGui.statusText := browserGui.Add("Text", "x10 y478 w680", "Showing " CaptureNames.Length " captures | Enter=Paste | Del=Delete | Ctrl+S=Share | Ctrl+I=Import")
+    browserGui.statusText := browserGui.Add("Text", "x10 y478 w680", "Showing " CaptureNames.Length " captures | Enter=Paste | Del=Delete | Ctrl+S=Share | Ctrl+I=Import | F1=Help")
 
     browserGui.OnEvent("Close", (*) => browserGui.Destroy())
     browserGui.OnEvent("Escape", (*) => browserGui.Destroy())
@@ -4237,6 +4239,7 @@ CC_OpenCaptureBrowser() {
     Hotkey("Delete", (*) => CC_BrowserDeleteCapture(listView, browserGui), "On")
     Hotkey("^f", (*) => searchEdit.Focus(), "On")
     Hotkey("^d", (*) => CC_BrowserDuplicateSelected(listView, browserGui), "On")
+    Hotkey("F1", (*) => CC_ShowHelp(), "On")
     ; New keyboard shortcuts
     Hotkey("^n", (*) => CC_BrowserNewCapture(browserGui), "On")
     Hotkey("^l", (*) => CC_BrowserCopyLinkOnly(listView), "On")
@@ -4597,7 +4600,7 @@ CC_BrowserRefreshList(browserGui, listView) {
     
     ; Update title and status bar
     browserGui.Title := "Capture Browser - " CaptureNames.Length " captures"
-    browserGui.statusText.Value := "Showing " CaptureNames.Length " captures | Enter=Paste | Del=Delete | Ctrl+S=Share | Ctrl+I=Import"
+    browserGui.statusText.Value := "Showing " CaptureNames.Length " captures | Enter=Paste | Del=Delete | Ctrl+S=Share | Ctrl+I=Import | F1=Help"
     
     ; Update tag dropdown if needed
     try {

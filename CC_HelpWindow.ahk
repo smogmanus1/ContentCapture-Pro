@@ -191,39 +191,44 @@ capture name with no spaces or separators.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   CAPTURE BROWSER BUTTONS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Open the Browser with Ctrl+Alt+B
 
 ROW 1 — Action Buttons
 ─────────────────────────────────
-  🌐 Open      Open the URL in your browser
+  🌐 Open      Open URL in your browser
   📋 Copy      Copy content to clipboard
   📧 Email     Create email with content
   ⭐ Fav       Toggle favorite status
-  ❓ Hotstring Show the hotstring/suffix name
+  ❓ Hotstring Show hotstring name & suffixes
   📖 Read      Read content in viewer
   ✏️ Edit      Edit the capture details
   🗑️ Del       Delete the capture
-  📷 Img       View/manage attached image
-  🔬 Research  Research & fact-check tools
+  📷 Img       Attach or view an image
+  🔬 Research  Fact-check & research tools
+  ❓ Help      This help window (also F1)
 
 ROW 2 — Management Buttons
 ─────────────────────────────────
-  + New        Create a new capture manually
-  🔗 Link      Copy shareable link
-  👁️ Preview   Preview content as formatted
+  ➕ New       Create a new capture manually
+  🔗 Link      Copy the URL only
+  👁 Preview   Preview formatted content
   🔄 Refresh   Reload captures from file
-  📤 Share     Export/import captures
+  📤 Share     Export captures (.ccp file)
   📥 Import    Import captures (Ctrl+I)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  BROWSER NAVIGATION
+  KEYBOARD SHORTCUTS (in Browser)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   Enter        Paste selected capture
-  Del          Delete selected capture
-  Double-click Open URL in browser
+  Delete       Delete selected capture
+  Ctrl+F       Jump to search box
   Ctrl+S       Share/export capture
   Ctrl+I       Import captures
-  ⭐ column    Click to toggle favorite
+  Ctrl+D       Duplicate selected capture
+  F1           Open this help window
+  Escape       Close the browser
+  Double-click Open URL in browser
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   SEARCH & FILTER
@@ -233,6 +238,7 @@ ROW 2 — Management Buttons
   Tag dropdown Filter by tag category
   Filter btn   Apply tag filter
   Column click Sort by that column
+  ⭐ column    Click to toggle favorite
         )"
         
         hg.Add("Edit", "x15 y35 w450 h480 ReadOnly -WantReturn +Multi", browserText)
@@ -260,16 +266,25 @@ CAPTURE & BROWSE
   Ctrl+Alt+N    New manual capture
                 (type in content by hand)
 
+  Ctrl+Alt+Space  Quick Search captures
+
 TOOLS & UTILITIES
 ─────────────────────────────────
   Ctrl+Alt+M    Main menu
-  Ctrl+Alt+O    Open captures file in editor
+  Ctrl+Alt+A    AI Assist menu
+  Ctrl+Alt+O    Open data file in editor
   Ctrl+Alt+W    Toggle Recent Captures widget
   Ctrl+Alt+H    Export captures to HTML
-  Ctrl+Alt+S    Open settings
+  Ctrl+Alt+K    Backup captures
   Ctrl+Alt+E    Email last capture
   Ctrl+Alt+C    Copy, clean, and paste text
-  Ctrl+Alt+L    Reload script
+  Ctrl+Alt+F    Format text to hotstring
+  Ctrl+Alt+S    Open settings
+  Ctrl+Alt+R    Reset data file
+  Ctrl+Alt+F12  Quick Help popup
+
+  Ctrl+Alt+Shift+B  Restore Browser
+                     (recover deleted captures)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   INSIDE CAPTURE BROWSER
@@ -277,8 +292,11 @@ TOOLS & UTILITIES
 
   Enter         Paste selected capture
   Delete        Delete selected capture
+  Ctrl+F        Jump to search box
   Ctrl+S        Share/export
   Ctrl+I        Import
+  Ctrl+D        Duplicate capture
+  F1            Open help window
   Escape        Close browser
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

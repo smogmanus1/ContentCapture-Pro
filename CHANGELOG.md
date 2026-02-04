@@ -4,6 +4,22 @@ All notable changes to ContentCapture Pro will be documented in this file.
 
 ---
 
+## [6.3.0] - 2026-02-04
+
+### Added
+- **CC_HelpWindow.ahk** - In-app Quick Reference help system
+  - Non-modal, always-on-top window stays open while you work
+  - 5 tabbed sections: Quick Start, Suffixes, Browser, Hotkeys, Tips
+  - Covers all 22 suffix actions, every Browser button, and all global hotkeys
+  - Toggle on/off with ❓ button or F1 key
+  - Remembers window position between opens
+  - Resizable window with content that scales
+  - Perfect for new users learning the system
+- **F1 hotkey** in Capture Browser opens help window
+- **Status bar** now shows F1=Help hint
+
+---
+
 ## [6.0.1] - 2026-01-28
 
 ### Added
