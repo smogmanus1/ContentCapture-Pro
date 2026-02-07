@@ -2,7 +2,7 @@
 ; ContentCapture Pro - Professional Content Capture & Sharing System
 ; ==============================================================================
 ; Author:      Brad
-; Version:     6.2.1 (AHK v2) - STABLE RELEASE
+; Version:     6.3.0 (AHK v2) - STABLE RELEASE
 ; Updated:     2026-02-01
 ; License:     MIT
 ;
@@ -544,7 +544,7 @@ CC_CheckAutoBackup()
 CC_SetupTrayMenu()
 
 ; Show startup notification
-CC_Notify("ContentCapture Pro v5.7 loaded!`n" CaptureNames.Length " captures available.`nType 'namesum' to summarize any capture!")
+CC_Notify("ContentCapture Pro v6.3.0 loaded!`n" CaptureNames.Length " captures available.`nType 'namesum' to summarize any capture!")
 
 ; Check if we should open browser after reload (flag file from edit save)
 openBrowserFlag := BaseDir "\open_browser.flag"
@@ -1463,8 +1463,8 @@ CC_SetupTrayMenu() {
     global CaptureNames, AIEnabled
     
     A_TrayMenu.Delete()
-    A_TrayMenu.Add("📚 ContentCapture Pro v4.5", (*) => CC_ShowMainMenu())
-    A_TrayMenu.Default := "📚 ContentCapture Pro v4.5"
+    A_TrayMenu.Add("📚 ContentCapture Pro v6.3.0", (*) => CC_ShowMainMenu())
+    A_TrayMenu.Default := "📚 ContentCapture Pro v6.3.0"
     A_TrayMenu.Add()
     
     ; Quick actions
@@ -3558,7 +3558,7 @@ CC_ShowMainMenu() {
     menuGui.BackColor := "1a1a2e"
 
     menuGui.SetFont("s14 bold cWhite")
-    menuGui.Add("Text", "x20 y15 w360 Center", "📚 ContentCapture Pro v4.4")
+    enuGui.Add("Text", "x20 y15 w360 Center", "📚 ContentCapture Pro v6.3.0")
 
     menuGui.SetFont("s10 norm c888888")
     favCount := IsSet(Favorites) ? Favorites.Length : 0
