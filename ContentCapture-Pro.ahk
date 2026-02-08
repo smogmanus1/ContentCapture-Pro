@@ -454,6 +454,49 @@ GetContentCaptureDir() {
 ContentCaptureDir := GetContentCaptureDir()
 
 ; ==============================================================================
+; GUI HOTSTRING SUSPEND/RESUME (Keyboard Lockup Fix)
+; ==============================================================================
+; With 7,000+ hotstrings active, opening a GUI with an Edit control causes
+; every keystroke to be processed by both the GUI and the hotstring engine,
+; leading to keyboard lockup and beeping. These functions suspend hotstring
+; recognition while CC GUIs are open and resume when they close.
+; ==============================================================================
+
+global CC_HotstringSuspended := false
+global CC_SuspendedGuiCount := 0
+
+CC_SuspendHotstrings() {
+    global CC_HotstringSuspended, CC_SuspendedGuiCount
+    CC_SuspendedGuiCount++
+    if (!CC_HotstringSuspended) {
+        Suspend(true)
+        CC_HotstringSuspended := true
+    }
+}
+
+CC_ResumeHotstrings() {
+    global CC_HotstringSuspended, CC_SuspendedGuiCount
+    CC_SuspendedGuiCount := Max(CC_SuspendedGuiCount - 1, 0)
+    if (CC_HotstringSuspended && CC_SuspendedGuiCount = 0) {
+        Suspend(false)
+        CC_HotstringSuspended := false
+    }
+}
+
+CC_GuiCleanup(guiObj) {
+    CC_ResumeHotstrings()
+    guiObj.Destroy()
+}
+
+; Hook into any GUI that calls CC_SuspendHotstrings - auto-resume on close
+CC_SuspendForGui(guiObj) {
+    CC_SuspendHotstrings()
+    ; Register a close handler so hotstrings ALWAYS resume even if
+    ; the GUI is destroyed by code that doesn't call CC_GuiCleanup
+    guiObj.OnEvent("Close", (*) => CC_ResumeHotstrings())
+}
+
+; ==============================================================================
 ; GLOBAL CONFIGURATION
 ; ==============================================================================
 
@@ -571,9 +614,10 @@ if (CCHelp.ShouldShowTutorial()) {
 }
 
 ; ==============================================================================
-; HOTKEYS
+; HOTKEYS (SuspendExempt so they work while hotstrings are suspended in GUIs)
 ; ==============================================================================
 
+#SuspendExempt
 ^!Space:: CC_QuickSearch()
 ^!a:: CC_AIAssistMenu()
 ^!m:: CC_ShowMainMenu()
@@ -595,6 +639,7 @@ if (CCHelp.ShouldShowTutorial()) {
 }
 ^!r:: CC_ResetDataFile()
 ^!F12:: CCHelp.ShowQuickHelp()
+#SuspendExempt false
 
 ; ==============================================================================
 ; QUICK SEARCH POPUP - Alfred/Raycast style instant search
@@ -629,6 +674,7 @@ if (CCHelp.ShouldShowTutorial()) {
 ; ------------------------------------------------------------------------------
 CC_QuickSearch() {
     global CaptureData, CaptureNames
+    CC_SuspendHotstrings()
     
     ; Create minimal, centered popup
     searchGui := Gui("+AlwaysOnTop -Caption +Border", "Quick Search")
@@ -661,8 +707,8 @@ CC_QuickSearch() {
     searchEdit.OnEvent("Focus", (*) => searchGui.hotkeysActive := true)
     
     ; Keyboard navigation
-    searchGui.OnEvent("Escape", (*) => searchGui.Destroy())
-    searchGui.OnEvent("Close", (*) => searchGui.Destroy())
+    searchGui.OnEvent("Escape", (*) => CC_GuiCleanup(searchGui))
+    searchGui.OnEvent("Close", (*) => CC_GuiCleanup(searchGui))
     
     ; Custom hotkeys for this GUI
     HotIfWinActive("ahk_id " searchGui.Hwnd)
@@ -833,7 +879,7 @@ CC_QuickSearchAction(searchGui, resultList, action) {
     else
         return
     
-    searchGui.Destroy()
+    CC_GuiCleanup(searchGui)
     
     ; Disable the hotkeys
     HotIf()
@@ -926,6 +972,7 @@ CC_AIAssistMenu() {
 
 CC_AISetup() {
     global AIEnabled, AIProvider, AIApiKey, AIModel, AIOllamaURL, ConfigFile
+    CC_SuspendHotstrings()
     
     setupGui := Gui("+AlwaysOnTop", "AI Integration Setup")
     setupGui.BackColor := "1a1a2e"
@@ -983,7 +1030,7 @@ CC_AISetup() {
     saveBtn.OnEvent("Click", (*) => CC_AISaveSettings(setupGui))
     
     cancelBtn := setupGui.Add("Button", "x260 y400 w120 h35", "Cancel")
-    cancelBtn.OnEvent("Click", (*) => setupGui.Destroy())
+    cancelBtn.OnEvent("Click", (*) => CC_GuiCleanup(setupGui))
     
     ; Test button
     testBtn := setupGui.Add("Button", "x20 y400 w80 h35", "🧪 Test")
@@ -1046,6 +1093,7 @@ CC_AITest(setupGui) {
 
 CC_AISelectCapture() {
     global CaptureData, CaptureNames
+    CC_SuspendHotstrings()
     
     ; Show a simple selection GUI
     selectGui := Gui("+AlwaysOnTop", "Select Capture for AI")
@@ -2498,6 +2546,7 @@ CC_GetCaptureImagePath(name) {
 
 CC_ShowReadWindow(name, *) {
     global CaptureData
+    CC_SuspendHotstrings()
 
     if !CaptureData.Has(StrLower(name))
         return
@@ -3552,13 +3601,14 @@ CC_CheckAutoBackup() {
 
 CC_ShowMainMenu() {
     global CaptureNames, Favorites, AIEnabled
+    CC_SuspendHotstrings()
 
     menuGui := Gui("+AlwaysOnTop", "ContentCapture Pro - Menu")
     menuGui.SetFont("s11")
     menuGui.BackColor := "1a1a2e"
 
     menuGui.SetFont("s14 bold cWhite")
-    enuGui.Add("Text", "x20 y15 w360 Center", "📚 ContentCapture Pro v6.3.0")
+    menuGui.Add("Text", "x20 y15 w360 Center", "📚 ContentCapture Pro v6.3.0")
 
     menuGui.SetFont("s10 norm c888888")
     favCount := IsSet(Favorites) ? Favorites.Length : 0
@@ -3571,54 +3621,55 @@ CC_ShowMainMenu() {
 
     menuGui.SetFont("s10")
     btnQuick := menuGui.Add("Button", "x20 y100 w170 h40", "🔍 SEARCH (Ctrl+Alt+Space)")
-    btnQuick.OnEvent("Click", (*) => (menuGui.Destroy(), CC_QuickSearch()))
+    btnQuick.OnEvent("Click", (*) => (CC_GuiCleanup(menuGui), CC_QuickSearch()))
     
     btnAI := menuGui.Add("Button", "x200 y100 w170 h40", "🤖 AI ASSIST (Ctrl+Alt+A)")
-    btnAI.OnEvent("Click", (*) => (menuGui.Destroy(), CC_AIAssistMenu()))
+    btnAI.OnEvent("Click", (*) => (CC_GuiCleanup(menuGui), CC_AIAssistMenu()))
 
     menuGui.SetFont("s11 cWhite")
     menuGui.Add("Text", "x20 y150", "━━━━━━━━━━━ CAPTURE ━━━━━━━━━━━")
 
     menuGui.SetFont("s10")
     btn1 := menuGui.Add("Button", "x20 y175 w110 h35", "📷 Webpage")
-    btn1.OnEvent("Click", (*) => (menuGui.Destroy(), CC_CaptureFromMenu()))
+    btn1.OnEvent("Click", (*) => (CC_GuiCleanup(menuGui), CC_CaptureFromMenu()))
 
     btn1b := menuGui.Add("Button", "x135 y175 w110 h35", "📝 Manual")
-    btn1b.OnEvent("Click", (*) => (menuGui.Destroy(), CC_ManualCapture()))
+    btn1b.OnEvent("Click", (*) => (CC_GuiCleanup(menuGui), CC_ManualCapture()))
 
     btn2 := menuGui.Add("Button", "x250 y175 w120 h35", "✂️ Format Text")
-    btn2.OnEvent("Click", (*) => (menuGui.Destroy(), CC_FormatTextToHotstring()))
+    btn2.OnEvent("Click", (*) => (CC_GuiCleanup(menuGui), CC_FormatTextToHotstring()))
 
     menuGui.SetFont("s11 cWhite")
     menuGui.Add("Text", "x20 y220", "━━━━━━━━━━━ BROWSE ━━━━━━━━━━━")
 
     menuGui.SetFont("s10")
     btn3 := menuGui.Add("Button", "x20 y245 w110 h35", "🔎 Browse All")
-    btn3.OnEvent("Click", (*) => (menuGui.Destroy(), CC_OpenCaptureBrowser()))
+    btn3.OnEvent("Click", (*) => (CC_GuiCleanup(menuGui), CC_OpenCaptureBrowser()))
 
     btn3b := menuGui.Add("Button", "x135 y245 w110 h35", "📦 Restore")
-    btn3b.OnEvent("Click", (*) => (menuGui.Destroy(), CC_OpenRestoreBrowser()))
+    btn3b.OnEvent("Click", (*) => (CC_GuiCleanup(menuGui), CC_OpenRestoreBrowser()))
 
     btn4 := menuGui.Add("Button", "x250 y245 w120 h35", "📂 Open File")
-    btn4.OnEvent("Click", (*) => (menuGui.Destroy(), CC_OpenDataFileInEditor()))
+    btn4.OnEvent("Click", (*) => (CC_GuiCleanup(menuGui), CC_OpenDataFileInEditor()))
 
     menuGui.SetFont("s11 cWhite")
     menuGui.Add("Text", "x20 y290", "━━━━━━━━━━ PROTECT ━━━━━━━━━━")
 
     menuGui.SetFont("s10")
     btn5 := menuGui.Add("Button", "x20 y315 w170 h35", "💾 Backup/Restore")
-    btn5.OnEvent("Click", (*) => (menuGui.Destroy(), CC_BackupCaptures()))
+    btn5.OnEvent("Click", (*) => (CC_GuiCleanup(menuGui), CC_BackupCaptures()))
 
     btn6 := menuGui.Add("Button", "x200 y315 w170 h35", "🔄 Reload Script")
-    btn6.OnEvent("Click", (*) => (menuGui.Destroy(), Reload()))
+    btn6.OnEvent("Click", (*) => (CC_GuiCleanup(menuGui), Reload()))
 
     menuGui.SetFont("s9 c888888")
     menuGui.Add("Text", "x20 y365 w350", "Space=Search, A=AI, P=Webpage, N=Manual, B=Browse")
 
     menuGui.SetFont("s10 cWhite")
-    menuGui.Add("Button", "x130 y395 w130 h30", "Close").OnEvent("Click", (*) => menuGui.Destroy())
+    menuGui.Add("Button", "x130 y395 w130 h30", "Close").OnEvent("Click", (*) => CC_GuiCleanup(menuGui))
 
-    menuGui.OnEvent("Escape", (*) => menuGui.Destroy())
+    menuGui.OnEvent("Escape", (*) => CC_GuiCleanup(menuGui))
+    menuGui.OnEvent("Close", (*) => CC_GuiCleanup(menuGui))
     menuGui.Show("w390 h440")
 }
 
@@ -3819,6 +3870,7 @@ CC_CaptureContent() {
 
 CC_ManualCapture() {
     global CaptureData, CaptureNames, AvailableTags
+    CC_SuspendHotstrings()
     
     manualGui := Gui("+AlwaysOnTop", "📝 Manual Capture - Add Your Own Content")
     manualGui.SetFont("s10")
@@ -4146,6 +4198,7 @@ CC_GetCaptureDetailsWithTags() {
 ; ------------------------------------------------------------------------------
 CC_OpenCaptureBrowser() {
     global CaptureData, CaptureNames, AvailableTags
+    CC_SuspendHotstrings()
 
     ; Safety: ensure data is loaded
     if !IsSet(CaptureNames) || Type(CaptureNames) != "Array" {
@@ -6658,6 +6711,15 @@ CC_MoveToArchive(restoredEntries, backupData, backupNames) {
 
 CC_EditCapture(name) {
     global CaptureData, AvailableTags
+    static prevEditGui := ""
+    
+    ; Destroy any previous Edit GUI instance to prevent duplicate control errors
+    if IsObject(prevEditGui) {
+        try prevEditGui.Destroy()
+        prevEditGui := ""
+    }
+    
+    CC_SuspendHotstrings()
 
     if !CaptureData.Has(StrLower(name)) {
         MsgBox("Capture '" name "' not found.", "Error", "16")
@@ -6675,6 +6737,7 @@ CC_EditCapture(name) {
     currentBody := cap.Has("body") ? cap["body"] : ""
 
     editGui := Gui("+AlwaysOnTop +Resize", "✏️ Edit: " name)
+    prevEditGui := editGui  ; Store reference for cleanup on next call
     editGui.SetFont("s10")
     editGui.BackColor := "F5F5F5"
 
@@ -7772,6 +7835,7 @@ CC_FormatTextToHotstring() {
     cleanText := CC_CleanContent(rawText)
 
     nameGui := Gui("+AlwaysOnTop", "Hotstring Name")
+    CC_SuspendHotstrings()
     nameGui.Add("Text", , "Enter a short name:")
     nameEdit := nameGui.Add("Edit", "w300")
     nameGui.Add("Button", "w80 Default", "OK").OnEvent("Click", (*) => nameGui.Submit())
