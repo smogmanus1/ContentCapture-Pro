@@ -2,11 +2,32 @@
 ; ContentCapture Pro - Professional Content Capture & Sharing System
 ; ==============================================================================
 ; Author:      Brad
-; Version:     6.3.0 (AHK v2) - STABLE RELEASE
-; Updated:     2026-02-01
+; Version:     6.3.1 (AHK v2) - STABLE RELEASE
+; Updated:     2026-02-08
 ; License:     MIT
 ;
-; CHANGELOG v6.2.1:
+; CHANGELOG v6.3.1:
+;   - CRITICAL FIX: Hotstring suspension was never resumed after GUI close/save
+;     * Suspend(true) was called when GUIs opened, but Suspend(false) was never
+;       called when GUIs closed, permanently disabling ALL hotstrings/hotkeys
+;     * This affected the entire AHK process, including personal .ahk scripts
+;   - FIXED: 7 of 9 GUI functions had missing CC_ResumeHotstrings() calls:
+;     * CC_AISetup - no Close/Escape handler, Save path didn't resume
+;     * CC_AISelectCapture - no Close/Escape handler, action didn't resume
+;     * CC_ShowReadWindow - Close/Escape/buttons just called Destroy()
+;     * CC_ManualCapture - Close/Escape/Cancel just called Destroy()
+;     * CC_OpenCaptureBrowser - Close/Escape/Close button just called Destroy()
+;     * CC_EditCapture - Close/Escape just called Destroy(), Save didn't resume
+;     * CC_FormatTextToHotstring - Cancel just called Destroy(), no Close/Escape
+;   - FIXED: CC_SaveEditedCapture didn't resume before Reload()
+;   - FIXED: CC_AddCapture didn't resume before Reload()
+;   - FIXED: Early returns after CC_SuspendHotstrings() didn't resume
+;   - FIXED: Edit GUI Share/Email buttons didn't resume before action
+;   - FIXED: Read Window Edit button didn't resume before opening edit
+;   - FIXED: DynamicSuffixHandler.Initialize() early-return guard skipped
+;     updating capture data references when already enabled
+;
+; CHANGELOG v6.3.0:
 ;   - NEW: CC_Clipboard.ahk - Centralized clipboard operations module
 ;   - ARCHITECTURE: All clipboard operations now use CC_Clip* functions
 ;   - ARCHITECTURE: Eliminated entire class of "stale clipboard" bugs
@@ -587,7 +608,7 @@ CC_CheckAutoBackup()
 CC_SetupTrayMenu()
 
 ; Show startup notification
-CC_Notify("ContentCapture Pro v6.3.0 loaded!`n" CaptureNames.Length " captures available.`nType 'namesum' to summarize any capture!")
+CC_Notify("ContentCapture Pro v6.3.1 loaded!`n" CaptureNames.Length " captures available.`nType 'namesum' to summarize any capture!")
 
 ; Check if we should open browser after reload (flag file from edit save)
 openBrowserFlag := BaseDir "\open_browser.flag"
@@ -1036,6 +1057,9 @@ CC_AISetup() {
     testBtn := setupGui.Add("Button", "x20 y400 w80 h35", "🧪 Test")
     testBtn.OnEvent("Click", (*) => CC_AITest(setupGui))
     
+    setupGui.OnEvent("Close", (*) => CC_GuiCleanup(setupGui))
+    setupGui.OnEvent("Escape", (*) => CC_GuiCleanup(setupGui))
+    
     setupGui.Show("w460 h460")
 }
 
@@ -1043,6 +1067,7 @@ CC_AISaveSettings(setupGui) {
     global AIEnabled, AIProvider, AIApiKey, AIModel, AIOllamaURL, ConfigFile
     
     saved := setupGui.Submit()
+    CC_ResumeHotstrings()  ; Resume after Submit() destroys GUI
     
     AIEnabled := saved.AIEnabled
     AIApiKey := saved.AIApiKey
@@ -1126,6 +1151,9 @@ CC_AISelectCapture() {
     selectGui.Add("Button", "x130 y440 w100 h30", "✉️ Email").OnEvent("Click", (*) => CC_AIOnSelected(selectGui, captureList, "email"))
     selectGui.Add("Button", "x240 y440 w100 h30", "🎯 Polish").OnEvent("Click", (*) => CC_AIOnSelected(selectGui, captureList, "professional"))
     
+    selectGui.OnEvent("Close", (*) => CC_GuiCleanup(selectGui))
+    selectGui.OnEvent("Escape", (*) => CC_GuiCleanup(selectGui))
+    
     selectGui.Show("w390 h490")
 }
 
@@ -1159,6 +1187,7 @@ CC_AIOnSelected(selectGui, captureList, action) {
     else
         return
     
+    CC_ResumeHotstrings()
     selectGui.Destroy()
     CC_AIAction(action, name)
 }
@@ -2548,8 +2577,10 @@ CC_ShowReadWindow(name, *) {
     global CaptureData
     CC_SuspendHotstrings()
 
-    if !CaptureData.Has(StrLower(name))
+    if !CaptureData.Has(StrLower(name)) {
+        CC_ResumeHotstrings()
         return
+    }
 
     cap := CaptureData[StrLower(name)]
 
@@ -2618,8 +2649,8 @@ CC_ShowReadWindow(name, *) {
     readGui.SetFont("s10")
     readGui.Add("Button", "x20 y" yPos " w80", "Copy All").OnEvent("Click", (*) => CC_CopyReadContent(name))
     readGui.Add("Button", "x105 y" yPos " w80", "Open URL").OnEvent("Click", (*) => (url != "") ? Run(url) : "")
-    readGui.Add("Button", "x190 y" yPos " w80", "✏️ Edit").OnEvent("Click", (*) => (readGui.Destroy(), CC_EditCapture(name)))
-    readGui.Add("Button", "x580 y" yPos " w100", "Close").OnEvent("Click", (*) => readGui.Destroy())
+    readGui.Add("Button", "x190 y" yPos " w80", "✏️ Edit").OnEvent("Click", (*) => (CC_GuiCleanup(readGui), CC_EditCapture(name)))
+    readGui.Add("Button", "x580 y" yPos " w100", "Close").OnEvent("Click", (*) => CC_GuiCleanup(readGui))
 
     winHeight := yPos + 55
     if (winHeight < 400)
@@ -2627,8 +2658,8 @@ CC_ShowReadWindow(name, *) {
     if (winHeight > 700)
         winHeight := 700
 
-    readGui.OnEvent("Close", (*) => readGui.Destroy())
-    readGui.OnEvent("Escape", (*) => readGui.Destroy())
+    readGui.OnEvent("Close", (*) => CC_GuiCleanup(readGui))
+    readGui.OnEvent("Escape", (*) => CC_GuiCleanup(readGui))
 
     readGui.Show("w700 h" winHeight)
 }
@@ -3204,6 +3235,7 @@ CC_AddCapture(name, url, title, date, tags, note, opinion, body, short := "", re
     Sleep(500)
     ; Create flag to reopen browser after reload
     try FileAppend("1", BaseDir "\open_browser.flag")
+    CC_ResumeHotstrings()  ; Resume before reload to prevent permanent suspension
     Reload()
 }
 
@@ -3608,7 +3640,7 @@ CC_ShowMainMenu() {
     menuGui.BackColor := "1a1a2e"
 
     menuGui.SetFont("s14 bold cWhite")
-    menuGui.Add("Text", "x20 y15 w360 Center", "📚 ContentCapture Pro v6.3.0")
+    menuGui.Add("Text", "x20 y15 w360 Center", "📚 ContentCapture Pro v6.3.1")
 
     menuGui.SetFont("s10 norm c888888")
     favCount := IsSet(Favorites) ? Favorites.Length : 0
@@ -3948,9 +3980,9 @@ CC_ManualCapture() {
     manualGui.Add("Text", "x250 y" btnY " cGray", "After saving, type the name + suffix:`n  name = paste,  namesh = short,  namego = open URL")
     
     saveBtn.OnEvent("Click", (*) => CC_SaveManualCapture(manualGui, nameEdit, urlEdit, titleEdit, bodyEdit, noteEdit, opinionEdit, researchEdit, shortEdit, tagCheckboxes))
-    cancelBtn.OnEvent("Click", (*) => manualGui.Destroy())
-    manualGui.OnEvent("Close", (*) => manualGui.Destroy())
-    manualGui.OnEvent("Escape", (*) => manualGui.Destroy())
+    cancelBtn.OnEvent("Click", (*) => CC_GuiCleanup(manualGui))
+    manualGui.OnEvent("Close", (*) => CC_GuiCleanup(manualGui))
+    manualGui.OnEvent("Escape", (*) => CC_GuiCleanup(manualGui))
     
     guiHeight := btnY + 70
     manualGui.Show("w590 h" guiHeight)
@@ -4072,7 +4104,7 @@ CC_SaveManualCapture(manualGui, nameEdit, urlEdit, titleEdit, bodyEdit, noteEdit
     timestamp := FormatTime(, "yyyy-MM-dd HH:mm:ss")
     CC_AddCapture(name, url, title, timestamp, tags, note, opinion, body, short, research)
     
-    manualGui.Destroy()
+    CC_GuiCleanup(manualGui)
     
     ; Show success with hotstring info
     msg := "✅ Saved '" name "'`n`n"
@@ -4207,6 +4239,7 @@ CC_OpenCaptureBrowser() {
     
     if (CaptureNames.Length = 0) {
         MsgBox("No captures yet.`n`nUse Ctrl+Alt+G to capture content.", "Capture Browser", "48")
+        CC_ResumeHotstrings()
         return
     }
 
@@ -4268,7 +4301,7 @@ CC_OpenCaptureBrowser() {
     browserGui.Add("Button", "x480 y405 w50", "📷 Img").OnEvent("Click", (*) => CC_BrowserAttachImage(listView, browserGui))
     browserGui.Add("Button", "x535 y405 w70", "🔬 Research").OnEvent("Click", (*) => ResearchTools.ShowResearchMenu(browserGui, listView))
     browserGui.Add("Button", "x610 y405 w30", "❓").OnEvent("Click", (*) => CC_ShowHelp())
-    browserGui.Add("Button", "x645 y405 w65", "Close").OnEvent("Click", (*) => browserGui.Destroy())
+    browserGui.Add("Button", "x645 y405 w65", "Close").OnEvent("Click", (*) => CC_GuiCleanup(browserGui))
 
     ; Button row 2 - New utility buttons
     browserGui.Add("Button", "x10 y440 w55", "➕ New").OnEvent("Click", (*) => CC_BrowserNewCapture(browserGui))
@@ -4280,8 +4313,8 @@ CC_OpenCaptureBrowser() {
 
     browserGui.statusText := browserGui.Add("Text", "x10 y478 w680", "Showing " CaptureNames.Length " captures | Enter=Paste | Del=Delete | Ctrl+S=Share | Ctrl+I=Import | F1=Help")
 
-    browserGui.OnEvent("Close", (*) => browserGui.Destroy())
-    browserGui.OnEvent("Escape", (*) => browserGui.Destroy())
+    browserGui.OnEvent("Close", (*) => CC_GuiCleanup(browserGui))
+    browserGui.OnEvent("Escape", (*) => CC_GuiCleanup(browserGui))
     
     ; Store listView reference for keyboard handling
     browserGui.listView := listView
@@ -4804,7 +4837,7 @@ CC_DoDuplicate(dupGui, sourceName, browserGui) {
     ; Refresh browser if it's open
     if (browserGui != "") {
         try {
-            browserGui.Destroy()
+            CC_GuiCleanup(browserGui)
             SetTimer(CC_RefreshBrowser, -100)
         }
     }
@@ -4944,7 +4977,7 @@ CC_BrowserDeleteCapture(listView, browserGui) {
     CC_SaveCaptureData()
     CC_GenerateHotstringFile()
 
-    browserGui.Destroy()
+    CC_GuiCleanup(browserGui)
     CC_OpenCaptureBrowser()
 
     if (selectedNames.Length = 1)
@@ -6715,7 +6748,10 @@ CC_EditCapture(name) {
     
     ; Destroy any previous Edit GUI instance to prevent duplicate control errors
     if IsObject(prevEditGui) {
-        try prevEditGui.Destroy()
+        try {
+            CC_ResumeHotstrings()  ; Balance the suspend from the previous edit GUI
+            prevEditGui.Destroy()
+        }
         prevEditGui := ""
     }
     
@@ -6723,6 +6759,7 @@ CC_EditCapture(name) {
 
     if !CaptureData.Has(StrLower(name)) {
         MsgBox("Capture '" name "' not found.", "Error", "16")
+        CC_ResumeHotstrings()  ; Resume since we're not showing a GUI
         return
     }
 
@@ -6856,7 +6893,7 @@ CC_EditCapture(name) {
     saveBtn.OnEvent("Click", (*) => CC_SaveEditedCapture(editGui, name))
 
     cancelBtn := editGui.Add("Button", "x120 y715 w80 h35", "Cancel")
-    cancelBtn.OnEvent("Click", (*) => editGui.Destroy())
+    cancelBtn.OnEvent("Click", (*) => (prevEditGui := "", CC_GuiCleanup(editGui)))
 
     ; Print button
     printBtn := editGui.Add("Button", "x205 y715 w80 h35", "🖨️ Print")
@@ -6864,13 +6901,13 @@ CC_EditCapture(name) {
 
     ; Share buttons
     shareBtn := editGui.Add("Button", "x450 y715 w120 h35", "📤 Share")
-    shareBtn.OnEvent("Click", (*) => (editGui.Destroy(), SS_ShareCapture(name)))
+    shareBtn.OnEvent("Click", (*) => (CC_GuiCleanup(editGui), SS_ShareCapture(name)))
     
     emailBtn := editGui.Add("Button", "x580 y715 w110 h35", "📧 Email")
-    emailBtn.OnEvent("Click", (*) => (editGui.Destroy(), SS_EmailCapture(name)))
+    emailBtn.OnEvent("Click", (*) => (CC_GuiCleanup(editGui), SS_EmailCapture(name)))
 
-    editGui.OnEvent("Close", (*) => editGui.Destroy())
-    editGui.OnEvent("Escape", (*) => editGui.Destroy())
+    editGui.OnEvent("Close", (*) => (prevEditGui := "", CC_GuiCleanup(editGui)))
+    editGui.OnEvent("Escape", (*) => (prevEditGui := "", CC_GuiCleanup(editGui)))
 
     editGui.Show("w700 h765")
 }
@@ -6941,6 +6978,7 @@ CC_SaveEditedCapture(editGui, originalName) {
             }
             
             editGui.Destroy()
+            CC_ResumeHotstrings()  ; Resume before reload to prevent permanent suspension
             CC_Notify("Renamed '" originalName "' → '" newName "' - Reloading...")
             Sleep(500)
             ; Create flag to reopen browser after reload
@@ -6960,6 +6998,7 @@ CC_SaveEditedCapture(editGui, originalName) {
             }
             
             editGui.Destroy()
+            CC_ResumeHotstrings()  ; Resume before reload to prevent permanent suspension
             CC_Notify("Capture '" newName "' saved - Reloading...")
             Sleep(500)
             ; Create flag to reopen browser after reload
@@ -7839,9 +7878,12 @@ CC_FormatTextToHotstring() {
     nameGui.Add("Text", , "Enter a short name:")
     nameEdit := nameGui.Add("Edit", "w300")
     nameGui.Add("Button", "w80 Default", "OK").OnEvent("Click", (*) => nameGui.Submit())
-    nameGui.Add("Button", "x+10 w80", "Cancel").OnEvent("Click", (*) => nameGui.Destroy())
+    nameGui.Add("Button", "x+10 w80", "Cancel").OnEvent("Click", (*) => CC_GuiCleanup(nameGui))
+    nameGui.OnEvent("Close", (*) => CC_GuiCleanup(nameGui))
+    nameGui.OnEvent("Escape", (*) => CC_GuiCleanup(nameGui))
     nameGui.Show()
     WinWaitClose(nameGui.Hwnd)
+    CC_ResumeHotstrings()  ; Resume after GUI closes (safe to call even if already resumed by Cancel/Escape)
 
     name := ""
     try name := RegExReplace(nameEdit.Value, "[\r\n\t\s]+", "")

@@ -3,9 +3,20 @@
 ; ==============================================================================
 ; DynamicSuffixHandler.ahk - Dynamic Suffix Detection for ContentCapture Pro
 ; ==============================================================================
-; Version:     2.3
+; Version:     2.5
 ; Author:      Brad (with Claude AI assistance)
 ; License:     MIT
+;
+; CHANGELOG v2.5:
+;   - FIXED: ActionSocial ignored the "short" field entirely - x/bs/mt suffixes
+;     always built content from opinion+title+url instead of using the short version
+;     that was specifically designed for character-limited platforms
+;   - Short version is now used as primary content for social sharing when available
+;   - URL is automatically appended if not already present and fits within limit
+;
+; CHANGELOG v2.4:
+;   - FIXED: Initialize() early-return guard skipped updating captureDataRef/captureNamesRef
+;     when already enabled, so re-initialization after edit/save used stale data
 ;
 ; CHANGELOG v2.3:
 ;   - FIXED: DSH_SafePaste was calling itself (infinite recursion) - now correctly calls CC_SafePaste
@@ -121,14 +132,14 @@ class DynamicSuffixHandler {
     
     ; ==== INITIALIZATION ====
     static Initialize(captureDataMap := "", captureNamesArray := "") {
-        if (this.isEnabled)
-            return true
-        
-        ; Store references
+        ; Always update data references, even if already running
         if (captureDataMap != "")
             this.captureDataRef := captureDataMap
         if (captureNamesArray != "")
             this.captureNamesRef := captureNamesArray
+        
+        if (this.isEnabled)
+            return true
         
         ; Create InputHook to monitor typing
         this.inputHook := InputHook("V I1")
@@ -492,15 +503,6 @@ class DynamicSuffixHandler {
     static ActionSocial(captureName, platform) {
         cap := this.captureDataRef[captureName]
         
-        ; Build social content (opinion + URL typically)
-        content := ""
-        if cap.Has("opinion")
-            content .= cap["opinion"] "`n`n"
-        if cap.Has("title")
-            content .= cap["title"] "`n"
-        if cap.Has("url")
-            content .= cap["url"]
-        
         ; Get character limit
         limits := Map(
             "facebook", 63206,
@@ -510,6 +512,28 @@ class DynamicSuffixHandler {
             "mastodon", 500
         )
         limit := limits.Has(platform) ? limits[platform] : 500
+        
+        ; Use short version if available (designed for character-limited platforms)
+        if (cap.Has("short") && cap["short"] != "") {
+            content := cap["short"]
+            ; Append URL if not already in short text and there's room
+            if (cap.Has("url") && cap["url"] != "" && !InStr(content, cap["url"])) {
+                withUrl := content "`n" cap["url"]
+                if (StrLen(withUrl) <= limit)
+                    content := withUrl
+            }
+        } else {
+            ; Fallback: build from opinion + title + URL
+            content := ""
+            if (cap.Has("opinion") && cap["opinion"] != "")
+                content .= cap["opinion"] "`n`n"
+            if (cap.Has("title") && cap["title"] != "")
+                content .= cap["title"] "`n"
+            if (cap.Has("url") && cap["url"] != "")
+                content .= cap["url"]
+        }
+        
+        content := Trim(content)
         
         ; Check length and either paste or show edit window
         if (StrLen(content) <= limit) {
