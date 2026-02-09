@@ -3,9 +3,20 @@
 ; ==============================================================================
 ; DynamicSuffixHandler.ahk - Dynamic Suffix Detection for ContentCapture Pro
 ; ==============================================================================
-; Version:     2.5
+; Version:     2.6
 ; Author:      Brad (with Claude AI assistance)
 ; License:     MIT
+;
+; CHANGELOG v2.6:
+;   - CRITICAL FIX: Removed all suffix entries that overlap with static hotstrings
+;     in ContentCapture_Generated.ahk. Both systems were firing on the same input,
+;     causing double backspaces, clipboard corruption, and script death.
+;   - DSH now ONLY handles suffixes that have NO static hotstring equivalent
+;   - Static hotstrings (Generated file) handle: base, ?, t, url, body, cp, i, ti,
+;     sh, em, go, rd, vi, d., ed, pr, oi, fb, x, bs, li, mt
+;   - DSH handles ONLY: u, fbi, xi, bsi, lii, mti, img, imgo, sum, yt, pp, fc,
+;     mb, wb, gs, av
+;   - FIXED: ShowSocialEditWindow now properly suspends/resumes hotstrings
 ;
 ; CHANGELOG v2.5:
 ;   - FIXED: ActionSocial ignored the "short" field entirely - x/bs/mt suffixes
@@ -41,24 +52,17 @@
 ; Monitors typing and intercepts suffix patterns dynamically instead of
 ; generating thousands of separate hotstring entries.
 ;
-; Supported Suffixes (type scriptnameSUFFIX then space/enter):
-;   u   → Paste URL only (NEW!)
-;   em  → Email via Outlook
-;   vi  → View/Edit in GUI
-;   go  → Open URL in browser
-;   rd  → Read content in MsgBox
-;   sh  → Paste short version only (for comments/replies)
-;   t   → Paste title only
-;   fb  → Share to Facebook
-;   x   → Share to Twitter/X
-;   bs  → Share to Bluesky
-;   li  → Share to LinkedIn
-;   mt  → Share to Mastodon
-;   sum → Summarize with AI (on-demand)
+; NOTE: Most suffixes are handled by static hotstrings in ContentCapture_Generated.ahk
+; DSH only handles these EXTRA suffixes (type scriptnameSUFFIX then space/enter):
+;   u   → Paste URL only
+;   fbi → Share to Facebook + image
+;   xi  → Share to Twitter/X + image
+;   bsi → Share to Bluesky + image
+;   lii → Share to LinkedIn + image
+;   mti → Share to Mastodon + image
 ;   img → Copy image to clipboard as bitmap
-;   imgo → Open attached image
-;   i   → Paste image path
-;   ti  → Paste title + image path
+;   imgo→ Open attached image
+;   sum → Summarize with AI (on-demand)
 ;   yt  → YouTube Transcript (Research)
 ;   pp  → Perplexity AI (Research)
 ;   fc  → Fact Check - Snopes (Research)
@@ -72,52 +76,35 @@
 
 class DynamicSuffixHandler {
     ; ==== CONFIGURATION ====
+    ; ONLY suffixes that do NOT have static hotstrings in ContentCapture_Generated.ahk
+    ; The Generated file handles: (base), ?, t, url, body, cp, i, ti, sh, em, go, rd, vi, d., ed, pr, oi, fb, x, bs, li, mt
+    ; DSH handles ONLY these extras (no overlap = no double-fire):
     static SUFFIX_MAP := Map(
-        ; Core actions
-        "u",   "url",         ; Paste URL only (NEW!)
-        "em",  "email",       ; Email via Outlook
-        "oi",  "outlookinsert", ; Insert into open Outlook email
-        "vi",  "view",        ; View/Edit in GUI
-        "go",  "openurl",     ; Open URL in browser
-        "rd",  "read",        ; Read in MsgBox
-        "sh",  "short",       ; Paste short version only
-        "t",   "title",       ; Paste title only
-        "cp",  "copy",        ; Copy to clipboard with notification
-        "pr",  "print",       ; Print formatted
+        ; URL only (not in Generated)
+        "u",   "url",
+
+        ; Social media with image (not in Generated)
+        "fbi", "facebookimg",
+        "xi",  "twitterimg",
+        "bsi", "blueskyimg",
+        "lii", "linkedinimg",
+        "mti", "mastodonimg",
         
-        ; Social media (text only)
-        "fb",  "facebook",    ; Share to Facebook
-        "x",   "twitter",     ; Share to Twitter/X
-        "bs",  "bluesky",     ; Share to Bluesky
-        "li",  "linkedin",    ; Share to LinkedIn
-        "mt",  "mastodon",    ; Share to Mastodon
+        ; Image actions (img/imgo not in Generated - note: i and ti ARE in Generated)
+        "img",  "copyimage",
+        "imgo", "openimage",
         
-        ; Social media with image
-        "fbi", "facebookimg", ; Facebook + image
-        "xi",  "twitterimg",  ; Twitter/X + image
-        "bsi", "blueskyimg",  ; Bluesky + image
-        "lii", "linkedinimg", ; LinkedIn + image
-        "mti", "mastodonimg", ; Mastodon + image
+        ; AI actions (not in Generated)
+        "sum", "summarize",
         
-        ; Image actions
-        "i",    "imagepath",  ; Paste image path
-        "img",  "copyimage",  ; Copy image to clipboard as bitmap
-        "imgo", "openimage",  ; Open attached image
-        "ti",   "titleimage", ; Title + image path
-        "d.",   "opendoc",    ; Open attached document
-        "ed",   "emaildoc",   ; Email with document attachment
-        
-        ; AI actions
-        "sum", "summarize",   ; AI summarize on-demand
-        
-        ; Research tools
-        "yt",  "transcript",  ; YouTube Transcript
-        "pp",  "perplexity",  ; Perplexity AI
-        "fc",  "factcheck",   ; Snopes fact check
-        "mb",  "mediabias",   ; Media Bias/Fact Check
-        "wb",  "wayback",     ; Wayback Machine
-        "gs",  "scholar",     ; Google Scholar
-        "av",  "archive"      ; Archive.today
+        ; Research tools (not in Generated)
+        "yt",  "transcript",
+        "pp",  "perplexity",
+        "fc",  "factcheck",
+        "mb",  "mediabias",
+        "wb",  "wayback",
+        "gs",  "scholar",
+        "av",  "archive"
     )
     
     ; Internal state
@@ -272,7 +259,11 @@ class DynamicSuffixHandler {
             case "outlookinsert":
                 this.ActionOutlookInsert(captureName)
             case "view":
-                this.ActionView(captureName)
+                ; Call the full Edit GUI (same as old static hotstring behavior)
+                if IsSet(CC_EditCapture)
+                    CC_EditCapture(captureName)
+                else
+                    this.ActionView(captureName)  ; Fallback to MsgBox if standalone
             case "openurl":
                 this.ActionOpenURL(captureName)
             case "read":
@@ -562,6 +553,10 @@ class DynamicSuffixHandler {
         editGui := Gui("+Resize", platform " Share - " captureName)
         editGui.SetFont("s10", "Segoe UI")
         
+        ; Suspend hotstrings while this edit window is open
+        if IsSet(CC_SuspendHotstrings)
+            CC_SuspendHotstrings()
+        
         editGui.Add("Text",, "Content exceeds " limit " characters. Edit below:")
         editBox := editGui.Add("Edit", "w500 h300 vContent", content)
         
@@ -571,9 +566,15 @@ class DynamicSuffixHandler {
         editBox.OnEvent("Change", (*) => charCount.Value := "Characters: " StrLen(editBox.Value) " / " limit)
         
         btnRow := editGui.Add("Button", "w100", "Paste")
-        btnRow.OnEvent("Click", (*) => (DSH_SafePaste(editBox.Value), editGui.Destroy()))
+        btnRow.OnEvent("Click", (*) => (DSH_SafePaste(editBox.Value), IsSet(CC_GuiCleanup) ? CC_GuiCleanup(editGui) : editGui.Destroy()))
         
-        editGui.Add("Button", "x+10 w100", "Cancel").OnEvent("Click", (*) => editGui.Destroy())
+        editGui.Add("Button", "x+10 w100", "Cancel").OnEvent("Click", (*) => IsSet(CC_GuiCleanup) ? CC_GuiCleanup(editGui) : editGui.Destroy())
+        
+        ; Resume hotstrings on close/escape
+        if IsSet(CC_GuiCleanup) {
+            editGui.OnEvent("Close", (*) => CC_GuiCleanup(editGui))
+            editGui.OnEvent("Escape", (*) => CC_GuiCleanup(editGui))
+        }
         
         editGui.Show()
     }

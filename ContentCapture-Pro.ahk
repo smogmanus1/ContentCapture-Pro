@@ -2,9 +2,28 @@
 ; ContentCapture Pro - Professional Content Capture & Sharing System
 ; ==============================================================================
 ; Author:      Brad
-; Version:     6.3.1 (AHK v2) - STABLE RELEASE
+; Version:     6.3.2 (AHK v2) - STABLE RELEASE
 ; Updated:     2026-02-08
 ; License:     MIT
+;
+; CHANGELOG v6.3.2:
+;   - CRITICAL FIX: Replaced Suspend(true/false) with targeted DSH InputHook pause
+;     * Suspend() is NUCLEAR — it kills ALL hotstrings and hotkeys in the entire
+;       AHK process, including personal shortcuts and reload hotkey
+;     * When Capture Browser opened → Suspend(true) → everything died
+;     * Even Ctrl+Alt+Shift+L couldn't reload because it was also suspended
+;     * NEW: CC_SuspendHotstrings() now only pauses DynamicSuffixHandler's InputHook
+;     * Static hotstrings remain active (AHK's built-in engine handles them fine)
+;     * Personal hotkeys/hotstrings ALWAYS work, even with CC GUIs open
+;   - CRITICAL FIX: Generated hotstrings now check CC_HotstringSuspended flag
+;     * Prevents accidental hotstring firing while typing in CC GUI edit fields
+;     * Hotstring "fires" but does nothing — no paste, no clipboard mess
+;   - CRITICAL FIX: Suspend count imbalance after edit-save-reload
+;     * Edit GUI no longer auto-reopens after save-reload (Browser suffices)
+;   - ADDED: Global OnError handler — crashes now show MsgBox instead of silent death
+;   - FIXED: DynamicSuffixHandler overlap with static hotstrings removed
+;     * DSH SUFFIX_MAP now only contains suffixes NOT in Generated file
+;     * Eliminates double-fire (both systems processing same input)
 ;
 ; CHANGELOG v6.3.1:
 ;   - CRITICAL FIX: Hotstring suspension was never resumed after GUI close/save
@@ -475,12 +494,49 @@ GetContentCaptureDir() {
 ContentCaptureDir := GetContentCaptureDir()
 
 ; ==============================================================================
-; GUI HOTSTRING SUSPEND/RESUME (Keyboard Lockup Fix)
+; GLOBAL ERROR HANDLER - Catch crashes instead of silent death
 ; ==============================================================================
-; With 7,000+ hotstrings active, opening a GUI with an Edit control causes
-; every keystroke to be processed by both the GUI and the hotstring engine,
-; leading to keyboard lockup and beeping. These functions suspend hotstring
-; recognition while CC GUIs are open and resume when they close.
+OnError(CC_GlobalErrorHandler)
+
+CC_GlobalErrorHandler(err, mode) {
+    try {
+        errorMsg := "ContentCapture Pro Error:`n`n"
+        errorMsg .= "Message: " err.Message "`n"
+        errorMsg .= "What: " err.What "`n"
+        errorMsg .= "File: " err.File "`n"
+        errorMsg .= "Line: " err.Line "`n"
+        if err.HasProp("Extra") && err.Extra != ""
+            errorMsg .= "Extra: " err.Extra "`n"
+        errorMsg .= "`nThe script will continue running."
+        
+        MsgBox(errorMsg, "ContentCapture Pro - Error Caught", "16")
+    }
+    return -1  ; Continue execution (don't exit)
+}
+
+; ==============================================================================
+; GUI HOTSTRING MANAGEMENT (Keyboard Conflict Prevention)
+; ==============================================================================
+; ARCHITECTURE DECISION (v6.3.2):
+;   Previous versions used Suspend(true/false) to prevent keyboard conflicts
+;   when GUIs with Edit controls were open. BUT Suspend() is NUCLEAR — it
+;   disables ALL hotstrings and hotkeys in the ENTIRE AHK process, including:
+;     - User's personal hotkeys (Ctrl+Alt+Shift+L reload, etc.)
+;     - User's personal hotstrings (dictionary, snippets, etc.)
+;     - Other included scripts' hotkeys
+;   This caused the "script appears dead" bug — it wasn't crashing, it was
+;   suspended and couldn't be un-suspended because even the reload hotkey was dead.
+;
+;   NEW APPROACH: Only pause the DynamicSuffixHandler's InputHook while GUIs
+;   with Edit controls are open. Static hotstrings use AHK's efficient internal
+;   matching engine and don't cause keyboard lockup. The InputHook is the only
+;   thing that needs to be paused.
+;
+;   This means:
+;     - Personal hotkeys ALWAYS work (even with CC GUIs open)
+;     - Static hotstrings stay active (AHK handles them efficiently)
+;     - Only DSH's extra suffixes are paused during GUI editing
+;     - No more "script is dead" symptoms
 ; ==============================================================================
 
 global CC_HotstringSuspended := false
@@ -490,16 +546,18 @@ CC_SuspendHotstrings() {
     global CC_HotstringSuspended, CC_SuspendedGuiCount
     CC_SuspendedGuiCount++
     if (!CC_HotstringSuspended) {
-        Suspend(true)
+        ; ONLY pause the DSH InputHook — do NOT call Suspend(true)
+        try DynamicSuffixHandler.Stop()
         CC_HotstringSuspended := true
     }
 }
 
 CC_ResumeHotstrings() {
-    global CC_HotstringSuspended, CC_SuspendedGuiCount
+    global CC_HotstringSuspended, CC_SuspendedGuiCount, CaptureData, CaptureNames
     CC_SuspendedGuiCount := Max(CC_SuspendedGuiCount - 1, 0)
     if (CC_HotstringSuspended && CC_SuspendedGuiCount = 0) {
-        Suspend(false)
+        ; Restart the DSH InputHook — do NOT call Suspend(false)
+        try DynamicSuffixHandler.Initialize(CaptureData, CaptureNames)
         CC_HotstringSuspended := false
     }
 }
@@ -608,7 +666,7 @@ CC_CheckAutoBackup()
 CC_SetupTrayMenu()
 
 ; Show startup notification
-CC_Notify("ContentCapture Pro v6.3.1 loaded!`n" CaptureNames.Length " captures available.`nType 'namesum' to summarize any capture!")
+CC_Notify("ContentCapture Pro v6.3.2 loaded!`n" CaptureNames.Length " captures available.`nType 'namesum' to summarize any capture!")
 
 ; Check if we should open browser after reload (flag file from edit save)
 openBrowserFlag := BaseDir "\open_browser.flag"
@@ -618,14 +676,14 @@ if FileExist(openBrowserFlag) {
 }
 
 ; Check if we should reopen a capture after reload (flag file from edit save)
+; NOTE: We intentionally do NOT auto-reopen the Edit GUI after save-reload.
+; Opening both Browser + Edit GUI causes a suspend count imbalance (count=2)
+; that leaves hotstrings permanently suspended when user closes only the Edit GUI.
+; The Browser alone is sufficient - user can click Edit from there if needed.
 CC_LastEditedFile := BaseDir "\last_edited.tmp"
 if FileExist(CC_LastEditedFile) {
     try {
-        lastEditedName := Trim(FileRead(CC_LastEditedFile, "UTF-8"))
         FileDelete(CC_LastEditedFile)
-        if (lastEditedName != "" && CaptureData.Has(StrLower(lastEditedName))) {
-            SetTimer(() => CC_EditCapture(lastEditedName), -600)
-        }
     }
 }
 
@@ -1715,45 +1773,49 @@ CC_GenerateHotstringFile() {
             continue
         }
         
+        ; Guard prefix: every hotstring checks if CC GUI is open before firing
+        ; This prevents accidental hotstring triggers while typing in CC edit fields
+        g := "    if CC_HotstringSuspended`n        return`n"
+        
         ; Base hotstring - paste content
-        content .= "::" name "::{`n    CC_HotstringPaste(`"" name "`")`n}`n"
+        content .= "::" name "::{`n" g "    CC_HotstringPaste(`"" name "`")`n}`n"
         
         ; Action menu
-        content .= "::" name "?::{`n    CC_ShowActionMenu(`"" name "`")`n}`n"
+        content .= "::" name "?::{`n" g "    CC_ShowActionMenu(`"" name "`")`n}`n"
         
-        ; NEW v6.0 Core content suffixes
-        content .= "::" name "t::{`n    CC_HotstringTitle(`"" name "`")`n}`n"
-        content .= "::" name "url::{`n    CC_HotstringURL(`"" name "`")`n}`n"
-        content .= "::" name "body::{`n    CC_HotstringBody(`"" name "`")`n}`n"
-        content .= "::" name "cp::{`n    CC_HotstringCopyOnly(`"" name "`")`n}`n"
+        ; Core content suffixes
+        content .= "::" name "t::{`n" g "    CC_HotstringTitle(`"" name "`")`n}`n"
+        content .= "::" name "url::{`n" g "    CC_HotstringURL(`"" name "`")`n}`n"
+        content .= "::" name "body::{`n" g "    CC_HotstringBody(`"" name "`")`n}`n"
+        content .= "::" name "cp::{`n" g "    CC_HotstringCopyOnly(`"" name "`")`n}`n"
         
-        ; NEW v6.0 Image suffixes
-        content .= "::" name "i::{`n    CC_HotstringImagePath(`"" name "`")`n}`n"
-        content .= "::" name "ti::{`n    CC_HotstringTitleImage(`"" name "`")`n}`n"
+        ; Image suffixes
+        content .= "::" name "i::{`n" g "    CC_HotstringImagePath(`"" name "`")`n}`n"
+        content .= "::" name "ti::{`n" g "    CC_HotstringTitleImage(`"" name "`")`n}`n"
         
-        ; Existing suffixes
-        content .= "::" name "sh::{`n    CC_HotstringShort(`"" name "`")`n}`n"
-        content .= "::" name "em::{`n    CC_HotstringEmail(`"" name "`")`n}`n"
-        content .= "::" name "go::{`n    CC_HotstringGo(`"" name "`")`n}`n"
-        content .= "::" name "rd::{`n    CC_ShowReadWindow(`"" name "`")`n}`n"
-        content .= "::" name "vi::{`n    CC_EditCapture(`"" name "`")`n}`n"
+        ; Standard suffixes
+        content .= "::" name "sh::{`n" g "    CC_HotstringShort(`"" name "`")`n}`n"
+        content .= "::" name "em::{`n" g "    CC_HotstringEmail(`"" name "`")`n}`n"
+        content .= "::" name "go::{`n" g "    CC_HotstringGo(`"" name "`")`n}`n"
+        content .= "::" name "rd::{`n" g "    CC_ShowReadWindow(`"" name "`")`n}`n"
+        content .= "::" name "vi::{`n" g "    CC_EditCapture(`"" name "`")`n}`n"
         
         ; Document suffixes
-        content .= "::" name "d.::{`n    CC_OpenDocument(`"" name "`")`n}`n"
-        content .= "::" name "ed::{`n    CC_EmailWithDocument(`"" name "`")`n}`n"
+        content .= "::" name "d.::{`n" g "    CC_OpenDocument(`"" name "`")`n}`n"
+        content .= "::" name "ed::{`n" g "    CC_EmailWithDocument(`"" name "`")`n}`n"
         
         ; Print suffix
-        content .= "::" name "pr::{`n    CC_PrintCapture(`"" name "`")`n}`n"
+        content .= "::" name "pr::{`n" g "    CC_PrintCapture(`"" name "`")`n}`n"
         
-        ; Outlook Insert suffix (insert at cursor in open email)
-        content .= "::" name "oi::{`n    CC_HotstringOutlookInsert(`"" name "`")`n}`n"
+        ; Outlook Insert suffix
+        content .= "::" name "oi::{`n" g "    CC_HotstringOutlookInsert(`"" name "`")`n}`n"
         
         ; Social media suffixes
-        content .= "::" name "fb::{`n    CC_HotstringFacebook(`"" name "`")`n}`n"
-        content .= "::" name "x::{`n    CC_HotstringTwitter(`"" name "`")`n}`n"
-        content .= "::" name "bs::{`n    CC_HotstringBluesky(`"" name "`")`n}`n"
-        content .= "::" name "li::{`n    CC_HotstringLinkedIn(`"" name "`")`n}`n"
-        content .= "::" name "mt::{`n    CC_HotstringMastodon(`"" name "`")`n}`n"
+        content .= "::" name "fb::{`n" g "    CC_HotstringFacebook(`"" name "`")`n}`n"
+        content .= "::" name "x::{`n" g "    CC_HotstringTwitter(`"" name "`")`n}`n"
+        content .= "::" name "bs::{`n" g "    CC_HotstringBluesky(`"" name "`")`n}`n"
+        content .= "::" name "li::{`n" g "    CC_HotstringLinkedIn(`"" name "`")`n}`n"
+        content .= "::" name "mt::{`n" g "    CC_HotstringMastodon(`"" name "`")`n}`n"
     }
     
     ; Write file
