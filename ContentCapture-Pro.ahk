@@ -15,9 +15,10 @@
 ;     * NEW: CC_SuspendHotstrings() now only pauses DynamicSuffixHandler's InputHook
 ;     * Static hotstrings remain active (AHK's built-in engine handles them fine)
 ;     * Personal hotkeys/hotstrings ALWAYS work, even with CC GUIs open
-;   - CRITICAL FIX: Generated hotstrings now check CC_HotstringSuspended flag
-;     * Prevents accidental hotstring firing while typing in CC GUI edit fields
-;     * Hotstring "fires" but does nothing — no paste, no clipboard mess
+;   - CRITICAL FIX: Generated hotstrings use #HotIf for context-sensitive firing
+;     * Hotstrings work in Facebook, Notepad, etc. even with CC Browser open
+;     * Hotstrings suppressed ONLY when a CC GUI is the active window
+;     * CC_IsActiveWindowCCGui() checks active window title for CC GUI patterns
 ;   - CRITICAL FIX: Suspend count imbalance after edit-save-reload
 ;     * Edit GUI no longer auto-reopens after save-reload (Browser suffices)
 ;   - ADDED: Global OnError handler — crashes now show MsgBox instead of silent death
@@ -565,6 +566,31 @@ CC_ResumeHotstrings() {
 CC_GuiCleanup(guiObj) {
     CC_ResumeHotstrings()
     guiObj.Destroy()
+}
+
+; Check if the currently active window is a ContentCapture GUI
+; Used by #HotIf to suppress hotstrings only when typing IN a CC GUI
+CC_IsActiveWindowCCGui() {
+    global CC_HotstringSuspended
+    if (!CC_HotstringSuspended)
+        return false  ; No CC GUIs open, hotstrings should fire
+    ; Check if active window title matches any CC GUI
+    try {
+        activeTitle := WinGetTitle("A")
+        if InStr(activeTitle, "Capture Browser")
+            return true
+        if InStr(activeTitle, "Edit:")
+            return true
+        if InStr(activeTitle, "Manual Capture")
+            return true
+        if InStr(activeTitle, "Quick Search")
+            return true
+        if InStr(activeTitle, "Action Menu")
+            return true
+        if InStr(activeTitle, "ContentCapture")
+            return true
+    }
+    return false  ; Active window is NOT a CC GUI, hotstrings should fire
 }
 
 ; Hook into any GUI that calls CC_SuspendHotstrings - auto-resume on close
@@ -1773,49 +1799,49 @@ CC_GenerateHotstringFile() {
             continue
         }
         
-        ; Guard prefix: every hotstring checks if CC GUI is open before firing
-        ; This prevents accidental hotstring triggers while typing in CC edit fields
-        g := "    if CC_HotstringSuspended`n        return`n"
+        ; Guard prefix: NOT needed — #HotIf CC_IsActiveWindowCCGui() wraps the
+        ; entire Generated file include, so AHK's engine suppresses these hotstrings
+        ; when the active window is a CC GUI. Much cleaner than runtime checks.
         
         ; Base hotstring - paste content
-        content .= "::" name "::{`n" g "    CC_HotstringPaste(`"" name "`")`n}`n"
+        content .= "::" name "::{`n    CC_HotstringPaste(`"" name "`")`n}`n"
         
         ; Action menu
-        content .= "::" name "?::{`n" g "    CC_ShowActionMenu(`"" name "`")`n}`n"
+        content .= "::" name "?::{`n    CC_ShowActionMenu(`"" name "`")`n}`n"
         
         ; Core content suffixes
-        content .= "::" name "t::{`n" g "    CC_HotstringTitle(`"" name "`")`n}`n"
-        content .= "::" name "url::{`n" g "    CC_HotstringURL(`"" name "`")`n}`n"
-        content .= "::" name "body::{`n" g "    CC_HotstringBody(`"" name "`")`n}`n"
-        content .= "::" name "cp::{`n" g "    CC_HotstringCopyOnly(`"" name "`")`n}`n"
+        content .= "::" name "t::{`n    CC_HotstringTitle(`"" name "`")`n}`n"
+        content .= "::" name "url::{`n    CC_HotstringURL(`"" name "`")`n}`n"
+        content .= "::" name "body::{`n    CC_HotstringBody(`"" name "`")`n}`n"
+        content .= "::" name "cp::{`n    CC_HotstringCopyOnly(`"" name "`")`n}`n"
         
         ; Image suffixes
-        content .= "::" name "i::{`n" g "    CC_HotstringImagePath(`"" name "`")`n}`n"
-        content .= "::" name "ti::{`n" g "    CC_HotstringTitleImage(`"" name "`")`n}`n"
+        content .= "::" name "i::{`n    CC_HotstringImagePath(`"" name "`")`n}`n"
+        content .= "::" name "ti::{`n    CC_HotstringTitleImage(`"" name "`")`n}`n"
         
         ; Standard suffixes
-        content .= "::" name "sh::{`n" g "    CC_HotstringShort(`"" name "`")`n}`n"
-        content .= "::" name "em::{`n" g "    CC_HotstringEmail(`"" name "`")`n}`n"
-        content .= "::" name "go::{`n" g "    CC_HotstringGo(`"" name "`")`n}`n"
-        content .= "::" name "rd::{`n" g "    CC_ShowReadWindow(`"" name "`")`n}`n"
-        content .= "::" name "vi::{`n" g "    CC_EditCapture(`"" name "`")`n}`n"
+        content .= "::" name "sh::{`n    CC_HotstringShort(`"" name "`")`n}`n"
+        content .= "::" name "em::{`n    CC_HotstringEmail(`"" name "`")`n}`n"
+        content .= "::" name "go::{`n    CC_HotstringGo(`"" name "`")`n}`n"
+        content .= "::" name "rd::{`n    CC_ShowReadWindow(`"" name "`")`n}`n"
+        content .= "::" name "vi::{`n    CC_EditCapture(`"" name "`")`n}`n"
         
         ; Document suffixes
-        content .= "::" name "d.::{`n" g "    CC_OpenDocument(`"" name "`")`n}`n"
-        content .= "::" name "ed::{`n" g "    CC_EmailWithDocument(`"" name "`")`n}`n"
+        content .= "::" name "d.::{`n    CC_OpenDocument(`"" name "`")`n}`n"
+        content .= "::" name "ed::{`n    CC_EmailWithDocument(`"" name "`")`n}`n"
         
         ; Print suffix
-        content .= "::" name "pr::{`n" g "    CC_PrintCapture(`"" name "`")`n}`n"
+        content .= "::" name "pr::{`n    CC_PrintCapture(`"" name "`")`n}`n"
         
         ; Outlook Insert suffix
-        content .= "::" name "oi::{`n" g "    CC_HotstringOutlookInsert(`"" name "`")`n}`n"
+        content .= "::" name "oi::{`n    CC_HotstringOutlookInsert(`"" name "`")`n}`n"
         
         ; Social media suffixes
-        content .= "::" name "fb::{`n" g "    CC_HotstringFacebook(`"" name "`")`n}`n"
-        content .= "::" name "x::{`n" g "    CC_HotstringTwitter(`"" name "`")`n}`n"
-        content .= "::" name "bs::{`n" g "    CC_HotstringBluesky(`"" name "`")`n}`n"
-        content .= "::" name "li::{`n" g "    CC_HotstringLinkedIn(`"" name "`")`n}`n"
-        content .= "::" name "mt::{`n" g "    CC_HotstringMastodon(`"" name "`")`n}`n"
+        content .= "::" name "fb::{`n    CC_HotstringFacebook(`"" name "`")`n}`n"
+        content .= "::" name "x::{`n    CC_HotstringTwitter(`"" name "`")`n}`n"
+        content .= "::" name "bs::{`n    CC_HotstringBluesky(`"" name "`")`n}`n"
+        content .= "::" name "li::{`n    CC_HotstringLinkedIn(`"" name "`")`n}`n"
+        content .= "::" name "mt::{`n    CC_HotstringMastodon(`"" name "`")`n}`n"
     }
     
     ; Write file
@@ -8780,6 +8806,12 @@ IsDigit(char) {
 ; INCLUDE GENERATED HOTSTRINGS
 ; Uses relative path for portability
 ; ==============================================================================
+; #HotIf makes these hotstrings context-sensitive:
+; They fire in Facebook, Notepad, browsers, etc. but NOT when you're typing
+; inside a ContentCapture GUI (Browser search, Edit fields, etc.)
+; This prevents accidental hotstring triggers while working in CC GUIs.
 
+#HotIf !CC_IsActiveWindowCCGui()
 #Include *i ContentCapture_Generated.ahk
+#HotIf
 
