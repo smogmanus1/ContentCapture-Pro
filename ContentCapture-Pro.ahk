@@ -483,6 +483,7 @@
 #Include CC_ShareModule.ahk
 #Include CC_HoverPreview.ahk
 #Include CC_HelpWindow.ahk
+#Include CC_GrepAll.ahk
 
 global ContentCaptureDir := ""
 
@@ -4342,6 +4343,7 @@ CC_OpenCaptureBrowser() {
     tagDropdown.Choose(1)
 
     browserGui.Add("Button", "x545 y7 w70", "Filter").OnEvent("Click", (*) => CC_FilterBrowserCaptures(browserGui))
+    browserGui.Add("Button", "x620 y7 w90", "🔍 Deep Search").OnEvent("Click", (*) => CC_GrepAll(browserGui["SearchText"].Value, browserGui))
 
     browserGui.filterFunc := CC_FilterBrowserCaptures.Bind(browserGui)
     searchEdit.OnEvent("Change", (*) => SetTimer(browserGui.filterFunc, -300))
@@ -4399,7 +4401,7 @@ CC_OpenCaptureBrowser() {
     browserGui.Add("Button", "x270 y440 w55", "📤 Share").OnEvent("Click", (*) => CC_BrowserShareCapture(listView, browserGui))
     browserGui.Add("Button", "x330 y440 w60", "📥 Import").OnEvent("Click", (*) => CC_BrowserImportCapture())
 
-    browserGui.statusText := browserGui.Add("Text", "x10 y478 w680", "Showing " CaptureNames.Length " captures | Enter=Paste | Del=Delete | Ctrl+S=Share | Ctrl+I=Import | F1=Help")
+    browserGui.statusText := browserGui.Add("Text", "x10 y478 w680", "Showing " CaptureNames.Length " captures (searching all fields)")
 
     browserGui.OnEvent("Close", (*) => CC_GuiCleanup(browserGui))
     browserGui.OnEvent("Escape", (*) => CC_GuiCleanup(browserGui))
@@ -4421,6 +4423,7 @@ CC_OpenCaptureBrowser() {
     Hotkey("F5", (*) => CC_BrowserRefreshList(browserGui, listView), "On")
     Hotkey("^s", (*) => CC_BrowserShareCapture(listView, browserGui), "On")
     Hotkey("^i", (*) => CC_BrowserImportCapture(), "On")
+    Hotkey("^g", (*) => CC_GrepAll(browserGui["SearchText"].Value, browserGui), "On")
     HotIf()
 
     ; Initialize hover preview tooltips
