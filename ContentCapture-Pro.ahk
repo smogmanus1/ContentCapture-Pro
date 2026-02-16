@@ -3844,7 +3844,10 @@ CC_CaptureContent() {
         }
     }
 
-    rawTitle := WinGetTitle("A")
+    try
+        rawTitle := WinGetTitle("A")
+    catch
+        rawTitle := ""
     title := CC_GetPageTitle(rawTitle)
     if (title = "")
         title := "Untitled Page"
@@ -8202,8 +8205,12 @@ CC_ParseTimestamp(timestamp) {
 }
 
 CC_GetPageTitle(title := "") {
-    if (title = "")
-        title := WinGetTitle("A")
+    if (title = "") {
+        try
+            title := WinGetTitle("A")
+        catch
+            title := ""
+    }
 
     ; Remove browser names
     browsers := ["Google Chrome", "Mozilla Firefox", "LibreWolf", "Microsoft Edge", "Opera", "Brave", "Firefox", "Chrome"]
