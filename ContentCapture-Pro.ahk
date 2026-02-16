@@ -3117,8 +3117,10 @@ CC_LoadCaptureData() {
         currentName := ""
         inBody := false
         inShort := false
+        inTranscript := false
         bodyLines := ""
         shortLines := ""
+        transcriptLines := ""
 
         Loop Parse, content, "`n", "`r" {
             line := A_LoopField
@@ -3129,6 +3131,8 @@ CC_LoadCaptureData() {
                         currentCapture["body"] := RTrim(bodyLines, "`n")
                     if (inShort && shortLines != "")
                         currentCapture["short"] := RTrim(shortLines, "`n")
+                    if (inTranscript && transcriptLines != "")
+                        currentCapture["transcript"] := RTrim(transcriptLines, "`n")
                     CaptureData[StrLower(currentName)] := currentCapture
                     CaptureNames.Push(currentName)
                 }
@@ -3138,8 +3142,10 @@ CC_LoadCaptureData() {
                 currentCapture["name"] := currentName
                 inBody := false
                 inShort := false
+                inTranscript := false
                 bodyLines := ""
                 shortLines := ""
+                transcriptLines := ""
                 continue
             }
 
@@ -3187,6 +3193,14 @@ CC_LoadCaptureData() {
                     currentCapture["body"] := RTrim(bodyLines, "`n")
             } else if (inBody) {
                 bodyLines .= line "`n"
+            } else if (line = "transcript=<<<TRANSCRIPT") {
+                inTranscript := true
+            } else if (line = "TRANSCRIPT>>>") {
+                inTranscript := false
+                if (transcriptLines != "")
+                    currentCapture["transcript"] := RTrim(transcriptLines, "`n")
+            } else if (inTranscript) {
+                transcriptLines .= line "`n"
             }
         }
 
@@ -3195,6 +3209,8 @@ CC_LoadCaptureData() {
                 currentCapture["body"] := RTrim(bodyLines, "`n")
             if (inShort && shortLines != "")
                 currentCapture["short"] := RTrim(shortLines, "`n")
+            if (inTranscript && transcriptLines != "")
+                currentCapture["transcript"] := RTrim(transcriptLines, "`n")
             CaptureData[StrLower(currentName)] := currentCapture
             CaptureNames.Push(currentName)
         }
@@ -3256,6 +3272,12 @@ CC_SaveCaptureData() {
             content .= "BODY>>>`n"
         }
 
+        if (cap.Has("transcript") && cap["transcript"] != "") {
+            content .= "transcript=<<<TRANSCRIPT`n"
+            content .= cap["transcript"] "`n"
+            content .= "TRANSCRIPT>>>`n"
+        }
+
         content .= "`n"
     }
 
@@ -3287,7 +3309,7 @@ CC_SaveShortVersion(name, shortText) {
     SetTimer(() => ToolTip(), -2000)
 }
 
-CC_AddCapture(name, url, title, date, tags, note, opinion, body, short := "", research := "") {
+CC_AddCapture(name, url, title, date, tags, note, opinion, body, short := "", research := "", transcript := "") {
     global CaptureData, CaptureNames
 
     cap := Map()
@@ -3301,6 +3323,7 @@ CC_AddCapture(name, url, title, date, tags, note, opinion, body, short := "", re
     cap["body"] := body
     cap["short"] := short
     cap["research"] := research
+    cap["transcript"] := transcript
 
     CaptureData[StrLower(name)] := cap
 
@@ -3844,10 +3867,7 @@ CC_CaptureContent() {
         }
     }
 
-    try
-        rawTitle := WinGetTitle("A")
-    catch
-        rawTitle := ""
+    rawTitle := WinGetTitle("A")
     title := CC_GetPageTitle(rawTitle)
     if (title = "")
         title := "Untitled Page"
@@ -3911,7 +3931,7 @@ CC_CaptureContent() {
 
     ; If user got transcript, ask if they want to use it
     if (gotTranscript) {
-        result := MsgBox("URL: " url "`n`nTitle: " title "`n`nUse the transcript you copied as body text?`n`nYes = Use transcript from clipboard`nNo = URL + title only", "Ready to Capture", "YesNoCancel")
+        result := MsgBox("URL: " url "`n`nTitle: " title "`n`nYou copied a transcript. It will be saved in the Transcript field.`n`nDo you also want to add body text (your notes/comments)?`n`nYes = Type or paste your notes`nNo = URL + title + transcript only", "Ready to Capture", "YesNoCancel")
     } else {
         result := MsgBox("URL: " url "`n`nTitle: " title "`n`nCapture body text?`n`nYes = Highlight text and press Ctrl+C`nNo = URL + title only", "Ready to Capture", "YesNoCancel")
     }
@@ -3922,18 +3942,19 @@ CC_CaptureContent() {
     }
 
     bodyText := ""
+    transcriptText := ""
 
     if (result = "Yes") {
         if (gotTranscript) {
-            ; Use what's already on clipboard (the transcript)
-            bodyText := A_Clipboard
-            if (bodyText = "") {
-                noTextResult := MsgBox("Clipboard is empty - no transcript found.`n`nContinue without body text?", "No Transcript", "YesNo")
-                if (noTextResult = "No") {
-                    A_Clipboard := oldClip
-                    return
-                }
-            } else {
+            ; Save transcript from clipboard to dedicated field
+            transcriptText := A_Clipboard
+            if (transcriptText != "")
+                transcriptText := CC_CleanContent(transcriptText)
+            ; Now let user add their own body text/notes
+            A_Clipboard := ""
+            MsgBox("Transcript saved!`n`nNow highlight any text you want as body notes and press Ctrl+C.`n`nOr just click OK to continue without body text.", "Add Body Text?", "OK Iconi")
+            if ClipWait(30, 0) {
+                bodyText := A_Clipboard
                 bodyText := CC_CleanContent(bodyText)
             }
         } else {
@@ -3950,6 +3971,11 @@ CC_CaptureContent() {
                 bodyText := CC_CleanContent(bodyText)
             }
         }
+    } else if (gotTranscript && result = "No") {
+        ; Still save the transcript even if user doesn't want to add body text
+        transcriptText := A_Clipboard
+        if (transcriptText != "")
+            transcriptText := CC_CleanContent(transcriptText)
     }
 
     LastCapturedURL := url
@@ -3975,7 +4001,7 @@ CC_CaptureContent() {
     }
 
     timestamp := FormatTime(, "yyyy-MM-dd HH:mm:ss")
-    CC_AddCapture(captureResult.name, url, title, timestamp, captureResult.tags, captureResult.comment, captureResult.opinion, bodyText)
+    CC_AddCapture(captureResult.name, url, title, timestamp, captureResult.tags, captureResult.comment, captureResult.opinion, bodyText, "", "", transcriptText)
 
     ; Show helpful tip for new users
     CCHelp.TipAfterFirstCapture(captureResult.name)
@@ -6939,25 +6965,38 @@ CC_EditCapture(name) {
     editGui.SetFont("s10 c000000", "Consolas")
     editBody := editGui.Add("Edit", "x15 y563 w670 h110 Multi VScroll vEditBody", currentBody)
 
+    ; Transcript field (for YouTube/video transcripts)
+    currentTranscript := cap.Has("transcript") ? cap["transcript"] : ""
+    hasTranscript := currentTranscript != ""
+    transcriptColor := hasTranscript ? "006600" : "666666"
+    transcriptIndicator := hasTranscript ? " ✓ (" StrLen(currentTranscript) " chars)" : ""
+    editGui.SetFont("s9 c" transcriptColor)
+    editGui.Add("Text", "x15 y680", "📜 Transcript (raw video/audio transcript):" transcriptIndicator)
+    editGui.SetFont("s8", "Segoe UI")
+    editGui.Add("Button", "x380 y677 w90 h22", "📋 Paste").OnEvent("Click", (*) => (editGui["EditTranscript"].Value := A_Clipboard))
+    editGui.Add("Button", "x475 y677 w60 h22", "Clear").OnEvent("Click", (*) => (editGui["EditTranscript"].Value := ""))
+    editGui.SetFont("s10 c000000", "Consolas")
+    editTranscript := editGui.Add("Edit", "x15 y698 w670 h80 Multi VScroll vEditTranscript", currentTranscript)
+
     ; Image attachment section
     editGui.SetFont("s9 c666666")
-    editGui.Add("Text", "x15 y680", "📷 Image (optional):")
+    editGui.Add("Text", "x15 y785", "📷 Image (optional):")
     editGui.SetFont("s9", "Segoe UI")
     
     hasImage := IsSet(IC_HasImage) && IC_HasImage(name)
     if hasImage {
-        editGui.Add("Text", "x120 y680 c0066CC", "✓ Image attached")
-        editGui.Add("Button", "x230 y677 w70 h24", "View").OnEvent("Click", (*) => IC_OpenImage(name))
-        editGui.Add("Button", "x305 y677 w70 h24", "Change").OnEvent("Click", (*) => IC_AttachImage(name))
-        editGui.Add("Button", "x380 y677 w70 h24", "Remove").OnEvent("Click", (*) => IC_RemoveImage(name))
+        editGui.Add("Text", "x120 y785 c0066CC", "✓ Image attached")
+        editGui.Add("Button", "x230 y782 w70 h24", "View").OnEvent("Click", (*) => IC_OpenImage(name))
+        editGui.Add("Button", "x305 y782 w70 h24", "Change").OnEvent("Click", (*) => IC_AttachImage(name))
+        editGui.Add("Button", "x380 y782 w70 h24", "Remove").OnEvent("Click", (*) => IC_RemoveImage(name))
     } else {
-        attachBtn := editGui.Add("Button", "x120 y677 w120 h24", "Attach Image...")
+        attachBtn := editGui.Add("Button", "x120 y782 w120 h24", "Attach Image...")
         attachBtn.OnEvent("Click", (*) => IC_AttachImage(name))
     }
 
     ; Document attachment section (NEW)
     editGui.SetFont("s9 c666666")
-    editGui.Add("Text", "x450 y680", "📄 Document (optional):")
+    editGui.Add("Text", "x450 y785", "📄 Document (optional):")
     editGui.SetFont("s9", "Segoe UI")
     
     currentDocPath := cap.Has("docpath") ? cap["docpath"] : ""
@@ -6966,44 +7005,44 @@ CC_EditCapture(name) {
     if hasDoc {
         ; Show filename only (not full path)
         SplitPath(currentDocPath, &docFileName)
-        editGui.Add("Text", "x555 y680 c0066CC w130", "✓ " SubStr(docFileName, 1, 15) (StrLen(docFileName) > 15 ? "..." : ""))
-        editGui.Add("Button", "x450 y700 w60 h22", "Open").OnEvent("Click", (*) => Run(currentDocPath))
-        editGui.Add("Button", "x515 y700 w60 h22", "Change").OnEvent("Click", CC_AttachDocClick.Bind(editGui))
-        editGui.Add("Button", "x580 y700 w60 h22", "Clear").OnEvent("Click", (*) => editGui["EditDocPath"].Value := "")
+        editGui.Add("Text", "x555 y785 c0066CC w130", "✓ " SubStr(docFileName, 1, 15) (StrLen(docFileName) > 15 ? "..." : ""))
+        editGui.Add("Button", "x450 y805 w60 h22", "Open").OnEvent("Click", (*) => Run(currentDocPath))
+        editGui.Add("Button", "x515 y805 w60 h22", "Change").OnEvent("Click", CC_AttachDocClick.Bind(editGui))
+        editGui.Add("Button", "x580 y805 w60 h22", "Clear").OnEvent("Click", (*) => editGui["EditDocPath"].Value := "")
     } else if currentDocPath != "" {
         ; Path exists but file not found
-        editGui.Add("Text", "x555 y680 cCC0000", "⚠️ File missing")
-        editGui.Add("Button", "x450 y700 w100 h22", "Reattach...").OnEvent("Click", CC_AttachDocClick.Bind(editGui))
-        editGui.Add("Button", "x555 y700 w60 h22", "Clear").OnEvent("Click", (*) => editGui["EditDocPath"].Value := "")
+        editGui.Add("Text", "x555 y785 cCC0000", "⚠️ File missing")
+        editGui.Add("Button", "x450 y805 w100 h22", "Reattach...").OnEvent("Click", CC_AttachDocClick.Bind(editGui))
+        editGui.Add("Button", "x555 y805 w60 h22", "Clear").OnEvent("Click", (*) => editGui["EditDocPath"].Value := "")
     } else {
-        attachDocBtn := editGui.Add("Button", "x555 y677 w120 h24", "Attach Doc...")
+        attachDocBtn := editGui.Add("Button", "x555 y782 w120 h24", "Attach Doc...")
         attachDocBtn.OnEvent("Click", CC_AttachDocClick.Bind(editGui))
     }
     ; Hidden field to store doc path
-    editGui.Add("Edit", "x15 y750 w1 h1 vEditDocPath Hidden", currentDocPath)
+    editGui.Add("Edit", "x15 y850 w1 h1 vEditDocPath Hidden", currentDocPath)
 
     editGui.SetFont("s10", "Segoe UI")
-    saveBtn := editGui.Add("Button", "x15 y715 w100 h35", "💾 Save")
+    saveBtn := editGui.Add("Button", "x15 y820 w100 h35", "💾 Save")
     saveBtn.OnEvent("Click", (*) => CC_SaveEditedCapture(editGui, name))
 
-    cancelBtn := editGui.Add("Button", "x120 y715 w80 h35", "Cancel")
+    cancelBtn := editGui.Add("Button", "x120 y820 w80 h35", "Cancel")
     cancelBtn.OnEvent("Click", (*) => (prevEditGui := "", CC_GuiCleanup(editGui)))
 
     ; Print button
-    printBtn := editGui.Add("Button", "x205 y715 w80 h35", "🖨️ Print")
+    printBtn := editGui.Add("Button", "x205 y820 w80 h35", "🖨️ Print")
     printBtn.OnEvent("Click", (*) => CC_PrintCapture(name))
 
     ; Share buttons
-    shareBtn := editGui.Add("Button", "x450 y715 w120 h35", "📤 Share")
+    shareBtn := editGui.Add("Button", "x450 y820 w120 h35", "📤 Share")
     shareBtn.OnEvent("Click", (*) => (CC_GuiCleanup(editGui), SS_ShareCapture(name)))
     
-    emailBtn := editGui.Add("Button", "x580 y715 w110 h35", "📧 Email")
+    emailBtn := editGui.Add("Button", "x580 y820 w110 h35", "📧 Email")
     emailBtn.OnEvent("Click", (*) => (CC_GuiCleanup(editGui), SS_EmailCapture(name)))
 
     editGui.OnEvent("Close", (*) => (prevEditGui := "", CC_GuiCleanup(editGui)))
     editGui.OnEvent("Escape", (*) => (prevEditGui := "", CC_GuiCleanup(editGui)))
 
-    editGui.Show("w700 h765")
+    editGui.Show("w700 h870")
 }
 
 CC_SaveEditedCapture(editGui, originalName) {
@@ -7042,6 +7081,7 @@ CC_SaveEditedCapture(editGui, originalName) {
         updatedCapture["research"] := editGui["EditResearch"].Value
         updatedCapture["short"] := editGui["EditShort"].Value
         updatedCapture["body"] := editGui["EditBody"].Value
+        updatedCapture["transcript"] := editGui["EditTranscript"].Value
         updatedCapture["docpath"] := editGui["EditDocPath"].Value
         
         ; Preserve original date
@@ -8205,12 +8245,8 @@ CC_ParseTimestamp(timestamp) {
 }
 
 CC_GetPageTitle(title := "") {
-    if (title = "") {
-        try
-            title := WinGetTitle("A")
-        catch
-            title := ""
-    }
+    if (title = "")
+        title := WinGetTitle("A")
 
     ; Remove browser names
     browsers := ["Google Chrome", "Mozilla Firefox", "LibreWolf", "Microsoft Edge", "Opera", "Brave", "Firefox", "Chrome"]

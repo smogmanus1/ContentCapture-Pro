@@ -106,6 +106,25 @@ class ResearchTools {
         }
         
         ; ============================================
+        ; AI PROMPT SECTION - Summarize for platforms
+        ; ============================================
+        if hasBody || hasTranscript {
+            promptMenu := Menu()
+            promptMenu.Add("📘 Summarize for Facebook", (*) => this.SendWithPrompt(name, "facebook"))
+            promptMenu.Add("🐦 Summarize for Twitter/X (280 chars)", (*) => this.SendWithPrompt(name, "twitter"))
+            promptMenu.Add("🦋 Summarize for Bluesky (300 chars)", (*) => this.SendWithPrompt(name, "bluesky"))
+            promptMenu.Add("💼 Summarize for LinkedIn", (*) => this.SendWithPrompt(name, "linkedin"))
+            promptMenu.Add()  ; Separator
+            promptMenu.Add("📝 Write a Comment/Reply", (*) => this.SendWithPrompt(name, "comment"))
+            promptMenu.Add("✅ Fact-Check This Content", (*) => this.SendWithPrompt(name, "factcheck"))
+            promptMenu.Add("📋 Key Points Summary", (*) => this.SendWithPrompt(name, "keypoints"))
+            promptMenu.Add("🎯 ELI5 (Explain Simply)", (*) => this.SendWithPrompt(name, "eli5"))
+            
+            researchMenu.Add("🤖 AI Summarize for...", promptMenu)
+            researchMenu.Add()  ; Separator
+        }
+        
+        ; ============================================
         ; RESEARCH TOOLS SECTION
         ; ============================================
         researchMenu.Add("🎬 YouTube Transcript", (*) => this.OpenTranscript(name))
@@ -229,6 +248,136 @@ class ResearchTools {
         ; Show instructions
         charCount := StrLen(prompt)
         TrayTip(contentType " copied! " aiName " opening...", "Paste with Ctrl+V (" charCount " chars)", "1")
+    }
+    
+    ; Send content with a platform-specific prompt to user's choice of AI
+    static SendWithPrompt(name, platform) {
+        global CaptureData
+        
+        if !CaptureData.Has(name) {
+            MsgBox("Capture not found.", "Error", "48")
+            return
+        }
+        
+        cap := CaptureData[name]
+        
+        ; Get content - prefer transcript, fall back to body
+        content := ""
+        contentType := ""
+        if cap.Has("transcript") && cap["transcript"] != "" {
+            content := cap["transcript"]
+            contentType := "transcript"
+        } else if cap.Has("body") && cap["body"] != "" {
+            content := cap["body"]
+            contentType := "body text"
+        }
+        
+        if content = "" {
+            MsgBox("No content (body or transcript) found for this capture.", "No Content", "48")
+            return
+        }
+        
+        title := cap.Has("title") ? cap["title"] : name
+        url := cap.Has("url") ? cap["url"] : ""
+        opinion := cap.Has("opinion") ? cap["opinion"] : ""
+        
+        ; Build platform-specific prompt
+        prompt := ""
+        switch platform {
+            case "facebook":
+                prompt := "Write a Facebook post about this content. Make it engaging and conversational, suitable for sharing with friends and followers. Include key takeaways and encourage discussion."
+                if opinion != ""
+                    prompt .= "`n`nMy perspective: " opinion
+            case "twitter":
+                prompt := "Write a tweet (max 280 characters) summarizing the key point of this content. Make it punchy and shareable. Include room for a URL at the end."
+                if opinion != ""
+                    prompt .= "`n`nMy angle: " opinion
+            case "bluesky":
+                prompt := "Write a Bluesky post (max 300 characters) summarizing this content. Keep it concise but informative. Leave room for a URL."
+                if opinion != ""
+                    prompt .= "`n`nMy angle: " opinion
+            case "linkedin":
+                prompt := "Write a LinkedIn post about this content. Keep it professional, insightful, and focused on the broader implications. Use a thoughtful tone suitable for professional networking."
+                if opinion != ""
+                    prompt .= "`n`nMy perspective: " opinion
+            case "comment":
+                prompt := "Based on this content, write a thoughtful comment or reply I could post in a discussion. Make it informed, concise, and add value to the conversation."
+                if opinion != ""
+                    prompt .= "`n`nMy perspective to incorporate: " opinion
+            case "factcheck":
+                prompt := "Fact-check this content. Identify the key claims being made, evaluate their accuracy, and note any misleading or unsupported assertions. Cite what you can verify."
+            case "keypoints":
+                prompt := "Summarize the key points of this content in a clear, concise bullet-point format. Focus on the most important takeaways."
+            case "eli5":
+                prompt := "Explain this content in simple terms that anyone could understand. Avoid jargon and use everyday language. Keep it brief but accurate."
+        }
+        
+        ; Build the full prompt with content
+        fullPrompt := prompt "`n`n"
+        fullPrompt .= "Title: " title "`n"
+        if url != ""
+            fullPrompt .= "Source: " url "`n"
+        fullPrompt .= "`n---`n`n"
+        fullPrompt .= content
+        fullPrompt .= "`n`n---"
+        
+        ; Show AI chooser
+        aiGui := Gui("+AlwaysOnTop", "Choose AI Service")
+        aiGui.SetFont("s10")
+        aiGui.BackColor := "F5F5F5"
+        
+        platformLabel := ""
+        switch platform {
+            case "facebook": platformLabel := "📘 Facebook Post"
+            case "twitter": platformLabel := "🐦 Twitter/X Tweet"
+            case "bluesky": platformLabel := "🦋 Bluesky Post"
+            case "linkedin": platformLabel := "💼 LinkedIn Post"
+            case "comment": platformLabel := "📝 Comment/Reply"
+            case "factcheck": platformLabel := "✅ Fact-Check"
+            case "keypoints": platformLabel := "📋 Key Points"
+            case "eli5": platformLabel := "🎯 Simple Explanation"
+        }
+        
+        aiGui.Add("Text", "x15 y10 w350", "Creating: " platformLabel)
+        aiGui.Add("Text", "x15 y30 w350 c888888", "Using " contentType " from: " SubStr(title, 1, 40) (StrLen(title) > 40 ? "..." : ""))
+        aiGui.Add("Text", "x15 y55 w350", "Send to which AI?")
+        
+        aiGui.Add("Button", "x15 y80 w160 h35", "🤖 ChatGPT").OnEvent("Click", (*) => (aiGui.Destroy(), this.LaunchAIWithPrompt(fullPrompt, "chatgpt")))
+        aiGui.Add("Button", "x185 y80 w160 h35", "🧠 Claude").OnEvent("Click", (*) => (aiGui.Destroy(), this.LaunchAIWithPrompt(fullPrompt, "claude")))
+        aiGui.Add("Button", "x15 y120 w160 h35", "🔍 Perplexity").OnEvent("Click", (*) => (aiGui.Destroy(), this.LaunchAIWithPrompt(fullPrompt, "perplexity")))
+        aiGui.Add("Button", "x185 y120 w160 h35", "🦙 Ollama").OnEvent("Click", (*) => (aiGui.Destroy(), this.LaunchAIWithPrompt(fullPrompt, "ollama")))
+        aiGui.Add("Button", "x15 y165 w330 h28", "📋 Just Copy to Clipboard").OnEvent("Click", (*) => (aiGui.Destroy(), CC_ClipCopy(fullPrompt), TrayTip("Prompt copied! (" StrLen(fullPrompt) " chars)", "Paste into any AI service", "1")))
+        
+        aiGui.Add("Button", "x15 y200 w80 h28", "Cancel").OnEvent("Click", (*) => aiGui.Destroy())
+        aiGui.OnEvent("Escape", (*) => aiGui.Destroy())
+        aiGui.Show("w360 h240")
+    }
+    
+    ; Launch AI service with prompt on clipboard
+    static LaunchAIWithPrompt(prompt, aiTool) {
+        CC_ClipCopy(prompt)
+        
+        aiName := ""
+        switch aiTool {
+            case "chatgpt":
+                Run("https://chat.openai.com/")
+                aiName := "ChatGPT"
+            case "claude":
+                Run("https://claude.ai/")
+                aiName := "Claude"
+            case "perplexity":
+                Run("https://www.perplexity.ai/")
+                aiName := "Perplexity"
+            case "ollama":
+                try {
+                    Run("http://localhost:11434")
+                } catch {
+                }
+                aiName := "Ollama"
+        }
+        
+        charCount := StrLen(prompt)
+        TrayTip(aiName " opening...", "Paste with Ctrl+V (" charCount " chars)", "1")
     }
     
     ; ==== TOOL IMPLEMENTATIONS ====
