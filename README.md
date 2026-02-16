@@ -1,6 +1,6 @@
 # ContentCapture Pro v6.4.0
 
-![ContentCapture Pro - Save Once, Share Everywhere](images/ccpimage.png)
+![ContentCapture Pro - Save Once, Share Everywhere](images/ccpimage.jpg)
 
 ## 🍪 Save Recipes, Articles, Videos & Transcripts from the Internet! 🍪
 
