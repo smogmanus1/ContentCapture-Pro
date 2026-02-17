@@ -1,0 +1,243 @@
+; ==============================================================================
+; INTEGRATION GUIDE - SocialImageShare.ahk
+; ==============================================================================
+; Universal image-aware sharing for ALL social media platforms
+; Replaces the earlier FacebookImageShare.ahk (discard that file)
+; ==============================================================================
+;
+;
+; ==============================================================================
+; STEP 1: Add the file to your ContentCapture Pro directory
+; ==============================================================================
+;
+; Copy SocialImageShare.ahk to:
+;   E:\contentcap\ContentCapture-GitHub\ContentCapture-Pro\SocialImageShare.ahk
+;
+;
+; ==============================================================================
+; STEP 2: Include it in ContentCapture-Pro.ahk
+; ==============================================================================
+;
+; Add this line near your other #Include statements (after ImageCapture.ahk):
+;
+;   #Include SocialImageShare.ahk
+;
+;
+; ==============================================================================
+; STEP 3: Update DynamicSuffixHandler.ahk - ALL social Action methods
+; ==============================================================================
+;
+; For EACH platform, replace the Action method to delegate to SocialImageShare.
+; The pattern is the same for every platform - just change the platform name.
+;
+;
+; ─────────────────────────────────────────────────────
+; 3A. FACEBOOK POST (fb suffix)
+; ─────────────────────────────────────────────────────
+;
+; REPLACE your ActionFacebook with:
+;
+;   static ActionFacebook(name, capture) {
+;       content := this.BuildContent(capture)
+;       url := capture.Has("url") && capture["url"] != "" ? capture["url"] : ""
+;       if IsSet(SI_SharePost) {
+;           SI_SharePost("facebook", name, capture, content, url)
+;       } else {
+;           CC_SafeCopy(content)
+;           if (url != "") {
+;               Run("https://www.facebook.com/sharer/sharer.php?u=" . this.URLEncode(url))
+;           } else {
+;               Run("https://www.facebook.com/")
+;           }
+;           TrayTip("Content copied! Paste with Ctrl+V", "Facebook Share", "1")
+;       }
+;   }
+;
+;
+; ─────────────────────────────────────────────────────
+; 3B. FACEBOOK COMMENT (fbc suffix)
+; ─────────────────────────────────────────────────────
+;
+; REPLACE your ActionFacebookComment with:
+;
+;   static ActionFacebookComment(name, capture) {
+;       if IsSet(SI_ShareComment) {
+;           SI_ShareComment("facebook", name, capture)
+;       } else {
+;           content := ""
+;           if (capture.Has("short") && capture["short"] != "")
+;               content := capture["short"]
+;           else if (capture.Has("title") && capture["title"] != "")
+;               content := capture["title"]
+;           if (capture.Has("url") && capture["url"] != "") {
+;               if (content != "")
+;                   content .= "`n"
+;               content .= capture["url"]
+;           }
+;           CC_SafePaste(content)
+;           TrayTip("Comment pasted with URL", "Facebook Comment", "1")
+;       }
+;   }
+;
+;
+; ─────────────────────────────────────────────────────
+; 3C. TWITTER/X (x suffix)
+; ─────────────────────────────────────────────────────
+;
+; REPLACE your ActionTwitter with:
+;
+;   static ActionTwitter(name, capture) {
+;       content := this.BuildContent(capture)
+;       url := capture.Has("url") && capture["url"] != "" ? capture["url"] : ""
+;       if IsSet(SI_SharePost) {
+;           SI_SharePost("twitter", name, capture, content, url)
+;       } else {
+;           hasShort := capture.Has("short") && capture["short"] != ""
+;           tweetText := content
+;           if (StrLen(tweetText) > 255)
+;               tweetText := SubStr(tweetText, 1, 252) . "..."
+;           shareURL := "https://twitter.com/intent/tweet?"
+;           if (tweetText != "")
+;               shareURL .= "text=" . this.URLEncode(tweetText)
+;           if (!hasShort && url != "")
+;               shareURL .= "&url=" . this.URLEncode(url)
+;           Run(shareURL)
+;           TrayTip("Opening Twitter/X...", "Twitter Share", "1")
+;       }
+;   }
+;
+;
+; ─────────────────────────────────────────────────────
+; 3D. BLUESKY (bs suffix)
+; ─────────────────────────────────────────────────────
+;
+; REPLACE your ActionBluesky with:
+;
+;   static ActionBluesky(name, capture) {
+;       content := this.BuildContent(capture)
+;       url := capture.Has("url") && capture["url"] != "" ? capture["url"] : ""
+;       if IsSet(SI_SharePost) {
+;           SI_SharePost("bluesky", name, capture, content, url)
+;       } else {
+;           if (StrLen(content) > 300)
+;               content := SubStr(content, 1, 297) . "..."
+;           CC_SafeCopy(content)
+;           Run("https://bsky.app/")
+;           TrayTip("Content copied! Paste with Ctrl+V", "Bluesky Share", "1")
+;       }
+;   }
+;
+;
+; ─────────────────────────────────────────────────────
+; 3E. LINKEDIN (li suffix)
+; ─────────────────────────────────────────────────────
+;
+; REPLACE your ActionLinkedIn with:
+;
+;   static ActionLinkedIn(name, capture) {
+;       content := this.BuildContent(capture)
+;       url := capture.Has("url") && capture["url"] != "" ? capture["url"] : ""
+;       if IsSet(SI_SharePost) {
+;           SI_SharePost("linkedin", name, capture, content, url)
+;       } else {
+;           CC_SafeCopy(content)
+;           if (url != "") {
+;               Run("https://www.linkedin.com/sharing/share-offsite/?url=" . this.URLEncode(url))
+;           } else {
+;               Run("https://www.linkedin.com/feed/")
+;           }
+;           TrayTip("Content copied! Paste with Ctrl+V", "LinkedIn Share", "1")
+;       }
+;   }
+;
+;
+; ─────────────────────────────────────────────────────
+; 3F. MASTODON (mt suffix)
+; ─────────────────────────────────────────────────────
+;
+; REPLACE your ActionMastodon with:
+;
+;   static ActionMastodon(name, capture) {
+;       content := this.BuildContent(capture)
+;       url := capture.Has("url") && capture["url"] != "" ? capture["url"] : ""
+;       if IsSet(SI_SharePost) {
+;           SI_SharePost("mastodon", name, capture, content, url)
+;       } else {
+;           if (StrLen(content) > 500)
+;               content := SubStr(content, 1, 497) . "..."
+;           CC_SafeCopy(content)
+;           TrayTip("Content copied! Paste into your Mastodon instance", "Mastodon Share", "1")
+;       }
+;   }
+;
+;
+; ==============================================================================
+; HOW IT WORKS - USER EXPERIENCE (same for ALL platforms)
+; ==============================================================================
+;
+;
+; SCENARIO 1: Record WITH image, using post suffix (fb, x, bs, li, mt)
+; ──────────────────────────────────────────────────────────────────────
+;   User types: ;rand50fb [space]   (or rand50x, rand50bs, rand50li, etc.)
+;
+;   MsgBox appears: "This record has an attached image.
+;                    Include the image in your [Platform] post?"
+;                    [Yes]  [No]
+;
+;   YES -> Platform opens, tooltip shows:
+;          "[icon] IMAGE READY FOR [PLATFORM]!
+;           1. Click in the compose/post box
+;           2. Ctrl+V = paste your text
+;           3. Ctrl+Shift+V = paste the IMAGE
+;           Press Escape to cancel"
+;
+;   NO  -> Standard share URL opens (same as before, no change)
+;
+;
+; SCENARIO 2: Record WITH image, using comment suffix (fbc)
+; ──────────────────────────────────────────────────────────────────────
+;   User types: ;rand50fbc [space]  (cursor already in a comment box)
+;
+;   MsgBox appears: "This record has an attached image.
+;                    Include the image in your Facebook comment?"
+;                    [Yes]  [No]
+;
+;   YES -> Text auto-pastes into comment box
+;          Brief pause (800ms)
+;          Image auto-pastes into comment box
+;          FULLY AUTOMATIC - no extra steps!
+;
+;   NO  -> Standard text paste only (same as before)
+;
+;
+; SCENARIO 3: Record WITHOUT image (any platform, any suffix)
+; ──────────────────────────────────────────────────────────────────────
+;   Behaves EXACTLY as before. No MsgBox, no interruption, no change.
+;
+;
+; ==============================================================================
+; TEMPORARY KEYBOARD SHORTCUTS (only active after post + Yes)
+; ==============================================================================
+;
+;   Ctrl+Shift+V  = Paste the pending image into the compose box
+;   Escape         = Cancel image paste mode
+;
+;   Auto-deactivate after use OR after 60 seconds of inactivity.
+;   Do NOT conflict with normal keyboard shortcuts.
+;
+;
+; ==============================================================================
+; NOTES
+; ==============================================================================
+;
+; - Discard FacebookImageShare.ahk if you previously downloaded it.
+;   SocialImageShare.ahk replaces it entirely.
+;
+; - The fallback code in each method means everything still works even if
+;   SocialImageShare.ahk fails to load. Zero risk of breaking existing behavior.
+;
+; - To add a new platform in the future, just add an entry to
+;   SocialPlatforms.Info in SocialImageShare.ahk and create a new
+;   Action method in DynamicSuffixHandler.ahk that calls SI_SharePost.
+;
+; ==============================================================================

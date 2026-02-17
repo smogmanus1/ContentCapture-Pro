@@ -484,6 +484,7 @@
 #Include CC_HoverPreview.ahk
 #Include CC_HelpWindow.ahk
 #Include CC_GrepAll.ahk
+#include SocialImageShare.ahk
 
 global ContentCaptureDir := ""
 
