@@ -485,7 +485,7 @@
 #Include CC_HelpWindow.ahk
 #Include CC_GrepAll.ahk
 #include SocialImageShare.ahk
-#Include CC_TranscriptFormat.ahk 
+#Include File_Dir_Or_LibName
 
 global ContentCaptureDir := ""
 

@@ -1,0 +1,92 @@
+; ==============================================================================
+; INTEGRATION GUIDE - CC_TranscriptFormat.ahk
+; ==============================================================================
+;
+;
+; STEP 1: Copy CC_TranscriptFormat.ahk to your ContentCapture Pro directory
+; ==============================================================================
+;
+;   E:\contentcap\ContentCapture-GitHub\ContentCapture-Pro\CC_TranscriptFormat.ahk
+;
+;
+; STEP 2: Add #Include to ContentCapture-Pro.ahk
+; ==============================================================================
+;
+;   #Include CC_TranscriptFormat.ahk
+;
+;
+; STEP 3: Add Format button to the Edit GUI
+; ==============================================================================
+;
+; In your Edit GUI code, find where the Transcript field is created.
+; Look for where the "Paste" and "Clear" buttons are added near the
+; Transcript Edit control.
+;
+; Add this line AFTER the existing Paste/Clear buttons:
+;
+;   TF_AddToGUI(myGui, transcriptEditCtrl)
+;
+; Where "transcriptEditCtrl" is the variable name of your transcript
+; Edit control. This adds a "📝 Format" button next to Paste and Clear.
+;
+;
+; ==============================================================================
+; HOW IT WORKS
+; ==============================================================================
+;
+; Click "📝 Format" on the Transcript field and a menu appears:
+;
+;
+; OPTION 1: 🧹 Clean Transcript
+; ─────────────────────────────────────────────
+;
+;   BEFORE:
+;     ♪ ♪ (kids shouting) NARRATOR: A vicious cold snap hit New York
+;     in the first week of February 1897, but nothing could slow the
+;     preparations. REBECCA EDWARDS: During the Gilded Age, Americans
+;     feel quite certainly that they are the vanguard of civilization
+;     and progress. ♪ ♪ (train chugging)
+;
+;   AFTER:
+;     A vicious cold snap hit New York in the first week of February
+;     1897, but nothing could slow the preparations. During the Gilded
+;     Age, Americans feel quite certainly that they are the vanguard
+;     of civilization and progress.
+;
+;   Removes: ♪ ♫ music cues, (parenthetical sounds/directions),
+;   SPEAKER LABELS:, excess blank lines, orphaned punctuation
+;
+;
+; OPTION 2: 💬 Key Quotes Only
+; ─────────────────────────────────────────────
+;
+;   Extracts non-narrator speaker quotes with attribution:
+;
+;     Rebecca Edwards: During the Gilded Age, Americans feel quite
+;     certainly that they are the vanguard of civilization and progress.
+;     This is an enormous period of opportunity, and possibility, and hope.
+;
+;     Edward O'Donnell: Increasingly workers begin to say, "If I as a
+;     member of this society lack the ability to pay my bills, and to
+;     feed my family then I am not a free citizen of a healthy republic."
+;
+;     Nell Irvin Painter: Gilded is not golden. Gilded has the sense of
+;     a patina covering something else. It's the shiny exterior and the
+;     rot underneath.
+;
+;   - Skips NARRATOR sections (description/narration)
+;   - Converts ALL CAPS names to Title Case
+;   - Cleans sound effects and music from within quotes
+;   - Skips very short fragments (under 30 chars)
+;
+;   User chooses: Replace transcript OR Copy to clipboard
+;
+;
+; OPTION 3: 🧹 Clean + 💬 Quotes (both)
+; ─────────────────────────────────────────────
+;
+;   Puts the cleaned transcript at the top and appends key quotes
+;   at the bottom separated by a divider line.
+;
+;
+; ==============================================================================
