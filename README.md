@@ -1,253 +1,168 @@
-# ContentCapture Pro v6.4.0
+# ContentCapture Pro — Update Notes
+
+## Version 6.5.0
+
+**Date:** February 17, 2026
 
 ![ContentCapture Pro - Save Once, Share Everywhere](images/ccpimage.jpg)
+---
 
-## 🍪 Save Recipes, Articles, Videos & Transcripts from the Internet! 🍪
+### Overview
 
-**ContentCapture Pro** is a free, open-source productivity tool that lets you capture webpage content with one hotkey and instantly recall it anywhere using short, memorable names. Capture once, share everywhere — to email, social media, AI research tools, and more.
-
-Built with [AutoHotkey v2](https://www.autohotkey.com/) for Windows.
+Two major features in this release that extend ContentCapture Pro's core mission: capture it once, share it everywhere. Attached images are no longer decorative — they ship with your content to every social platform. And raw video transcripts can now be cleaned and distilled into shareable quotes with a single click.
 
 ---
 
-# ⛔ STOP! READ THIS FIRST! ⛔
+### 🖼️ Feature 1: Social Image Share
 
-# You MUST Install AutoHotkey BEFORE This Will Work!
+**New File:** `SocialImageShare.ahk`
 
----
+Attached images now travel with your content when you share to any social media platform. When a sharing suffix fires and the record has an attached image, ContentCapture Pro asks if you want to include it. Say Yes and the image goes with your content. Say No and it works exactly like before. Records without images see zero change — no prompts, no interruption.
 
-## 📥 STEP 1: Install AutoHotkey v2
+**Supported Platforms:**
 
-# 👉 [CLICK HERE TO DOWNLOAD](https://www.autohotkey.com/download/) 👈
+| Platform   | Post Suffix | Comment Suffix | Image Support |
+|------------|-------------|----------------|---------------|
+| Facebook   | `fb`        | `fbc`          | ✅             |
+| Twitter/X  | `x`         | —              | ✅             |
+| Bluesky    | `bs`        | —              | ✅             |
+| LinkedIn   | `li`        | —              | ✅             |
+| Mastodon   | `mt`        | —              | ✅             |
 
-1. Click that link ☝️
-2. Click the big green **"Download"** button
-3. Click **"Download v2.0"** (the TOP one, NOT v1.1!)
-4. **Double-click** the downloaded file
-5. Click **Next → Next → Install → Finish**
+**How It Works — Posts** (`fb`, `x`, `bs`, `li`, `mt`):
 
-### ✅ Done? You should see "Installation Complete"
+- Type your hotstring + suffix (e.g., `;rand50fb`)
+- If an image is attached, you are asked to include it
+- Platform opens, text goes to clipboard for Ctrl+V
+- Ctrl+Shift+V pastes the image
+- On-screen tooltip reminds you of the shortcuts
+- Press Escape to cancel image paste at any time
+- Auto-cleanup after 60 seconds of inactivity
 
----
+**How It Works — Comments** (`fbc`):
 
-## 📥 STEP 2: Install ContentCapture Pro
+- Click into a comment box
+- Type your hotstring + `fbc` (e.g., `;rand50fbc`)
+- If an image is attached, you are asked to include it
+- Text and image paste fully automatically — no extra steps
 
-**Find the file called `install.bat` and double-click it!**
+**Technical Details:**
 
-* If Windows says "Windows protected your PC" → Click **"More info"** → Click **"Run anyway"**
-* Click **"Yes"** when it asks questions
-* When it's done, look for a **green "H" icon** near your clock (bottom-right corner of screen)
-
-💡 *Having problems? Try right-clicking `install.bat` and selecting "Run as administrator"*
-
-**🎉 That's it! You're ready to start saving!**
-
----
-
-## 🍳 STEP 3: Save Something!
-
-1. Open your web browser (Chrome, Edge, Firefox, LibreWolf)
-2. Go to any webpage — a recipe, news article, YouTube video, anything
-3. **Highlight** the text you want to save (click and drag your mouse over it)
-4. Press **Ctrl + Alt + G** at the same time
-   * Hold **Ctrl** (corner of keyboard)
-   * Hold **Alt** (next to spacebar)
-   * Tap the letter **G**
-5. Type a short name like `soup1` (no spaces!)
-6. Click **Save**
+- Image-to-clipboard uses PowerShell `System.Windows.Forms.Clipboard.SetImage()`
+- All social media compose boxes accept clipboard image paste via Ctrl+V
+- Temporary hotkeys (Ctrl+Shift+V, Escape) auto-deactivate after use or timeout
+- Character limits enforced per platform (Twitter 280, Bluesky 300, Mastodon 500)
+- `IsSet()` fallback checks ensure zero risk of breaking existing behavior
+- Platform configuration centralized in `SocialPlatforms` class for easy expansion
 
 ---
 
-## 🔮 STEP 4: Get It Back!
+### 📝 Feature 2: Transcript Format
 
-Want your content back? Easy!
+**New File:** `CC_TranscriptFormat.ahk`
 
-1. Click where you want to type (Word, email, anywhere)
-2. Type: `soup1` then press **Space**
-3. ✨ Your content appears! ✨
+Adds a **📝 Format** button to the Transcript field in the Edit GUI. Raw video and audio transcripts from YouTube, PBS, podcasts, and other sources can now be cleaned up and distilled with one click.
 
----
+**Three formatting options:**
 
-## 📋 Quick Reference (Print This!)
+**🧹 Clean Transcript** — Strips all non-speech content:
 
-| To Do This... | Press These Keys |
-| --- | --- |
-| **Save from website** | **Ctrl + Alt + G** |
-| **See all your saves** | **Ctrl + Alt + B** |
-| **Get help** | **F1** (inside the browser) or click **❓** |
+- Music cues (♪ ♫ and variations)
+- Sound effects and stage directions ((gunfire), (train chugging), (birds chirping))
+- Speaker labels (NARRATOR:, EDWARDS:, H.W. BRANDS:)
+- Excessive blank lines and orphaned punctuation
+- Shows reduction percentage after cleanup
 
-| Type This... | To Do This... |
-| --- | --- |
-| `soup1` then Space | Paste your saved content |
-| `soup1go` then Space | Open the original website |
-| `soup1em` then Space | Email it to someone |
-| `soup1fb` then Space | Share to Facebook |
-| `soup1x` then Space | Share to Twitter/X |
-| `soup1bs` then Space | Share to Bluesky |
-| `soup1gpt` then Space | Send to ChatGPT |
-| `soup1cl` then Space | Send to Claude |
+**💬 Key Quotes Only** — Extracts notable interview quotes with speaker attribution:
 
----
+- Identifies non-narrator speakers and their spoken text
+- Formats as "Speaker Name: quote text" in Title Case
+- Skips narrator/description passages entirely
+- Drops short fragments under 30 characters
+- User chooses: replace transcript or copy to clipboard
 
-## 🚀 What Can ContentCapture Pro Do?
+**🧹 + 💬 Both** — Cleaned transcript on top, key quotes appended at the bottom with a divider. Best of both worlds in one click.
 
-### 📸 Capture Anything
-One hotkey captures the URL, page title, and any highlighted text from your browser. YouTube videos? It grabs the transcript too and saves it in a dedicated field so you can reference it anytime without re-downloading.
-
-### ⌨️ 22 Suffix Actions Per Capture
-Every capture gets 22 hotstring variants automatically. Type the name with a suffix to paste, email, share to social media, open the URL, send to AI, and more. Power users can access any capture in under 2 seconds.
-
-### 🤖 AI-Powered Research
-Select any capture and send its content directly to ChatGPT, Claude, Perplexity, or Ollama with one click. The new **AI Summarize** menu builds platform-specific prompts — tell it to write a Facebook post, a tweet, a LinkedIn share, fact-check the content, or explain it simply. Your opinion and source are included automatically.
-
-### 📜 Dedicated Transcript Field
-YouTube and video transcripts now get their own field, separate from your body text. Write your own notes and opinions in the Body field while the raw transcript is preserved for AI analysis, fact-checking, or reference. Paste a transcript with one click during capture or in the Edit screen.
-
-### 🔍 Deep Search
-Search across everything — your JSON capture database and legacy files. Find any URL, title, or text across thousands of captures instantly.
-
-### 📊 Research & Verification Toolkit
-Built-in tools for Snopes fact-checking, Media Bias ratings, Google Scholar, Wayback Machine, and Archive.today. Research notes are saved directly to each capture with quick-tag buttons for verified/false/mixed ratings.
-
-### 🖱️ Hover Preview
-Mouse over any capture in the browser to see a tooltip preview with the title, URL, body snippet, tags, and status — no clicking required.
-
-### ❓ Built-In Help System
-Press F1 or click ❓ in the Capture Browser for a tabbed help window covering Quick Start, all 22 suffixes, browser controls, hotkeys, and tips. Stays on top while you work.
-
-### 📤 Share Everywhere
-Share to Facebook, Twitter/X, Bluesky, LinkedIn, and email. The Short Version field lets you craft character-limited posts for each platform. Social media sharing automatically uses your Short Version when available.
-
-### 💾 Rock-Solid Reliability
-Every clipboard operation follows the correct save → clear → set → wait → paste → restore pattern. GUI windows never permanently disable your hotstrings. Error dialogs catch crashes visibly instead of silent failures.
-
----
-
-## 🆕 What's New in v6.4.0
-
-**New: Dedicated Transcript Field 📜**
-* YouTube transcripts save to their own field — separate from your body text
-* Write your own notes in Body while the raw transcript is preserved
-* One-click Paste button in the Edit GUI for quick transcript entry
-* AI tools can target the transcript specifically for analysis
-
-**New: AI Summarize for Platforms 🤖**
-* Research menu → AI Summarize for → Facebook / Twitter / Bluesky / LinkedIn
-* Also: Write a Comment, Fact-Check, Key Points, and ELI5 prompts
-* Automatically includes your title, URL, opinion, and transcript/body
-* Choose ChatGPT, Claude, Perplexity, Ollama, or just copy to clipboard
-
-**Fixed: WinGetTitle Error 🛡️**
-* No more "Target window not found" error dialogs during capture
-* Graceful fallback when active window changes mid-capture
-
-**Previous Highlights (v6.3.x):**
-* Built-in Help System with 5 tabbed sections
-* Deep Search across all capture sources
-* 19 clipboard handling bugs fixed across the codebase
-* GUI suspension system completely rebuilt — hotstrings never get permanently stuck
-* Social media Short Version field now properly used by sharing functions
-
----
-
-## ❓ PROBLEMS? READ THIS!
-
-### "Nothing happens when I press Ctrl+Alt+G"
-
-1. Look for a green **"H"** near your clock (might need to click the little **^** arrow to see hidden icons)
-2. **No green H?** Double-click `ContentCapture.ahk` to start the program
-3. **Still nothing?** You probably need to install AutoHotkey — go back to STEP 1!
-
-### "I see an error about v2"
-
-You installed the wrong version! Go to [autohotkey.com/download](https://www.autohotkey.com/download/) and make sure you download **v2.0** (the top option), NOT v1.1
-
-### "Windows blocked the program"
-
-This is normal! Click **"More info"** then **"Run anyway"** — the program is safe!
-
-### "Where are my saves stored?"
-
-In a file called `captures.dat` — **DON'T DELETE THIS FILE!** It has all your saves!
-
----
-
-## 💾 How to Back Up Your Data
-
-Copy these to a USB drive or email them to yourself:
-
-* The file called `captures.dat`
-* The folder called `images`
-
----
-
-## 👵 Tips for Naming Your Saves
-
-**GOOD names:**
-
-* `cookies1`
-* `meatloaf`
-* `momsoup`
-* `xmasstuffing`
-* `climatevid`
-
-**BAD names:**
-
-* `Grandma's Cookies` ❌ (no spaces or apostrophes!)
-* `a` ❌ (too short, you'll forget what it is)
-* `recipe` ❌ (too generic)
-
----
-
-## 🗂️ Project Structure
+**Example — Before:**
 
 ```
-ContentCapture-Pro/
-├── ContentCapture.ahk          # Main launcher (run this!)
-├── ContentCapture-Pro.ahk      # Core application
-├── DynamicSuffixHandler.ahk    # Suffix hotstring engine
-├── ResearchTools.ahk           # AI & research toolkit
-├── CC_Clipboard.ahk            # Clipboard management
-├── CC_GrepAll.ahk              # Deep Search module
-├── CC_HelpWindow.ahk           # Built-in help system
-├── CC_HoverPreview.ahk         # Hover tooltip previews
-├── CC_ShareModule.ahk          # Import/Export
-├── SocialShare.ahk             # Social media sharing
-├── ImageCapture.ahk            # Image attachments
-├── ImageClipboard.ahk          # Image clipboard handling
-├── ImageDatabase.ahk           # Image storage
-├── ImageSharing.ahk            # Image sharing
-├── install.bat                 # One-click installer
-├── Install-ContentCapture.ps1  # PowerShell installer
-├── captures.dat                # Your data (created on first run)
-├── config.ini                  # Settings (created on first run)
-└── images/                     # Attached images
+♪ ♪ (kids shouting) NARRATOR: A vicious cold snap hit New York
+in the first week of February 1897. REBECCA EDWARDS: During the
+Gilded Age, Americans feel quite certainly that they are the
+vanguard of civilization and progress. ♪ ♪ (train chugging)
+```
+
+**Example — After Clean:**
+
+```
+A vicious cold snap hit New York in the first week of February
+1897. During the Gilded Age, Americans feel quite certainly that
+they are the vanguard of civilization and progress.
+```
+
+**Example — After Key Quotes:**
+
+```
+Rebecca Edwards: During the Gilded Age, Americans feel quite
+certainly that they are the vanguard of civilization and progress.
+This is an enormous period of opportunity, and possibility, and hope.
 ```
 
 ---
 
-## 📞 Need Help?
+### Installation
 
-* **Website:** [crisisoftruth.org](https://crisisoftruth.org)
-* **GitHub Issues:** [Report a bug](https://github.com/smogmanus1/ContentCapture-Pro/issues)
-* **AutoHotkey Forums:** [Discussion thread](https://www.autohotkey.com/boards/)
+**New files (copy to ContentCapture Pro directory):**
+
+- `SocialImageShare.ahk`
+- `CC_TranscriptFormat.ahk`
+
+**Add to ContentCapture-Pro.ahk includes:**
+
+```autohotkey
+#Include SocialImageShare.ahk
+#Include CC_TranscriptFormat.ahk
+```
+
+**Edit GUI integration for Transcript Format:**
+
+Add this line where the Transcript field Paste/Clear buttons are created:
+
+```autohotkey
+TF_AddToGUI(myGui, transcriptEditCtrl)
+```
+
+**DynamicSuffixHandler.ahk — six method updates:**
+
+- `ActionFacebook` → delegates to `SI_SharePost("facebook", ...)`
+- `ActionFacebookComment` → delegates to `SI_ShareComment("facebook", ...)`
+- `ActionTwitter` → delegates to `SI_SharePost("twitter", ...)`
+- `ActionBluesky` → delegates to `SI_SharePost("bluesky", ...)`
+- `ActionLinkedIn` → delegates to `SI_SharePost("linkedin", ...)`
+- `ActionMastodon` → delegates to `SI_SharePost("mastodon", ...)`
+
+Each method includes a fallback so everything works even if `SocialImageShare.ahk` is not loaded.
+
+See `INTEGRATION_GUIDE.txt` for exact replacement code for each method.
+
+**Delete if present:**
+
+- `FacebookImageShare.ahk` — replaced by `SocialImageShare.ahk`
 
 ---
 
-## 🙏 Credits
+### File Manifest
 
-Created by Brad | [crisisoftruth.org](https://crisisoftruth.org)
-
-Special thanks to the AutoHotkey community, Joe Glines, Isaias Baez, and Jack Dunning for inspiration and contributions.
+| File | Status | Purpose |
+|------|--------|---------|
+| `SocialImageShare.ahk` | **NEW** | Image-aware sharing for all social platforms |
+| `CC_TranscriptFormat.ahk` | **NEW** | Transcript cleanup and key quote extraction |
+| `DynamicSuffixHandler.ahk` | **UPDATED** | Six Action methods updated for image delegation |
+| `ContentCapture-Pro.ahk` | **UPDATED** | Two new #Include lines, GUI integration call |
+| `FacebookImageShare.ahk` | **DELETE** | Replaced by SocialImageShare.ahk |
+| `INTEGRATION_GUIDE.txt` | **Reference** | Exact code for DynamicSuffixHandler updates |
+| `TRANSCRIPT_FORMAT_GUIDE.txt` | **Reference** | Transcript Format integration details |
 
 ---
 
-## 📄 License
-
-[MIT License](LICENSE) — Free to use, modify, and share.
-
----
-
-**Made with ❤️ by Brad**
-
-**Happy Capturing! 🚀**
+*ContentCapture Pro v6.5.0 — Capture it once. Share it everywhere.*
