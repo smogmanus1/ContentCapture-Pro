@@ -3,9 +3,17 @@
 ; ==============================================================================
 ; DynamicSuffixHandler.ahk - Dynamic Suffix Detection for ContentCapture Pro
 ; ==============================================================================
-; Version:     2.6
+; Version:     2.7
 ; Author:      Brad (with Claude AI assistance)
 ; License:     MIT
+;
+; CHANGELOG v2.7:
+;   - ENHANCED: ActionSocial now checks for attached images via SocialImageShare.ahk
+;     When a record has an attached image, user is prompted to include it in the post
+;   - Works across ALL platforms: Facebook, Twitter/X, Bluesky, LinkedIn, Mastodon
+;   - ActionSocialWithImage updated to use SI_SharePost for real clipboard image paste
+;   - Content building extracted to _BuildSocialContent helper to avoid duplication
+;   - Zero change to behavior when no image is attached or SocialImageShare.ahk not loaded
 ;
 ; CHANGELOG v2.6:
 ;   - CRITICAL FIX: Removed all suffix entries that overlap with static hotstrings
@@ -494,7 +502,47 @@ class DynamicSuffixHandler {
     static ActionSocial(captureName, platform) {
         cap := this.captureDataRef[captureName]
         
-        ; Get character limit
+        ; ── CHECK FOR ATTACHED IMAGE ──
+        ; If SocialImageShare.ahk is loaded and record has an image, delegate to it
+        if IsSet(SI_SharePost) {
+            imgPath := ""
+            try {
+                if IsSet(IC_HasImage) && IC_HasImage(captureName) {
+                    if IsSet(IC_GetImagePath)
+                        imgPath := IC_GetImagePath(captureName)
+                }
+            }
+            if (imgPath != "" && FileExist(imgPath)) {
+                content := this._BuildSocialContent(cap, platform)
+                url := cap.Has("url") && cap["url"] != "" ? cap["url"] : ""
+                SI_SharePost(platform, captureName, cap, content, url)
+                return
+            }
+        }
+        
+        ; ── STANDARD SHARING (no image or SocialImageShare not loaded) ──
+        content := this._BuildSocialContent(cap, platform)
+        
+        limits := Map(
+            "facebook", 63206,
+            "twitter", 280,
+            "bluesky", 300,
+            "linkedin", 3000,
+            "mastodon", 500
+        )
+        limit := limits.Has(platform) ? limits[platform] : 500
+        
+        ; Check length and either paste or show edit window
+        if (StrLen(content) <= limit) {
+            DSH_SafePaste(content)
+        } else {
+            ; Show edit window for trimming
+            this.ShowSocialEditWindow(captureName, platform, content, limit)
+        }
+    }
+    
+    ; Helper: Build social content (used by both image and non-image paths)
+    static _BuildSocialContent(cap, platform) {
         limits := Map(
             "facebook", 63206,
             "twitter", 280,
@@ -524,24 +572,23 @@ class DynamicSuffixHandler {
                 content .= cap["url"]
         }
         
-        content := Trim(content)
-        
-        ; Check length and either paste or show edit window
-        if (StrLen(content) <= limit) {
-            DSH_SafePaste(content)
-        } else {
-            ; Show edit window for trimming
-            this.ShowSocialEditWindow(captureName, platform, content, limit)
-        }
+        return Trim(content)
     }
     
     static ActionSocialWithImage(captureName, platform) {
         cap := this.captureDataRef[captureName]
         
-        ; First paste the text content
+        ; If SocialImageShare.ahk is loaded, use it for real clipboard image paste
+        if IsSet(SI_SharePost) {
+            content := this._BuildSocialContent(cap, platform)
+            url := cap.Has("url") && cap["url"] != "" ? cap["url"] : ""
+            SI_SharePost(platform, captureName, cap, content, url)
+            return
+        }
+        
+        ; Fallback: paste text content then image path
         this.ActionSocial(captureName, platform)
         
-        ; Then add image path on new line if available
         if (cap.Has("image") && cap["image"] != "") {
             Sleep(100)
             DSH_SafePaste("`n" cap["image"])
