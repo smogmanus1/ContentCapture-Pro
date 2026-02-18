@@ -3,9 +3,17 @@
 ; ==============================================================================
 ; CC_Clipboard.ahk - Centralized Clipboard Operations for ContentCapture Pro
 ; ==============================================================================
-; Version:     1.2.0
+; Version:     1.3.0
 ; Author:      Brad (with Claude AI assistance)
-; Updated:     2026-02-01
+; Updated:     2026-02-18
+;
+; CHANGELOG v1.3.0:
+;   - FIXED: Clipboard restore after paste was THE cause of stale content bug
+;   - CC_ClipPaste now CLEARS clipboard after paste instead of restoring old content
+;   - _DSH_SafePaste fallback also updated to clear instead of restore
+;   - Restoring old clipboard caused race conditions where stale content would
+;     get pasted on the NEXT hotstring trigger instead of new content
+;   - This is the definitive fix for "clipboard not clearing" / "wrong content pasting"
 ;
 ; CHANGELOG v1.2.0:
 ;   - FIXED: Paste delay STILL too short for some applications
@@ -34,19 +42,18 @@
 ;
 ; THE SOLUTION:
 ;   Every clipboard operation now follows this bulletproof sequence:
-;   1. Save original clipboard (if needed)
-;   2. Clear clipboard completely
-;   3. Wait for clear to complete
-;   4. Set new content
-;   5. Wait for content to be ready
-;   6. FLUSH input buffer (prevent keystroke leaking)
-;   7. Wait for modifier keys to release
-;   8. Perform paste (Ctrl+V)
-;   9. Wait for paste to complete (dynamic delay based on content size)
-;  10. Restore original clipboard (if needed)
+;   1. Clear clipboard completely
+;   2. Wait for clear to complete
+;   3. Set new content
+;   4. Wait for content to be ready
+;   5. FLUSH input buffer (prevent keystroke leaking)
+;   6. Wait for modifier keys to release
+;   7. Perform paste (Ctrl+V)
+;   8. Wait for paste to complete (dynamic delay based on content size)
+;   9. CLEAR clipboard (prevents stale content on next operation)
 ;
 ; USAGE:
-;   CC_ClipPaste(content)      → Paste content, restore original clipboard
+;   CC_ClipPaste(content)      → Paste content, clear clipboard after
 ;   CC_ClipPasteKeep(content)  → Paste content, keep it on clipboard
 ;   CC_ClipCopy(content)       → Copy content to clipboard (no paste)
 ;   CC_ClipGet()               → Get current clipboard text
@@ -86,7 +93,11 @@ global CC_CLIP_CONTENT_SCALE := 50        ; add 1ms per this many chars
 ; CC_ClipPaste(content, timeout)
 ; ------------------------------------------------------------------------------
 ; The PRIMARY paste function. Use this for hotstring paste operations.
-; Pastes content and restores the user's original clipboard afterward.
+; Pastes content and then CLEARS the clipboard to prevent stale content bugs.
+;
+; NOTE (v1.3.0): This function NO LONGER restores the original clipboard.
+; Restoring caused race conditions where old content would get pasted on
+; the next hotstring trigger. Clearing is the safe default.
 ;
 ; Parameters:
 ;   content  - Text to paste
@@ -103,38 +114,39 @@ CC_ClipPaste(content, timeout := 2) {
     if (content = "")
         return false
     
-    ; Step 1: Save original clipboard (preserves all formats including images)
-    savedClip := ClipboardAll()
+    ; v1.3.0: NO LONGER saving/restoring clipboard
+    ; Restoring old clipboard was THE root cause of stale content bugs.
+    ; The old content would sit on the clipboard and win race conditions
+    ; on the next hotstring trigger, causing wrong content to paste.
     
-    ; Steps 2-5: Clear, wait, set, wait
+    ; Steps 1-4: Clear, wait, set, wait
     if !_CC_ClipSetInternal(content, timeout) {
-        A_Clipboard := savedClip
         return false
     }
     
-    ; Step 6: Pre-paste flush - let any pending keystrokes finish
+    ; Step 5: Pre-paste flush - let any pending keystrokes finish
     ; This prevents the hotstring trigger character (space/enter/etc.)
     ; from leaking into the pasted content (e.g., "lie" becoming "like")
     Sleep(CC_CLIP_PRE_PASTE_DELAY)
     
-    ; Step 7: Ensure no modifier keys are stuck
-    ; Sometimes Ctrl/Shift/Alt can be held from previous operations
+    ; Step 6: Ensure no modifier keys are stuck
     KeyWait("Ctrl", "T0.3")
     KeyWait("Shift", "T0.3")
     KeyWait("Alt", "T0.3")
     
-    ; Step 8: Paste
+    ; Step 7: Paste
     SendInput("^v")
     
-    ; Step 9: Wait for paste to complete (CRITICAL - must be long enough!)
+    ; Step 8: Wait for paste to complete (CRITICAL - must be long enough!)
     ; Calculate delay based on content length
     contentLen := StrLen(content)
     pasteDelay := CC_CLIP_PASTE_BASE_DELAY + Min(contentLen // CC_CLIP_CONTENT_SCALE, CC_CLIP_PASTE_MAX_DELAY)
     pasteDelay := Max(pasteDelay, 500)
     Sleep(pasteDelay)
     
-    ; Step 10: Restore original clipboard
-    A_Clipboard := savedClip
+    ; Step 9: CLEAR clipboard after paste (v1.3.0 fix)
+    ; This ensures no stale content remains for the next operation
+    A_Clipboard := ""
     
     return true
 }

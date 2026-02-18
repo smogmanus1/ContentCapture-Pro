@@ -795,18 +795,18 @@ class DynamicSuffixHandler {
 
 ; Internal fallback versions (prefixed with underscore to avoid conflicts)
 _DSH_SafePaste(text) {
-    savedClip := ClipboardAll()
+    ; v1.3.0: No longer saving/restoring clipboard - clear after paste instead
     A_Clipboard := ""
     Sleep(50)
     A_Clipboard := text
     if !ClipWait(2) {
-        A_Clipboard := savedClip
         TrayTip("Clipboard operation failed", "Error", "2")
         return
     }
+    Sleep(150)  ; Pre-paste flush
     SendInput("^v")
-    Sleep(150)
-    A_Clipboard := savedClip
+    Sleep(500)  ; Wait for paste
+    A_Clipboard := ""  ; Clear clipboard to prevent stale content
 }
 
 _DSH_SafeCopy() {
