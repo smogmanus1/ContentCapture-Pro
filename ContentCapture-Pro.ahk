@@ -4431,6 +4431,8 @@ CC_OpenCaptureBrowser() {
     browserGui.Add("Button", "x200 y440 w65", "🔄 Refresh").OnEvent("Click", (*) => CC_BrowserRefreshList(browserGui, listView))
     browserGui.Add("Button", "x270 y440 w55", "📤 Share").OnEvent("Click", (*) => CC_BrowserShareCapture(listView, browserGui))
     browserGui.Add("Button", "x330 y440 w60", "📥 Import").OnEvent("Click", (*) => CC_BrowserImportCapture())
+    pinBtn := browserGui.Add("Button", "x395 y440 w50", "📌 Pin")
+    pinBtn.OnEvent("Click", (*) => CC_BrowserTogglePin(browserGui, pinBtn))
 
     browserGui.statusText := browserGui.Add("Text", "x10 y478 w680", "Showing " CaptureNames.Length " captures (searching all fields)")
 
@@ -4465,6 +4467,21 @@ CC_OpenCaptureBrowser() {
     
     ; Show helpful tip for new users
     CCHelp.TipAfterFirstBrowse()
+}
+
+; Toggle browser window always-on-top
+CC_BrowserTogglePin(browserGui, pinBtn) {
+    static isPinned := false
+    isPinned := !isPinned
+    if (isPinned) {
+        browserGui.Opt("+AlwaysOnTop")
+        pinBtn.Text := "📌 Unpin"
+        TrayTip("Browser pinned on top!", "📌 Pin", "1")
+    } else {
+        browserGui.Opt("-AlwaysOnTop")
+        pinBtn.Text := "📌 Pin"
+        TrayTip("Browser unpinned.", "📌 Pin", "1")
+    }
 }
 
 CC_BrowserToggleFavorite(listView, browserGui) {
@@ -6979,6 +6996,13 @@ CC_EditCapture(name) {
     editGui.Add("Button", "x475 y677 w60 h22", "Clear").OnEvent("Click", (*) => (editGui["EditTranscript"].Value := ""))
     editGui.SetFont("s10 c000000", "Consolas")
     editTranscript := editGui.Add("Edit", "x15 y698 w670 h80 Multi VScroll vEditTranscript", currentTranscript)
+    
+    ; Set the global transcript control reference for CC_TranscriptFormat.ahk
+    global TF_TranscriptCtrl
+    TF_TranscriptCtrl := editTranscript
+    ; Add Format button on the transcript label row
+    editGui.SetFont("s8", "Segoe UI")
+    editGui.Add("Button", "x540 y677 w80 h22", "📝 Format").OnEvent("Click", TF_ShowFormatMenu)
 
     ; Image attachment section
     editGui.SetFont("s9 c666666")
