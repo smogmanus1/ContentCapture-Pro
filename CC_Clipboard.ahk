@@ -3,9 +3,23 @@
 ; ==============================================================================
 ; CC_Clipboard.ahk - Centralized Clipboard Operations for ContentCapture Pro
 ; ==============================================================================
-; Version:     1.3.0
+; Version:     1.4.0
 ; Author:      Brad (with Claude AI assistance)
-; Updated:     2026-02-18
+; Updated:     2026-02-20
+;
+; CHANGELOG v1.4.0:
+;   - FIXED: Second hotstring never fires after first paste in Facebook comments
+;   - ROOT CAUSE: SendInput("^v") disables the keyboard hook while running.
+;     The hotstring recognizer depends on the keyboard hook. After a SendInput
+;     paste, the recognizer buffer is left dirty and the next hotstring typed
+;     by the user never matches.
+;   - FIX: Changed SendInput("^v") → SendEvent("^v") in CC_ClipPaste and
+;     CC_ClipPasteKeep. SendEvent does NOT suppress the keyboard hook.
+;   - FIX: Added Hotstring("Reset") after every paste to explicitly clear
+;     the recognizer buffer for the next hotstring.
+;   - Source: AHK docs confirm "Send/SendInput automatically disable the
+;     script's keyboard hook while they're running. The same is true of the
+;     hotstring recognizer, since its reset is triggered by the keyboard hook."
 ;
 ; CHANGELOG v1.3.0:
 ;   - FIXED: Clipboard restore after paste was THE cause of stale content bug
@@ -134,8 +148,13 @@ CC_ClipPaste(content, timeout := 2) {
     KeyWait("Shift", "T0.3")
     KeyWait("Alt", "T0.3")
     
-    ; Step 7: Paste
-    SendInput("^v")
+    ; Step 7: Paste — using SendEvent, NOT SendInput
+    ; CRITICAL FIX (v1.4.0): SendInput disables the keyboard hook while it
+    ; runs. The hotstring recognizer depends on the keyboard hook. This means
+    ; after a SendInput paste, the recognizer buffer is left dirty and the
+    ; NEXT hotstring you type won't fire. SendEvent does NOT suppress the
+    ; keyboard hook, so the recognizer stays healthy.
+    SendEvent("^v")
     
     ; Step 8: Wait for paste to complete (CRITICAL - must be long enough!)
     ; Calculate delay based on content length
@@ -147,6 +166,12 @@ CC_ClipPaste(content, timeout := 2) {
     ; Step 9: CLEAR clipboard after paste (v1.3.0 fix)
     ; This ensures no stale content remains for the next operation
     A_Clipboard := ""
+    
+    ; Step 10: Reset the hotstring recognizer (v1.4.0 fix)
+    ; Clears the internal keystroke buffer so the NEXT hotstring you type
+    ; will be recognized from a clean slate. This is the definitive fix for
+    ; "first hotstring works, second doesn't fire."
+    Hotstring("Reset")
     
     return true
 }
@@ -178,14 +203,17 @@ CC_ClipPasteKeep(content, timeout := 2) {
     KeyWait("Shift", "T0.3")
     KeyWait("Alt", "T0.3")
     
-    ; Paste
-    SendInput("^v")
+    ; Paste — SendEvent, not SendInput (see CC_ClipPaste for explanation)
+    SendEvent("^v")
     
     ; Wait for paste to complete
     contentLen := StrLen(content)
     pasteDelay := CC_CLIP_PASTE_BASE_DELAY + Min(contentLen // CC_CLIP_CONTENT_SCALE, CC_CLIP_PASTE_MAX_DELAY)
     pasteDelay := Max(pasteDelay, 500)
     Sleep(pasteDelay)
+    
+    ; Reset hotstring recognizer for next hotstring
+    Hotstring("Reset")
     
     return true
 }

@@ -794,6 +794,7 @@ class DynamicSuffixHandler {
 ; ==============================================================================
 
 ; Internal fallback versions (prefixed with underscore to avoid conflicts)
+
 _DSH_SafePaste(text) {
     ; v1.3.0: No longer saving/restoring clipboard - clear after paste instead
     A_Clipboard := ""
@@ -801,12 +802,17 @@ _DSH_SafePaste(text) {
     A_Clipboard := text
     if !ClipWait(2) {
         TrayTip("Clipboard operation failed", "Error", "2")
+        Hotstring("Reset")
         return
     }
     Sleep(150)  ; Pre-paste flush
-    SendInput("^v")
+    KeyWait("Ctrl", "T0.3")
+    KeyWait("Shift", "T0.3")
+    KeyWait("Alt", "T0.3")
+    SendEvent("^v")  ; v1.4.0: Was SendInput — fixes second hotstring not firing
     Sleep(500)  ; Wait for paste
     A_Clipboard := ""  ; Clear clipboard to prevent stale content
+    Hotstring("Reset")  ; v1.4.0: Reset recognizer for next hotstring
 }
 
 _DSH_SafeCopy() {
