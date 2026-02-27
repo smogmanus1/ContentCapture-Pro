@@ -2,9 +2,25 @@
 ; ContentCapture Pro - Professional Content Capture & Sharing System
 ; ==============================================================================
 ; Author:      Brad
-; Version:     6.3.2 (AHK v2) - STABLE RELEASE
-; Updated:     2026-02-08
+; Version:     6.5.0 (AHK v2) - CONTENT FILES ARCHITECTURE
+; Updated:     2026-02-20
 ; License:     MIT
+;
+; CHANGELOG v6.5.0:
+;   - NEW: CC_ContentFiles.ahk - External content file storage system
+;     * Large body text (>5000 chars) automatically saved to content/ folder
+;     * ALL transcripts saved to content/ folder (any size)
+;     * captures.dat stores lightweight FILE: pointers instead of inline content
+;     * Dramatically reduces captures.dat size and memory usage
+;     * Eliminates GUI "Can't create control" errors from massive content
+;     * Speeds up hotstring firing, save/reload cycles, and clipboard ops
+;   - NEW: One-time automatic migration of existing inline content to files
+;   - NEW: Edit GUI shows preview (2000 chars) for large transcripts
+;   - NEW: "Open File" button for file-based transcripts in Edit GUI
+;   - FIXED: Edit GUI duplicate control error (static reference closure bug)
+;   - FIXED: Save function uses safe control reads with fallback
+;   - IMPROVED: Browser filter skips file-pointer content for fast search
+;     (use Deep Search for full body/transcript content search)
 ;
 ; CHANGELOG v6.3.2:
 ;   - CRITICAL FIX: Replaced Suspend(true/false) with targeted DSH InputHook pause
@@ -472,6 +488,7 @@
 #Warn VarUnset, Off  ; Suppress warnings about globals defined in other files
 
 ; CC_Clipboard.ahk MUST be included first - it provides all clipboard functions
+#Include CC_ContentFiles.ahk
 #Include CC_Clipboard.ahk
 #Include ImageCapture.ahk
 #Include ImageClipboard.ahk
@@ -683,6 +700,18 @@ if !FileExist(ConfigFile) {
 ; Load capture data
 CC_LoadCaptureData()
 
+; Migrate inline content to files (one-time operation, safe to run repeatedly)
+migrationFlag := BaseDir "\content_migrated.flag"
+if !FileExist(migrationFlag) {
+    migratedCount := CF_MigrateAll()
+    if (migratedCount > 0) {
+        CC_SaveCaptureData()  ; Save the updated pointers
+        try FileAppend(FormatTime(, "yyyy-MM-dd HH:mm:ss") " - Migrated " migratedCount " captures", migrationFlag, "UTF-8")
+    } else {
+        try FileAppend(FormatTime(, "yyyy-MM-dd HH:mm:ss") " - No migration needed", migrationFlag, "UTF-8")
+    }
+}
+
 DynamicSuffixHandler.Initialize(CaptureData, CaptureNames)
 
 ; Generate static hotstrings file
@@ -695,7 +724,7 @@ CC_CheckAutoBackup()
 CC_SetupTrayMenu()
 
 ; Show startup notification
-CC_Notify("ContentCapture Pro v6.3.2 loaded!`n" CaptureNames.Length " captures available.`nType 'namesum' to summarize any capture!")
+CC_Notify("ContentCapture Pro v6.5.0 loaded!`n" CaptureNames.Length " captures available.`nType 'namesum' to summarize any capture!")
 
 ; Check if we should open browser after reload (flag file from edit save)
 openBrowserFlag := BaseDir "\open_browser.flag"
@@ -1930,8 +1959,11 @@ CC_GetCaptureContent(name) {
     if (cap.Has("opinion") && cap["opinion"] != "")
         content .= "`n`n--- My Take ---`n" cap["opinion"]
 
-    if (cap.Has("body") && cap["body"] != "")
-        content .= "`n`n" cap["body"]
+    if (cap.Has("body") && cap["body"] != "") {
+        bodyText := CF_LoadContent(name, "body", cap["body"])
+        if (bodyText != "")
+            content .= "`n`n" bodyText
+    }
 
     return content
 }
@@ -2264,10 +2296,22 @@ CC_GetCaptureURL(name) {
 CC_HotstringPaste(name, *) {
     global CaptureData
     
+    ; Save the active window NOW before any clipboard ops shift focus
+    ; (Facebook/React contenteditable fields can lose focus during clipboard setup)
+    activeHwnd := WinExist("A")
+    
     ; Get full content - always paste full content regardless of platform
     content := CC_GetCaptureContent(name)
     if (content = "") {
+        TrayTip("No content found for: " name, "ContentCapture Pro", "2")
         return
+    }
+
+    ; Re-activate the original window before paste in case focus drifted
+    ; Sleep gives Windows time to fully transfer focus before SendEvent("^v")
+    if (activeHwnd) {
+        try WinActivate("ahk_id " activeHwnd)
+        Sleep(200)  ; Wait for focus to settle - without this, first paste fires into void
     }
 
     ; Use safe paste - handles clipboard save/restore internally
@@ -2681,7 +2725,7 @@ CC_ShowReadWindow(name, *) {
     tags := cap.Has("tags") ? cap["tags"] : ""
     opinion := cap.Has("opinion") ? cap["opinion"] : ""
     note := cap.Has("note") ? cap["note"] : ""
-    body := cap.Has("body") ? cap["body"] : ""
+    body := CF_LoadContent(name, "body", cap.Has("body") ? cap["body"] : "")
 
     readGui := Gui("+Resize", "📖 " title)
     readGui.SetFont("s10")
@@ -3187,6 +3231,9 @@ CC_LoadCaptureData() {
             } else if (SubStr(line, 1, 6) = "short=") {
                 ; Legacy single-line format
                 currentCapture["short"] := SubStr(line, 7)
+            } else if (SubStr(line, 1, 10) = "body=FILE:") {
+                ; File pointer - store pointer, content loaded on demand
+                currentCapture["body"] := SubStr(line, 6)  ; "FILE:filename.txt"
             } else if (line = "body=<<<BODY") {
                 inBody := true
             } else if (line = "BODY>>>") {
@@ -3195,6 +3242,9 @@ CC_LoadCaptureData() {
                     currentCapture["body"] := RTrim(bodyLines, "`n")
             } else if (inBody) {
                 bodyLines .= line "`n"
+            } else if (SubStr(line, 1, 16) = "transcript=FILE:") {
+                ; File pointer - store pointer, content loaded on demand
+                currentCapture["transcript"] := SubStr(line, 12)  ; "FILE:filename.txt"
             } else if (line = "transcript=<<<TRANSCRIPT") {
                 inTranscript := true
             } else if (line = "TRANSCRIPT>>>") {
@@ -3269,15 +3319,27 @@ CC_SaveCaptureData() {
         }
 
         if (cap.Has("body") && cap["body"] != "") {
-            content .= "body=<<<BODY`n"
-            content .= cap["body"] "`n"
-            content .= "BODY>>>`n"
+            bodyValue := cap["body"]
+            ; If it's already a file pointer, write the pointer as a single line
+            if CF_IsFilePointer(bodyValue) {
+                content .= "body=" bodyValue "`n"
+            } else {
+                content .= "body=<<<BODY`n"
+                content .= bodyValue "`n"
+                content .= "BODY>>>`n"
+            }
         }
 
         if (cap.Has("transcript") && cap["transcript"] != "") {
-            content .= "transcript=<<<TRANSCRIPT`n"
-            content .= cap["transcript"] "`n"
-            content .= "TRANSCRIPT>>>`n"
+            transcriptValue := cap["transcript"]
+            ; If it's already a file pointer, write the pointer as a single line
+            if CF_IsFilePointer(transcriptValue) {
+                content .= "transcript=" transcriptValue "`n"
+            } else {
+                content .= "transcript=<<<TRANSCRIPT`n"
+                content .= transcriptValue "`n"
+                content .= "TRANSCRIPT>>>`n"
+            }
         }
 
         content .= "`n"
@@ -3322,10 +3384,12 @@ CC_AddCapture(name, url, title, date, tags, note, opinion, body, short := "", re
     cap["tags"] := tags
     cap["note"] := note
     cap["opinion"] := opinion
-    cap["body"] := body
     cap["short"] := short
     cap["research"] := research
-    cap["transcript"] := transcript
+    
+    ; Externalize large content through file system
+    cap["body"] := CF_SaveContent(name, "body", body)
+    cap["transcript"] := CF_SaveContent(name, "transcript", transcript)
 
     CaptureData[StrLower(name)] := cap
 
@@ -3869,7 +3933,15 @@ CC_CaptureContent() {
         }
     }
 
-    rawTitle := WinGetTitle("A")
+    ; Brief pause to let the browser regain focus after any MsgBox dialogs
+    Sleep(300)
+    
+    rawTitle := ""
+    try {
+        rawTitle := WinGetTitle("A")
+    } catch {
+        rawTitle := ""
+    }
     title := CC_GetPageTitle(rawTitle)
     if (title = "")
         title := "Untitled Page"
@@ -4585,10 +4657,13 @@ CC_FilterBrowserCaptures(browserGui) {
         }
 
         if (searchText != "") {
-            ; Search ALL fields - name, title, body, opinion, tags, URL, note
+            ; Search ALL metadata fields - name, title, opinion, tags, URL, note
+            ; Body is only searched if inline (not file-pointer) to keep filter fast
+            ; Use Deep Search (Ctrl+G) to search body/transcript file content
             nameLower := StrLower(name)
             titleLower := StrLower(cap.Has("title") ? cap["title"] : "")
-            bodyLower := StrLower(cap.Has("body") ? cap["body"] : "")
+            bodyRaw := cap.Has("body") ? cap["body"] : ""
+            bodyLower := (bodyRaw != "" && !CF_IsFilePointer(bodyRaw)) ? StrLower(bodyRaw) : ""
             opinionLower := StrLower(cap.Has("opinion") ? cap["opinion"] : "")
             tagsLower := StrLower(cap.Has("tags") ? cap["tags"] : "")
             urlLower := StrLower(cap.Has("url") ? cap["url"] : "")
@@ -5094,6 +5169,7 @@ CC_BrowserDeleteCapture(listView, browserGui) {
 
     ; Delete all selected captures
     for name in selectedNames {
+        CF_DeleteContent(name)  ; Remove associated content files
         if CaptureData.Has(StrLower(name))
             CaptureData.Delete(name)
     }
@@ -6881,9 +6957,15 @@ CC_MoveToArchive(restoredEntries, backupData, backupNames) {
 ; EDIT CAPTURE
 ; ==============================================================================
 
-CC_EditCapture(name) {
+CC_EditCapture(name, clearOnly := false) {
     global CaptureData, AvailableTags
     static prevEditGui := ""
+    
+    ; Allow external callers to clear the static reference (used by Close/Escape handlers)
+    if (clearOnly) {
+        prevEditGui := ""
+        return
+    }
     
     ; Destroy any previous Edit GUI instance to prevent duplicate control errors
     if IsObject(prevEditGui) {
@@ -6892,6 +6974,17 @@ CC_EditCapture(name) {
             prevEditGui.Destroy()
         }
         prevEditGui := ""
+        Sleep(50)  ; Give Windows time to fully release GUI resources
+    }
+    
+    ; Fallback: destroy any lingering Edit GUI windows by title
+    try {
+        DetectHiddenWindows(true)
+        if WinExist("✏️ Edit: ahk_class AutoHotkeyGUI") {
+            WinClose()
+            Sleep(50)
+        }
+        DetectHiddenWindows(false)
     }
     
     CC_SuspendHotstrings()
@@ -6910,7 +7003,8 @@ CC_EditCapture(name) {
     currentOpinion := cap.Has("opinion") ? cap["opinion"] : ""
     currentNote := cap.Has("note") ? cap["note"] : ""
     currentResearch := cap.Has("research") ? cap["research"] : ""
-    currentBody := cap.Has("body") ? cap["body"] : ""
+    ; Resolve file pointers for body and load actual content
+    currentBody := CF_LoadContent(name, "body", cap.Has("body") ? cap["body"] : "")
 
     editGui := Gui("+AlwaysOnTop +Resize", "✏️ Edit: " name)
     prevEditGui := editGui  ; Store reference for cleanup on next call
@@ -6985,24 +7079,38 @@ CC_EditCapture(name) {
     editBody := editGui.Add("Edit", "x15 y563 w670 h110 Multi VScroll vEditBody", currentBody)
 
     ; Transcript field (for YouTube/video transcripts)
-    currentTranscript := cap.Has("transcript") ? cap["transcript"] : ""
+    ; Load transcript from file if it's a pointer
+    rawTranscriptValue := cap.Has("transcript") ? cap["transcript"] : ""
+    transcriptIsFile := CF_IsFilePointer(rawTranscriptValue)
+    currentTranscript := CF_LoadContent(name, "transcript", rawTranscriptValue)
     hasTranscript := currentTranscript != ""
+    transcriptLen := StrLen(currentTranscript)
     transcriptColor := hasTranscript ? "006600" : "666666"
-    transcriptIndicator := hasTranscript ? " ✓ (" StrLen(currentTranscript) " chars)" : ""
+    transcriptIndicator := hasTranscript ? " ✓ (" transcriptLen " chars" (transcriptIsFile ? ", file" : "") ")" : ""
     editGui.SetFont("s9 c" transcriptColor)
-    editGui.Add("Text", "x15 y680", "📜 Transcript (raw video/audio transcript):" transcriptIndicator)
+    editGui.Add("Text", "x15 y680", "📜 Transcript:" transcriptIndicator)
     editGui.SetFont("s8", "Segoe UI")
     editGui.Add("Button", "x380 y677 w90 h22", "📋 Paste").OnEvent("Click", (*) => (editGui["EditTranscript"].Value := A_Clipboard))
     editGui.Add("Button", "x475 y677 w60 h22", "Clear").OnEvent("Click", (*) => (editGui["EditTranscript"].Value := ""))
     editGui.SetFont("s10 c000000", "Consolas")
-    editTranscript := editGui.Add("Edit", "x15 y698 w670 h80 Multi VScroll vEditTranscript", currentTranscript)
+    ; Show preview for large transcripts, full text for small ones
+    transcriptDisplay := (transcriptLen > 2000) ? CF_GetPreview(currentTranscript, 2000) : currentTranscript
+    editTranscript := editGui.Add("Edit", "x15 y698 w670 h80 Multi VScroll vEditTranscript", transcriptDisplay)
+    ; Store whether this has a full transcript file (for save logic)
+    editGui.transcriptIsFile := transcriptIsFile
+    editGui.transcriptFullLen := transcriptLen
     
     ; Set the global transcript control reference for CC_TranscriptFormat.ahk
     global TF_TranscriptCtrl
     TF_TranscriptCtrl := editTranscript
     ; Add Format button on the transcript label row
     editGui.SetFont("s8", "Segoe UI")
-    editGui.Add("Button", "x540 y677 w80 h22", "📝 Format").OnEvent("Click", TF_ShowFormatMenu)
+    if (transcriptIsFile) {
+        ; Add "Open File" button for file-based transcripts
+        editGui.Add("Button", "x540 y677 w80 h22", "📂 Open File").OnEvent("Click", (*) => CF_OpenTranscriptFile(name))
+    } else {
+        editGui.Add("Button", "x540 y677 w80 h22", "📝 Format").OnEvent("Click", TF_ShowFormatMenu)
+    }
 
     ; Image attachment section
     editGui.SetFont("s9 c666666")
@@ -7052,7 +7160,7 @@ CC_EditCapture(name) {
     saveBtn.OnEvent("Click", (*) => CC_SaveEditedCapture(editGui, name))
 
     cancelBtn := editGui.Add("Button", "x120 y820 w80 h35", "Cancel")
-    cancelBtn.OnEvent("Click", (*) => (prevEditGui := "", CC_GuiCleanup(editGui)))
+    cancelBtn.OnEvent("Click", (*) => (CC_EditCapture("", true), CC_GuiCleanup(editGui)))
 
     ; Print button
     printBtn := editGui.Add("Button", "x205 y820 w80 h35", "🖨️ Print")
@@ -7065,10 +7173,36 @@ CC_EditCapture(name) {
     emailBtn := editGui.Add("Button", "x580 y820 w110 h35", "📧 Email")
     emailBtn.OnEvent("Click", (*) => (CC_GuiCleanup(editGui), SS_EmailCapture(name)))
 
-    editGui.OnEvent("Close", (*) => (prevEditGui := "", CC_GuiCleanup(editGui)))
-    editGui.OnEvent("Escape", (*) => (prevEditGui := "", CC_GuiCleanup(editGui)))
+    editGui.OnEvent("Close", (*) => (CC_EditCapture("", true), CC_GuiCleanup(editGui)))
+    editGui.OnEvent("Escape", (*) => (CC_EditCapture("", true), CC_GuiCleanup(editGui)))
 
     editGui.Show("w700 h870")
+}
+
+; Open transcript file in default text editor
+CF_OpenTranscriptFile(name) {
+    filePath := CF_GetFilePath(StrLower(name), "transcript")
+    if FileExist(filePath) {
+        try Run(filePath)
+    } else {
+        MsgBox("Transcript file not found:`n" filePath, "File Not Found", "48")
+    }
+}
+
+; Helper: safely read a GUI control value with fallback to Submit data or existing capture data
+CC_SafeGetControl(editGui, saved, updatedCapture, fieldName, controlName) {
+    try {
+        updatedCapture[fieldName] := editGui[controlName].Value
+    } catch {
+        ; Control may not exist (e.g. failed to create due to content size)
+        ; Fall back to Submit data, then existing data
+        try {
+            updatedCapture[fieldName] := saved.%controlName%
+        } catch {
+            ; Keep whatever was already there
+            updatedCapture[fieldName] := ""
+        }
+    }
 }
 
 CC_SaveEditedCapture(editGui, originalName) {
@@ -7099,16 +7233,45 @@ CC_SaveEditedCapture(editGui, originalName) {
         updatedCapture["name"] := newName
         ; FIX: Get all values directly from controls to ensure latest values are captured
         ; (Submit may miss updates if control hasn't lost focus)
-        updatedCapture["url"] := editGui["EditURL"].Value
-        updatedCapture["title"] := editGui["EditTitle"].Value
-        updatedCapture["tags"] := editGui["EditTags"].Value
-        updatedCapture["opinion"] := editGui["EditOpinion"].Value
-        updatedCapture["note"] := editGui["EditNote"].Value
-        updatedCapture["research"] := editGui["EditResearch"].Value
-        updatedCapture["short"] := editGui["EditShort"].Value
-        updatedCapture["body"] := editGui["EditBody"].Value
-        updatedCapture["transcript"] := editGui["EditTranscript"].Value
-        updatedCapture["docpath"] := editGui["EditDocPath"].Value
+        ; Use try/catch with Submit fallback in case a control failed to create
+        CC_SafeGetControl(editGui, saved, updatedCapture, "url", "EditURL")
+        CC_SafeGetControl(editGui, saved, updatedCapture, "title", "EditTitle")
+        CC_SafeGetControl(editGui, saved, updatedCapture, "tags", "EditTags")
+        CC_SafeGetControl(editGui, saved, updatedCapture, "opinion", "EditOpinion")
+        CC_SafeGetControl(editGui, saved, updatedCapture, "note", "EditNote")
+        CC_SafeGetControl(editGui, saved, updatedCapture, "research", "EditResearch")
+        CC_SafeGetControl(editGui, saved, updatedCapture, "short", "EditShort")
+        CC_SafeGetControl(editGui, saved, updatedCapture, "body", "EditBody")
+        CC_SafeGetControl(editGui, saved, updatedCapture, "transcript", "EditTranscript")
+        CC_SafeGetControl(editGui, saved, updatedCapture, "docpath", "EditDocPath")
+        
+        ; Externalize large content to files
+        ; For transcript: if the Edit control only has a preview, preserve the original file
+        saveName := (newNameLower != originalNameLower) ? newName : originalName
+        
+        ; Handle transcript - check if user edited it or if it's still the preview
+        transcriptFromGui := updatedCapture.Has("transcript") ? updatedCapture["transcript"] : ""
+        if (transcriptFromGui != "" && InStr(transcriptFromGui, "... [") && InStr(transcriptFromGui, " more chars in file]")) {
+            ; GUI still has the preview text — preserve the original file pointer
+            origCap := CaptureData[originalNameLower]
+            if (origCap.Has("transcript") && CF_IsFilePointer(origCap["transcript"])) {
+                updatedCapture["transcript"] := origCap["transcript"]
+            }
+        } else if (transcriptFromGui != "") {
+            ; User edited/pasted new transcript — save through file system
+            updatedCapture["transcript"] := CF_SaveContent(saveName, "transcript", transcriptFromGui)
+        }
+        
+        ; Handle body - externalize if large
+        bodyFromGui := updatedCapture.Has("body") ? updatedCapture["body"] : ""
+        if (bodyFromGui != "") {
+            updatedCapture["body"] := CF_SaveContent(saveName, "body", bodyFromGui)
+        }
+        
+        ; Handle rename: move content files too
+        if (newNameLower != originalNameLower) {
+            CF_RenameContent(originalName, newName)
+        }
         
         ; Preserve original date
         if CaptureData[originalNameLower].Has("date")
@@ -7137,6 +7300,7 @@ CC_SaveEditedCapture(editGui, originalName) {
                 MsgBox("Error reinitializing hotstrings: " err.Message, "Error", "16")
             }
             
+            CC_EditCapture("", true)  ; Clear static reference before destroy
             editGui.Destroy()
             CC_ResumeHotstrings()  ; Resume before reload to prevent permanent suspension
             CC_Notify("Renamed '" originalName "' → '" newName "' - Reloading...")
@@ -7157,6 +7321,7 @@ CC_SaveEditedCapture(editGui, originalName) {
                 MsgBox("Error reinitializing hotstrings: " err.Message, "Error", "16")
             }
             
+            CC_EditCapture("", true)  ; Clear static reference before destroy
             editGui.Destroy()
             CC_ResumeHotstrings()  ; Resume before reload to prevent permanent suspension
             CC_Notify("Capture '" newName "' saved - Reloading...")
@@ -8271,8 +8436,13 @@ CC_ParseTimestamp(timestamp) {
 }
 
 CC_GetPageTitle(title := "") {
-    if (title = "")
-        title := WinGetTitle("A")
+    if (title = "") {
+        try {
+            title := WinGetTitle("A")
+        } catch {
+            title := ""
+        }
+    }
 
     ; Remove browser names
     browsers := ["Google Chrome", "Mozilla Firefox", "LibreWolf", "Microsoft Edge", "Opera", "Brave", "Firefox", "Chrome"]
