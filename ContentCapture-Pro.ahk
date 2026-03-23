@@ -3900,9 +3900,9 @@ CC_CaptureContent() {
     A_Clipboard := ""
 
     Send("^l")
-    Sleep(100)
+    Sleep(300)
     Send("^c")
-    if !ClipWait(0.5) {
+    if !ClipWait(1.5) {
         MsgBox("Could not retrieve URL from browser.", "Error", "16")
         A_Clipboard := oldClip
         return

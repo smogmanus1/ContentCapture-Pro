@@ -92,12 +92,10 @@
 ;   Very long      (5000 chars): 500 + (5000/50) = 600ms   plus 150ms flush
 ;   Huge content   (50000 chars):500 + 2000       = 2500ms  capped, plus flush
 
-global CC_CLIP_CLEAR_DELAY := 75          ; ms to wait after clearing clipboard
+global CC_CLIP_CLEAR_DELAY := 100         ; ms to wait after clearing clipboard
 global CC_CLIP_WAIT_TIMEOUT := 2          ; seconds to wait for clipboard ready
-global CC_CLIP_PRE_PASTE_DELAY := 150     ; ms to wait BEFORE paste (flush input buffer)
-global CC_CLIP_PASTE_BASE_DELAY := 500    ; base ms to wait AFTER paste (was 400, originally 100)
-global CC_CLIP_PASTE_MAX_DELAY := 2000    ; max additional delay for long content (was 1500, originally 300)
-global CC_CLIP_CONTENT_SCALE := 50        ; add 1ms per this many chars
+global CC_CLIP_PRE_PASTE_DELAY := 250     ; ms to wait BEFORE paste (flush input buffer)
+global CC_CLIP_PASTE_BASE_DELAY := 700    ; base ms to wait AFTER paste (was 500)
 
 ; ==============================================================================
 ; PRIMARY CLIPBOARD FUNCTIONS

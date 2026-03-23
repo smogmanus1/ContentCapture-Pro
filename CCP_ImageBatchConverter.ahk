@@ -1,335 +1,609 @@
-﻿; ============================================================
-; CCP_ImageBatchConverter.ahk
-; ContentCapture Pro - Image -> Base64 Batch Converter Utility
-; Run standalone to convert your existing image collection
-; ============================================================
-; USAGE
-;   1. Run this script directly (not via CCP)
-;   2. Point it at your images folder (e.g. E:\crisisoftruth\images\)
-;   3. It scans for png/jpg/gif/bmp/ico/webp files
-;   4. Encodes each to Base64 and appends to images.txt
-;   5. Shows a size report so you know what you're dealing with
-;
-; OUTPUT FORMAT  (same as Joe Glines / existing xmas entry)
-;   images.txt  ->  INI file, [Images] section
-;   key = base64string
-;
-; The "key" defaults to the filename without extension
-;   usrights.png  ->  key: usrights  ->  hotstring: ;;usrightsimg
-;   mylogo.jpg    ->  key: mylogo    ->  hotstring: ;;mylogoimg
-; ============================================================
+﻿; CCP_ImageBatchConverter.ahk
+; ContentCapture Pro - Batch Image to Base64 Converter
+; Stores images in SQLite database (images.db) - no size limits
+; Requires: winsqlite3.dll + CCP_SQLite.ahk in same folder
+; AHK v2 - UTF-8 with BOM
 
 #Requires AutoHotkey v2.0
 #SingleInstance Force
+#Include CCP_SQLite.ahk
 
-; -- Configuration - edit these to match your setup ----------
-DEFAULT_IMAGE_FOLDER := "E:\crisisoftruth\images"
-DEFAULT_INI_FILE     := A_ScriptDir "\images.txt"
-SUPPORTED_EXTS       := ["png", "jpg", "jpeg", "gif", "bmp", "ico", "webp"]
-; Large images (over this KB) get a warning before encoding
-LARGE_FILE_WARN_KB   := 200
-; ------------------------------------------------------------
+global folderAbbrev := Map(
+    "big-beautiful-bill",    "bbb",
+    "children-deportation",  "childep",
+    "debunking-claims",      "debunk",
+    "due-process",           "dueproc",
+    "economy-class",         "econ",
+    "facebook",              "fb",
+    "fascism-democracy",     "fascdem",
+    "friends-debates",       "friends",
+    "general-political",     "genpol",
+    "immigration-ice",       "ice",
+    "maga-supporters",       "maga",
+    "massdet",               "massdet",
+    "media-propaganda",      "media",
+    "military-history",      "mil",
+    "religion-hypocrisy",    "relig",
+    "screenshots-misc",      "misc",
+    "shareables",            "share",
+    "site-assets",           "site",
+    "trump",                 "trump",
+    "thejokeisontheidiots",  "joke",
+    "america",               "america",
+    "a_data",                "skip"
+)
 
-; Build the GUI
-mainGui := Gui(, "CCP Image -> Base64 Batch Converter")
-mainGui.SetFont("s10", "Segoe UI")
-mainGui.OnEvent("Close", (*) => ExitApp())
+global skipFolders  := ["chatgpt", "exporting-webpage", "new folder", "new tab_files", "a_data"]
+global scannedFiles := []
+global encodedCount := 0
+global mainGui      := ""
+global lvFiles      := ""
+global editKeyGui   := ""
 
-mainGui.Add("GroupBox", "w580 h70 Section", "Source Folder")
-editFolder := mainGui.Add("Edit", "xs+10 ys+22 w500", DEFAULT_IMAGE_FOLDER)
-mainGui.Add("Button", "x+5 w60", "Browse").OnEvent("Click", BrowseFolder)
+BuildGui()
 
-mainGui.Add("GroupBox", "xs w580 h70 Section", "Output INI File")
-editIni := mainGui.Add("Edit", "xs+10 ys+22 w500", DEFAULT_INI_FILE)
-mainGui.Add("Button", "x+5 w60", "Browse").OnEvent("Click", BrowseIni)
+BuildGui() {
+    global mainGui, lvFiles
+    mainGui := Gui("+Resize", "CCP Image Batch Converter v3.0")
+    mainGui.SetFont("s9", "Segoe UI")
+    mainGui.OnEvent("Close", (*) => ExitApp())
+    mainGui.OnEvent("Size", OnGuiSize)
 
-mainGui.Add("GroupBox", "xs w580 h120 Section", "Options")
-cbSkipExisting := mainGui.Add("Checkbox", "xs+10 ys+25 Checked", "Skip images already in INI (don't re-encode)")
-cbAddMeta      := mainGui.Add("Checkbox", "xs+10 yp+25 Checked", "Write metadata (source path, date captured)")
-cbWarnLarge    := mainGui.Add("Checkbox", "xs+10 yp+25 Checked", "Warn before encoding images over " LARGE_FILE_WARN_KB "KB")
-mainGui.Add("Text", "xs+10 yp+30", "Custom key prefix (leave blank for none):")
-editPrefix     := mainGui.Add("Edit", "x+5 w100", "")
-mainGui.Add("Text", "x+5", "  e.g. 'cot' -> cotusrights")
+    mainGui.Add("Text", "x10 y12 w80", "Image Folder:")
+    global ctlFolder := mainGui.Add("Edit", "x95 y10 w480 vFolderPath",
+        "E:\crisisoftruth\images")
+    mainGui.Add("Button", "x580 y8 w80", "Browse...").OnEvent("Click", BrowseFolder)
 
-btnScan   := mainGui.Add("Button", "xs w180 h35 Section", "1. Scan Folder")
-btnEncode := mainGui.Add("Button", "x+10 w180 h35 Disabled", "2. Encode Selected ->  images.txt")
-btnReport := mainGui.Add("Button", "x+10 w180 h35 Disabled", "3. View Size Report")
+    mainGui.Add("Text", "x10 y42 w80", "Database:")
+    global ctlDb := mainGui.Add("Edit", "x95 y40 w480 vDbPath",
+        A_ScriptDir "\images.db")
+    mainGui.Add("Button", "x580 y38 w80", "Browse...").OnEvent("Click", BrowseDb)
 
-btnScan.OnEvent("Click", ScanFolder)
-btnEncode.OnEvent("Click", EncodeSelected)
-btnReport.OnEvent("Click", ShowReport)
+    global ctlResize   := mainGui.Add("Checkbox", "x10 y72 vDoResize Checked",
+        "Resize images over")
+    global ctlMaxPx    := mainGui.Add("Edit", "x170 y70 w50 vMaxPixels", "800")
+    mainGui.Add("Text", "x225 y72", "px  Quality:")
+    global ctlQuality  := mainGui.Add("Edit", "x305 y70 w40 vJpegQuality", "75")
+    mainGui.Add("Text", "x350 y72", "%")
+    global ctlConvJpeg := mainGui.Add("Checkbox", "x390 y72 vConvertToJpeg Checked",
+        "Convert large PNGs to JPEG")
+    global ctlSkipExist := mainGui.Add("Checkbox", "x10 y96 vSkipExisting Checked",
+        "Skip keys already in database")
+    global ctlRecurse   := mainGui.Add("Checkbox", "x220 y96 vDoRecurse Checked",
+        "Include subfolders")
 
-mainGui.Add("Text", "xs", "Found images:")
-lvImages := mainGui.Add("ListView",
-    "xs w580 h220 Checked -LV0x10 Grid",
-    ["Key (hotstring root)", "File", "Size", "Status"])
-lvImages.ModifyCol(1, 150)
-lvImages.ModifyCol(2, 220)
-lvImages.ModifyCol(3, 80)
-lvImages.ModifyCol(4, 100)
+    mainGui.Add("Button", "x10  y122 w100", "Scan Folder").OnEvent("Click", ScanFolder)
+    mainGui.Add("Button", "x120 y122 w120", "Encode Selected").OnEvent("Click", EncodeSelected)
+    mainGui.Add("Button", "x250 y122 w100", "Select All").OnEvent("Click", SelectAll)
+    mainGui.Add("Button", "x360 y122 w100", "Select None").OnEvent("Click", SelectNone)
+    mainGui.Add("Button", "x470 y122 w110", "Remove Selected").OnEvent("Click", RemoveSelected)
 
-statusBar := mainGui.Add("StatusBar")
-statusBar.SetText("  Ready - scan a folder to begin")
+    global ctlStatus := mainGui.Add("Text", "x10 y152 w650",
+        "Ready. Click Scan Folder to begin.")
 
-mainGui.Show("w610")
+    lvFiles := mainGui.Add("ListView",
+        "x10 y170 w650 h380 vFileList Checked -LV0x10 Grid",
+        ["Key", "Original File", "Folder", "Orig KB", "Est. After KB", "Status"])
+    lvFiles.ModifyCol(1, 130)
+    lvFiles.ModifyCol(2, 155)
+    lvFiles.ModifyCol(3, 100)
+    lvFiles.ModifyCol(4, 60)
+    lvFiles.ModifyCol(5, 75)
+    lvFiles.ModifyCol(6, 100)
+    lvFiles.OnEvent("DoubleClick", EditKey)
 
-; -- Global state --------------------------------------------
-scannedFiles  := []   ; array of {path, name, key, sizeKB, status}
-encodedCount  := 0
+    mainGui.Add("Text", "x10 y558", "Log:")
+    global ctlLog := mainGui.Add("Edit",
+        "x10 y574 w650 h80 ReadOnly -Wrap HScroll VScroll", "")
 
-; -- Button handlers -----------------------------------------
+    mainGui.Show("w670 h670")
+}
+
+OnGuiSize(g, mm, w, h) {
+    global lvFiles, ctlLog, ctlStatus
+    if mm = 1
+        return
+    lvFiles.Move(,, w-20, Max(200, h-300))
+    ctlLog.Move(, h-90, w-20, 80)
+    ctlStatus.Move(,, w-20,)
+}
 
 BrowseFolder(*) {
-    f := DirSelect("*" editFolder.Value,, "Select your images folder")
-    if (f != "")
-        editFolder.Value := f
+    global ctlFolder
+    c := DirSelect("*" ctlFolder.Value, 3, "Select Image Folder")
+    if c
+        ctlFolder.Value := c
 }
 
-BrowseIni(*) {
-    f := FileSelect("S", editIni.Value, "Select output INI file", "INI files (*.txt;*.ini)")
-    if (f != "")
-        editIni.Value := f
+BrowseDb(*) {
+    global ctlDb
+    c := FileSelect("S", ctlDb.Value, "Select or Create Database",
+        "SQLite Database (*.db)")
+    if c
+        ctlDb.Value := c
 }
 
+LogMsg(msg) {
+    global ctlLog
+    cur := ctlLog.Value
+    ctlLog.Value := cur . (cur ? "`n" : "") . msg
+    SendMessage(0x115, 7, 0, ctlLog.Hwnd)
+}
+
+; -- Scan folder --------------------------------------------------------------
 ScanFolder(*) {
-    global scannedFiles
-    folder := editFolder.Value
+    global scannedFiles, lvFiles, ctlFolder, ctlDb, ctlSkipExist, ctlRecurse, ctlStatus
+
+    folder    := ctlFolder.Value
+    dbPath    := ctlDb.Value
+    doRecurse := ctlRecurse.Value
+
     if !DirExist(folder) {
-        MsgBox("Folder not found:`n" folder, "CCP Converter", "Icon!")
+        MsgBox("Folder not found:`n" folder, "Error", "Icon!")
         return
     }
 
-    iniFile  := editIni.Value
-    prefix   := editPrefix.Value
-    skipExisting := cbSkipExisting.Value
-
-    ; Read existing keys from INI
     existingKeys := Map()
-    if FileExist(iniFile) {
-        loop read, iniFile {
-            if RegExMatch(A_LoopReadLine, "^(\w+)=", &m)
-                existingKeys[m[1]] := true
+    if FileExist(dbPath) && ctlSkipExist.Value {
+        try {
+            db := CCP_DB_Open(dbPath)
+            CCP_DB_InitImages(db)
+            for row in CCP_DB_Query(db, "SELECT key FROM images")
+                existingKeys[StrLower(row["key"])] := 1
+            CCP_DB_Close(db)
+        } catch as e {
+            LogMsg("Warning reading DB: " e.Message)
         }
     }
 
     scannedFiles := []
-    lvImages.Delete()
+    lvFiles.Delete()
+    usedKeys  := Map()
+    imgExts   := Map("png",1,"jpg",1,"jpeg",1,"gif",1,"bmp",1,"ico",1,"webp",1)
+    loopFlag  := doRecurse ? "FR" : "F"
+    rootLen   := StrLen(folder)
 
-    ; Scan for image files
-    extPattern := ""
-    for ext in SUPPORTED_EXTS
-        extPattern .= (extPattern ? "|" : "") ext
-
-    loop files, folder "\*.*", "F" {
-        SplitPath(A_LoopFilePath, , , &ext, &nameNoExt)
-        if !RegExMatch(ext, "i)^(" extPattern ")$")
+    Loop Files, folder "\*.*", loopFlag {
+        ext := StrLower(A_LoopFileExt)
+        if !imgExts.Has(ext)
+            continue
+        relPath := SubStr(A_LoopFileDir, rootLen + 2)
+        if ShouldSkipFolder(relPath)
             continue
 
-        sizeKB := Round(A_LoopFileSize / 1024, 1)
-        key    := prefix . nameNoExt
-
-        status := "Ready"
-        if skipExisting && existingKeys.Has(key)
-            status := "Exists - skip"
-
-        fileInfo := {
-            path:   A_LoopFilePath,
-            name:   A_LoopFileName,
-            key:    key,
-            sizeKB: sizeKB,
-            status: status
+        key := BuildKey(A_LoopFileName, relPath)
+        baseKey := key
+        n := 2
+        while usedKeys.Has(key) {
+            key := baseKey "_" n
+            n++
         }
-        scannedFiles.Push(fileInfo)
+        usedKeys[key] := 1
 
-        row := lvImages.Add(status = "Exists - skip" ? "Check0" : "Check",
-            key, A_LoopFileName, sizeKB " KB", status)
+        origKB   := Round(A_LoopFileSize / 1024, 1)
+        estAfter := EstimateAfterSize(origKB, ext)
+        status   := existingKeys.Has(StrLower(key)) ? "Exists - skip" : "Ready"
 
-        ; Colour-code large files
-        if (sizeKB > LARGE_FILE_WARN_KB)
-            lvImages.Modify(row, , , , , , "!! Large")
+        fi := {path: A_LoopFilePath, key: key, file: A_LoopFileName,
+               folder: relPath ? relPath : "(root)", origKB: origKB,
+               estAfter: estAfter, ext: ext, status: status}
+        scannedFiles.Push(fi)
+
+        row := lvFiles.Add("Check", key, A_LoopFileName, fi.folder,
+            origKB, estAfter, status)
+        if status = "Exists - skip"
+            lvFiles.Modify(row, "-Check")
     }
 
-    count := scannedFiles.Length
-    statusBar.SetText("  Found " count " image(s) - check the ones you want to encode")
-    if (count > 0) {
-        btnEncode.Enabled := true
-        btnReport.Enabled := true
-    }
+    total   := scannedFiles.Length
+    skipped := 0
+    for fi in scannedFiles
+        if fi.status = "Exists - skip"
+            skipped++
+
+    ctlStatus.Value := "Scanned: " total " images  |  "
+        . skipped " already in DB  |  " (total - skipped) " ready to encode"
+    LogMsg("Scan complete: " total " files found")
 }
 
-EncodeSelected(*) {
-    global scannedFiles, encodedCount
-    iniFile  := editIni.Value
-    addMeta  := cbAddMeta.Value
-    warnLarge := cbWarnLarge.Value
+ShouldSkipFolder(relPath) {
+    global skipFolders
+    if relPath = ""
+        return false
+    lp := StrLower(relPath)
+    for s in skipFolders
+        if InStr(lp, s)
+            return true
+    return false
+}
 
-    ; Collect checked rows
-    toEncode := []
+BuildKey(filename, relPath) {
+    global folderAbbrev
+    SplitPath(filename, , , , &nameNoExt)
+    key := StrLower(nameNoExt)
+    key := RegExReplace(key, "[^a-z0-9_\-]", "")
+    key := RegExReplace(key, "(img|jpg|jpeg|png|gif|bmp|webp)$", "")
+    key := RegExReplace(key, "[\-_]+$", "")
+    if key = ""
+        key := "img_" SubStr(nameNoExt, 1, 8)
+    if relPath != "" {
+        parts     := StrSplit(relPath, "\")
+        topFolder := StrLower(parts[1])
+        if folderAbbrev.Has(topFolder) {
+            abbrev := folderAbbrev[topFolder]
+            if abbrev = "skip"
+                return "SKIP_" key
+            key := abbrev "_" key
+        } else {
+            key := SubStr(RegExReplace(topFolder, "[^a-z0-9]", ""), 1, 6) "_" key
+        }
+    }
+    return key
+}
+
+EstimateAfterSize(origKB, ext) {
+    global ctlConvJpeg, ctlResize, ctlQuality
+    doResize  := IsSet(ctlResize)   ? ctlResize.Value   : 1
+    doConvert := IsSet(ctlConvJpeg) ? ctlConvJpeg.Value : 1
+    quality   := IsSet(ctlQuality)  ? (ctlQuality.Value + 0) : 75
+    if origKB < 50
+        return Round(origKB * 1.34, 1)
+    if (ext = "png" || ext = "bmp") && doConvert && doResize
+        return Round(origKB * 0.08 * (quality / 75) * 1.34, 1)
+    if (ext = "jpg" || ext = "jpeg") && doResize {
+        if origKB > 500
+            return Round(origKB * 0.15 * 1.34, 1)
+        if origKB > 200
+            return Round(origKB * 0.30 * 1.34, 1)
+    }
+    return Round(origKB * 1.34, 1)
+}
+
+EditKey(lvCtl, rowNum) {
+    global scannedFiles, editKeyGui
+    if rowNum = 0
+        return
+    fi  := scannedFiles[rowNum]
+    cur := lvFiles.GetText(rowNum, 1)
+    editKeyGui := Gui("+Owner" mainGui.Hwnd " +AlwaysOnTop", "Edit Key")
+    editKeyGui.SetFont("s9", "Segoe UI")
+    editKeyGui.Add("Text",, "File: " fi.file)
+    editKeyGui.Add("Text",, "Hotstring will be: " Chr(59) Chr(59) cur "img")
+    global ctlNewKey := editKeyGui.Add("Edit", "w300 vNewKey", cur)
+    editKeyGui.Add("Button", "Default w80", "OK").OnEvent("Click",
+        SaveEditedKey.Bind(rowNum))
+    editKeyGui.Add("Button", "w80", "Cancel").OnEvent("Click",
+        (*) => editKeyGui.Destroy())
+    editKeyGui.Show()
+}
+
+SaveEditedKey(rowNum, *) {
+    global scannedFiles, editKeyGui, ctlNewKey
+    s      := editKeyGui.Submit()
+    newKey := RegExReplace(StrLower(Trim(s.NewKey)), "[^a-z0-9_\-]", "")
+    if newKey = "" {
+        MsgBox("Key contains no valid characters.", "Error", "Icon!")
+        return
+    }
+    scannedFiles[rowNum].key := newKey
+    lvFiles.Modify(rowNum,, newKey)
+    editKeyGui.Destroy()
+    LogMsg("Key set to: " newKey)
+}
+
+SelectAll(*) {
+    global scannedFiles
+    Loop scannedFiles.Length
+        lvFiles.Modify(A_Index, "Check")
+}
+
+SelectNone(*) {
+    global scannedFiles
+    Loop scannedFiles.Length
+        lvFiles.Modify(A_Index, "-Check")
+}
+
+RemoveSelected(*) {
+    global scannedFiles
+    toDelete := []
     row := 0
-    loop {
-        row := lvImages.GetNext(row, "Checked")
+    Loop {
+        row := lvFiles.GetNext(row, "Checked")
         if !row
             break
-        fi := scannedFiles[row]
-        if (fi.status = "Exists - skip")
-            continue
-        toEncode.Push({row: row, fi: fi})
+        toDelete.Push(row)
     }
+    if toDelete.Length = 0 {
+        MsgBox("No items selected.", "Remove", "Icon!")
+        return
+    }
+    newFiles := []
+    for i, fi in scannedFiles {
+        skip := false
+        for r in toDelete
+            if r = i { skip := true ; break }
+        if !skip
+            newFiles.Push(fi)
+    }
+    scannedFiles := newFiles
+    lvFiles.Delete()
+    for fi in scannedFiles {
+        row := lvFiles.Add("Check", fi.key, fi.file, fi.folder,
+            fi.origKB, fi.estAfter, fi.status)
+        if fi.status = "Exists - skip"
+            lvFiles.Modify(row, "-Check")
+    }
+    LogMsg("Removed " toDelete.Length " item(s).")
+}
 
-    if !toEncode.Length {
-        MsgBox("No images checked to encode.", "CCP Converter", "Iconi")
+; -- Encode selected ----------------------------------------------------------
+EncodeSelected(*) {
+    global scannedFiles, encodedCount, ctlDb, ctlStatus
+    global ctlResize, ctlMaxPx, ctlConvJpeg, ctlQuality
+
+    dbPath    := ctlDb.Value
+    doResize  := ctlResize.Value
+    maxPx     := ctlMaxPx.Value + 0
+    doConvert := ctlConvJpeg.Value
+    quality   := ctlQuality.Value + 0
+    if quality < 1 || quality > 100
+        quality := 75
+    if maxPx < 100
+        maxPx := 800
+
+    toEncode := []
+    row := 0
+    Loop {
+        row := lvFiles.GetNext(row, "Checked")
+        if !row
+            break
+        toEncode.Push(row)
+    }
+    if toEncode.Length = 0 {
+        MsgBox("No items checked.", "Nothing to do", "Icon!")
         return
     }
 
-    ; Warn about large files
-    if warnLarge {
-        largeList := ""
-        for item in toEncode {
-            if (item.fi.sizeKB > LARGE_FILE_WARN_KB)
-                largeList .= "  " item.fi.name " (" item.fi.sizeKB " KB)`n"
-        }
-        if largeList {
-            result := MsgBox(
-                "These images are over " LARGE_FILE_WARN_KB "KB and will produce large base64 strings:`n`n"
-                . largeList
-                . "`nLarge images may slow down CCP or bloat images.txt.`n"
-                . "Consider resizing them first.`n`nContinue anyway?",
-                "CCP Converter - Large File Warning", "YesNo Icon!")
-            if (result = "No")
-                return
-        }
-    }
-
-    ; Encode each checked image
-    encodedCount := 0
-    failed := 0
-
-    for item in toEncode {
-        fi  := item.fi
-        row := item.row
-
-        statusBar.SetText("  Encoding: " fi.name "...")
-        lvImages.Modify(row, , , , , , "Encoding...")
-
-        b64 := ImageToBase64_v2(fi.path)
-        if (b64 = "") {
-            lvImages.Modify(row, , , , , , "FAILED")
-            failed++
-            continue
-        }
-
-        b64Len := StrLen(b64)
-        b64KB  := Round(b64Len / 1024, 1)
-
-        ; Write to INI
-        IniWrite(b64, iniFile, "Images", fi.key)
-
-        if addMeta {
-            IniWrite(fi.name,   iniFile, "Meta_" fi.key, "sourceFile")
-            IniWrite(fi.path,   iniFile, "Meta_" fi.key, "sourcePath")
-            IniWrite(fi.sizeKB, iniFile, "Meta_" fi.key, "origSizeKB")
-            IniWrite(b64KB,     iniFile, "Meta_" fi.key, "b64SizeKB")
-            IniWrite(FormatTime(, "yyyy-MM-dd HH:mm:ss"), iniFile, "Meta_" fi.key, "captured")
-        }
-
-        lvImages.Modify(row, , , , , , "DONE Saved (" b64KB "KB)")
-        encodedCount++
-    }
-
-    statusBar.SetText("  Done - " encodedCount " encoded, " failed " failed. INI: " iniFile)
-    if (encodedCount > 0) {
-        doneMsg := encodedCount " image(s) encoded and saved to:`n"
-        doneMsg .= iniFile "`n`n"
-        doneMsg .= "Hotstring format:  ;;<key>img`n"
-        doneMsg .= "Example:  ;;usrightsimg`n`n"
-        doneMsg .= "Add  #Include ImageCapture.ahk  to your CCP script,`n"
-        doneMsg .= "then add the 'img' case to your suffix handler."
-        MsgBox(doneMsg, "CCP Converter - Complete", "Iconi")
-    }
-}
-
-ShowReport(*) {
-    iniFile := editIni.Value
-    if !FileExist(iniFile) {
-        MsgBox("INI file not found yet - encode some images first.", "Report", "Iconi")
+    resp := MsgBox("Encode " toEncode.Length " image(s) into:`n" dbPath
+        . "`n`nContinue?", "Confirm", "YesNo Icon?")
+    if resp != "Yes"
         return
-    }
 
-    ; Parse INI and report sizes
-    report := "images.txt Size Report`n"
-        . "File: " iniFile "`n"
-        . StrReplace(Format("{:-" (StrLen(iniFile) + 14) "s}", ""), " ", "-") "`n`n"
-        . Format("{:-25s} {:>10s}  {:>10s}`n", "Key", "B64 Size", "Orig Est.")
-        . RepeatStr("-", 48) "`n"
-
-    totalB64 := 0
-    keyCount := 0
-
-    loop read, iniFile {
-        if RegExMatch(A_LoopReadLine, "^(\w+)=(.+)$", &m) {
-            key    := m[1]
-            b64len := StrLen(m[2])
-            origEst := Round(b64len * 3 / 4 / 1024, 1)
-            b64KB   := Round(b64len / 1024, 1)
-            totalB64 += b64len
-            keyCount++
-            report .= Format("{:-25s} {:>8s}KB  {:>8s}KB`n", key, b64KB, origEst)
-        }
-    }
-
-    report .= RepeatStr("-", 48) "`n"
-    report .= Format("{:-25s} {:>8s}KB`n", "TOTAL (" keyCount " images)", Round(totalB64/1024, 1))
-    report .= "`nNote: images.txt is loaded on demand - only`n"
-        . "the requested image is decoded per hotstring fire."
-
-    repGui := Gui(, "CCP images.txt Size Report")
-    repGui.SetFont("s9", "Consolas")
-    repGui.Add("Edit", "w500 h350 ReadOnly -Wrap", report)
-    repGui.Add("Button", "w100", "Close").OnEvent("Click", (*) => repGui.Destroy())
-    repGui.Show()
-}
-
-
-; -- Helper - repeat a character n times ----------------------
-RepeatStr(char, n) {
-    result := ""
-    loop n
-        result .= char
-    return result
-}
-
-; -- Core encoder (AHK v2 native) ----------------------------
-ImageToBase64_v2(filePath) {
-    if !FileExist(filePath)
-        return ""
+    db := ""
     try {
-        f := FileOpen(filePath, "rb")
-        nBytes := f.Length
-        buf := Buffer(nBytes, 0)
-        f.RawRead(buf, nBytes)
+        db := CCP_DB_Open(dbPath)
+        CCP_DB_InitImages(db)
+    } catch as e {
+        MsgBox("Cannot open database:`n" e.Message, "Error", "Icon!")
+        return
+    }
+
+    pToken := Gdip_Startup()
+    if !pToken {
+        CCP_DB_Close(db)
+        MsgBox("GDI+ failed to start.", "Error", "Icon!")
+        return
+    }
+
+    encodedCount := 0
+    failCount    := 0
+    CCP_DB_Begin(db)
+
+    for row in toEncode {
+        fi := scannedFiles[row]
+        lvFiles.Modify(row, "", "", "", "", "", "Encoding...")
+        ctlStatus.Value := "Encoding " A_Index " of " toEncode.Length ": " fi.file
+
+        result := EncodeOneImage(fi, db, pToken, doResize, maxPx, doConvert, quality)
+
+        if result = "OK" {
+            encodedCount++
+            scannedFiles[row].status := "Encoded OK"
+            lvFiles.Modify(row, "-Check", , , , , "Encoded OK")
+        } else {
+            failCount++
+            scannedFiles[row].status := "FAILED"
+            lvFiles.Modify(row, "-Check", , , , , "FAILED")
+            LogMsg("FAIL [" fi.key "]: " result)
+        }
+    }
+
+    CCP_DB_Commit(db)
+    Gdip_Shutdown(pToken)
+    CCP_DB_Close(db)
+
+    ctlStatus.Value := "Done.  Encoded: " encodedCount "  |  Failed: " failCount
+    doneMsg := encodedCount " image(s) saved to:`n" dbPath "`n`n"
+    doneMsg .= "Use CCP_ImageViewer.ahk to browse your images.`n"
+    doneMsg .= "Hotstring example: " Chr(59) Chr(59) "usrightsimg"
+    if failCount > 0
+        doneMsg .= "`n`nFailed: " failCount " (see log)"
+    MsgBox(doneMsg, "Converter Complete", "Iconi")
+    LogMsg("Complete: " encodedCount " OK  |  " failCount " failed.")
+}
+
+EncodeOneImage(fi, db, pToken, doResize, maxPx, doConvert, quality) {
+    ext          := fi.ext
+    needsResize  := doResize  && fi.origKB > 200 && ext != "gif"
+    needsConvert := doConvert && (ext = "png" || ext = "bmp") && fi.origKB > 100
+    workPath     := fi.path
+
+    if needsResize || needsConvert {
+        tmp := A_Temp "\_ccpconv_" A_TickCount "." (needsConvert ? "jpg" : ext)
+        res := ResizeImage(pToken, fi.path, tmp, maxPx, needsConvert, quality)
+        if res = "OK"
+            workPath := tmp
+        else
+            LogMsg("Resize skipped (" fi.file "): " res)
+    }
+
+    b64 := FileToBase64(workPath)
+    if workPath != fi.path && FileExist(workPath)
+        FileDelete(workPath)
+    if !b64
+        return "Base64 encode failed"
+
+    try {
+        CCP_DB_UpsertImage(db, fi.key, b64, fi.file, fi.folder,
+            fi.origKB, Round(StrLen(b64)/1024, 1),
+            FormatTime(, "yyyy-MM-dd HH:mm:ss"))
+    } catch as e {
+        return "DB write error: " e.Message
+    }
+
+    LogMsg("OK  [" fi.key "]  " fi.file "  ->  " Round(StrLen(b64)/1024,1) " KB b64")
+    return "OK"
+}
+
+FileToBase64(filePath) {
+    try {
+        f := FileOpen(filePath, "r")
+        if !f
+            return ""
+        sz := f.Length
+        if sz = 0 {
+            f.Close()
+            return ""
+        }
+        buf := Buffer(sz)
+        f.RawRead(buf, sz)
         f.Close()
+        outSz := 0
+        DllCall("Crypt32.dll\CryptBinaryToStringW",
+            "Ptr", buf, "UInt", sz, "UInt", 0x40000001, "Ptr", 0, "UInt*", &outSz)
+        if outSz = 0
+            return ""
+        outBuf := Buffer(outSz * 2)
+        DllCall("Crypt32.dll\CryptBinaryToStringW",
+            "Ptr", buf, "UInt", sz, "UInt", 0x40000001, "Ptr", outBuf, "UInt*", &outSz)
+        return StrGet(outBuf, "UTF-16")
     } catch {
         return ""
     }
+}
 
-    outSize := 0
-    DllCall("Crypt32.dll\CryptBinaryToStringW",
-        "Ptr",   buf,
-        "UInt",  nBytes,
-        "UInt",  0x40000001,   ; CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF
-        "Ptr",   0,
-        "UInt*", &outSize)
+ResizeImage(pToken, src, dst, maxPx, toJpeg, quality) {
+    pb := Gdip_CreateBitmapFromFile(src)
+    if !pb
+        return "Load failed"
+    sw := Gdip_GetImageWidth(pb)
+    sh := Gdip_GetImageHeight(pb)
+    if sw = 0 || sh = 0 {
+        Gdip_DisposeImage(pb)
+        return "Invalid dimensions"
+    }
+    if sw > sh {
+        nw := Min(sw, maxPx)
+        nh := Round(sh * (nw / sw))
+    } else {
+        nh := Min(sh, maxPx)
+        nw := Round(sw * (nh / sh))
+    }
+    if nw >= sw && nh >= sh && !toJpeg {
+        Gdip_DisposeImage(pb)
+        return "OK"
+    }
+    pd := Gdip_CreateBitmap(nw, nh)
+    if !pd {
+        Gdip_DisposeImage(pb)
+        return "Create dest failed"
+    }
+    pg := Gdip_GraphicsFromImage(pd)
+    if !pg {
+        Gdip_DisposeImage(pb)
+        Gdip_DisposeImage(pd)
+        return "Graphics context failed"
+    }
+    Gdip_SetInterpolationMode(pg, 7)
+    Gdip_SetSmoothingMode(pg, 4)
+    Gdip_DrawImage(pg, pb, 0, 0, nw, nh)
+    Gdip_DeleteGraphics(pg)
+    Gdip_DisposeImage(pb)
+    r := toJpeg ? Gdip_SaveBitmapToJpeg(pd, dst, quality)
+                : Gdip_SaveBitmapToFile(pd, dst)
+    Gdip_DisposeImage(pd)
+    return r = 0 ? "OK" : "Save failed (r=" r ")"
+}
 
-    if !outSize
-        return ""
+; == GDI+ wrappers ============================================================
 
-    outBuf := Buffer(outSize * 2, 0)
-    DllCall("Crypt32.dll\CryptBinaryToStringW",
-        "Ptr",   buf,
-        "UInt",  nBytes,
-        "UInt",  0x40000001,
-        "Ptr",   outBuf,
-        "UInt*", &outSize)
+Gdip_Startup() {
+    si := Buffer(24, 0)
+    NumPut("UInt", 1, si, 0)
+    pt := 0
+    DllCall("gdiplus\GdiplusStartup", "UPtr*", &pt, "Ptr", si, "Ptr", 0)
+    return pt
+}
+Gdip_Shutdown(pt)   => DllCall("gdiplus\GdiplusShutdown", "UPtr", pt)
+Gdip_DisposeImage(p) => DllCall("gdiplus\GdipDisposeImage", "UPtr", p)
+Gdip_DeleteGraphics(p) => DllCall("gdiplus\GdipDeleteGraphics", "UPtr", p)
 
-    return RTrim(StrGet(outBuf, "UTF-16"), "`r`n ")
+Gdip_CreateBitmapFromFile(path) {
+    pb := 0
+    w  := Buffer((StrLen(path)+1)*2)
+    StrPut(path, w, "UTF-16")
+    DllCall("gdiplus\GdipCreateBitmapFromFile", "Ptr", w, "UPtr*", &pb)
+    return pb
+}
+Gdip_GetImageWidth(pb) {
+    w := 0
+    DllCall("gdiplus\GdipGetImageWidth", "UPtr", pb, "UInt*", &w)
+    return w
+}
+Gdip_GetImageHeight(pb) {
+    h := 0
+    DllCall("gdiplus\GdipGetImageHeight", "UPtr", pb, "UInt*", &h)
+    return h
+}
+Gdip_CreateBitmap(w, h) {
+    pb := 0
+    DllCall("gdiplus\GdipCreateBitmapFromScan0",
+        "Int", w, "Int", h, "Int", 0, "Int", 0x0026200A, "Ptr", 0, "UPtr*", &pb)
+    return pb
+}
+Gdip_GraphicsFromImage(pb) {
+    pg := 0
+    DllCall("gdiplus\GdipGetImageGraphicsContext", "UPtr", pb, "UPtr*", &pg)
+    return pg
+}
+Gdip_SetInterpolationMode(pg, m) =>
+    DllCall("gdiplus\GdipSetInterpolationMode", "UPtr", pg, "Int", m)
+Gdip_SetSmoothingMode(pg, m) =>
+    DllCall("gdiplus\GdipSetSmoothingMode", "UPtr", pg, "Int", m)
+Gdip_DrawImage(pg, pb, x, y, w, h) =>
+    DllCall("gdiplus\GdipDrawImageRectI",
+        "UPtr", pg, "UPtr", pb, "Int", x, "Int", y, "Int", w, "Int", h)
+
+Gdip_SaveBitmapToFile(pb, path) {
+    clsid := Buffer(16)
+    DllCall("ole32\CLSIDFromString",
+        "Str", "{557CF406-1A04-11D3-9A73-0000F81EF32E}", "Ptr", clsid)
+    w := Buffer((StrLen(path)+1)*2)
+    StrPut(path, w, "UTF-16")
+    return DllCall("gdiplus\GdipSaveImageToFile",
+        "UPtr", pb, "Ptr", w, "Ptr", clsid, "Ptr", 0)
+}
+
+Gdip_SaveBitmapToJpeg(pb, path, quality := 75) {
+    clsid := Buffer(16)
+    DllCall("ole32\CLSIDFromString",
+        "Str", "{557CF401-1A04-11D3-9A73-0000F81EF32E}", "Ptr", clsid)
+    ep := Buffer(40, 0)
+    NumPut("UInt", 1, ep, 0)
+    NumPut("UInt",   0xB5E45B1D, ep,  8)
+    NumPut("UShort", 0x4AFA,     ep, 12)
+    NumPut("UShort", 0x2D45,     ep, 14)
+    NumPut("UChar",  0x9C, ep, 16)  NumPut("UChar", 0xDD, ep, 17)
+    NumPut("UChar",  0x5D, ep, 18)  NumPut("UChar", 0xB3, ep, 19)
+    NumPut("UChar",  0x51, ep, 20)  NumPut("UChar", 0x05, ep, 21)
+    NumPut("UChar",  0xE7, ep, 22)  NumPut("UChar", 0xEB, ep, 23)
+    NumPut("UInt",   1, ep, 24)
+    NumPut("UInt",   4, ep, 28)
+    qb := Buffer(4)
+    NumPut("UInt", quality, qb, 0)
+    NumPut("UPtr", qb.Ptr, ep, 32)
+    w := Buffer((StrLen(path)+1)*2)
+    StrPut(path, w, "UTF-16")
+    return DllCall("gdiplus\GdipSaveImageToFile",
+        "UPtr", pb, "Ptr", w, "Ptr", clsid, "Ptr", ep)
 }
