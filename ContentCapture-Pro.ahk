@@ -3899,6 +3899,8 @@ CC_CaptureContent() {
     oldClip := ClipboardAll()
     A_Clipboard := ""
 
+    Send("{Escape}")
+    Sleep(100)
     Send("^l")
     Sleep(300)
     Send("^c")
