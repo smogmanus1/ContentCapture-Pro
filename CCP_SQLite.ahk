@@ -1,4 +1,4 @@
-; CCP_SQLite.ahk
+﻿; CCP_SQLite.ahk
 ; ContentCapture Pro - SQLite Wrapper
 ; Uses winsqlite3.dll — checks script folder first, then Windows System32
 ; AHK v2 - UTF-8 with BOM
@@ -64,22 +64,24 @@ CCP_DB_Close(db) {
 
 ; ---------------------------------------------------------------------------
 ; EXECUTE (no result set)
+; Uses prepare_v2/step/finalize instead of sqlite3_exec to avoid access
+; violations that occur with sqlite3_exec on some winsqlite3.dll builds.
 ; ---------------------------------------------------------------------------
 CCP_DB_Execute(db, sql) {
     dll    := CCP_SQLite_DLL()
     sqlBuf := Buffer(StrPut(sql, "UTF-8"))
     StrPut(sql, sqlBuf, "UTF-8")
-    errPtr := 0
-    rc := DllCall(dll "\sqlite3_exec",
-        "UPtr",  db, "Ptr", sqlBuf,
-        "Ptr",   0,  "Ptr", 0,
-        "UPtr*", &errPtr, "Int")
-    if rc != 0 {
-        msg := errPtr ? StrGet(errPtr, "UTF-8") : "unknown error"
-        if errPtr
-            DllCall(dll "\sqlite3_free", "Ptr", errPtr)
-        throw Error("SQL error [rc=" rc "]: " msg "`nSQL: " sql)
-    }
+    stmt := 0
+    rc := DllCall(dll "\sqlite3_prepare_v2",
+        "UPtr", db, "Ptr", sqlBuf, "Int", -1,
+        "UPtr*", &stmt, "Ptr", 0, "Int")
+    if rc != 0 || !stmt
+        throw Error("sqlite3_prepare_v2 failed (rc=" rc ")`nSQL: " sql)
+    rc := DllCall(dll "\sqlite3_step", "UPtr", stmt, "Int")
+    DllCall(dll "\sqlite3_finalize", "UPtr", stmt)
+    ; rc=100 (SQLITE_ROW) or rc=101 (SQLITE_DONE) are both success for execute
+    if rc != 101 && rc != 100
+        throw Error("sqlite3_step failed (rc=" rc ")`nSQL: " sql)
 }
 
 ; ---------------------------------------------------------------------------
