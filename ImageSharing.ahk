@@ -1,21 +1,26 @@
 ; ==============================================================================
-; ImageSharing.ahk - Multi-Image Social Media Sharing Module for ContentCapture Pro
+; ImageSharing.ahk - Multi-Image Social Media Sharing for ContentCapture Pro
 ; ==============================================================================
-; Version: 2.2
-; Updated: 2026-01-31
-; Supports: Facebook, Twitter/X, Bluesky, LinkedIn, Mastodon
-; Features: Multiple image support, auto-paste, platform detection
+; Version:     2.3
+; Updated:     2026-03-23
+;
+; CHANGELOG v2.3:
+;   - NEW: SQLite images.db support
+;     * IS_GetCaptureImages() checks images.db first, falls back to images.dat
+;       and CaptureData image fields
+;     * IS_GetImagesFromSQLite() retrieves b64 from DB, decodes to temp files
+;     * IS_Base64ToTempFile() decodes Base64 with magic-byte type detection
+;   - NEW: IS_CleanTempImages() cleans up temp files created during sharing
+;   - Temp files written to A_Temp\_ccpimg_*.ext and deleted after use
 ;
 ; CHANGELOG v2.2:
-;   - FIXED: Global state variables (IS_PendingContent, IS_PendingImages, etc.)
-;     are now properly cleared after operations complete or on errors
-;   - ADDED: IS_ClearPendingState() function to reset all global state
-;   - ADDED: Clipboard clearing before setting new content (prevents stale data)
+;   - FIXED: Global state variables properly cleared after operations
+;   - ADDED: IS_ClearPendingState() to reset all global state
+;   - ADDED: Clipboard clearing before setting new content
 ;   - FIXED: All clipboard operations now clear first, then set content
 ;
 ; CHANGELOG v2.1:
-;   - Fixed: EncodeURIComponent call corrected to IS_EncodeURIComponent (line 505)
-;   - This bug would cause error when sharing to Twitter with images
+;   - Fixed: EncodeURIComponent corrected to IS_EncodeURIComponent
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -23,61 +28,41 @@
 ; ==============================================================================
 ; PLATFORM IMAGE LIMITS
 ; ==============================================================================
-; Facebook Post:    Up to 10 images
-; Facebook Comment: 1 image only
-; Twitter/X:        Up to 4 images
-; Bluesky:          Up to 4 images  
-; LinkedIn:         Up to 9 images (posts), 1 image (comments)
-; Mastodon:         Up to 4 images
-; ==============================================================================
 
 global IS_ImageLimits := Map(
-    "facebook_post", 10,
-    "facebook_comment", 1,
-    "twitter", 4,
-    "bluesky", 4,
-    "linkedin_post", 9,
-    "linkedin_comment", 1,
-    "mastodon", 4,
-    "email", 10
+    "facebook_post",    10,
+    "facebook_comment",  1,
+    "twitter",           4,
+    "bluesky",           4,
+    "linkedin_post",     9,
+    "linkedin_comment",  1,
+    "mastodon",          4,
+    "email",            10
 )
 
 ; ==============================================================================
-; GLOBAL STATE VARIABLES
-; ==============================================================================
-; These track pending operations for multi-step sharing workflows
-; IMPORTANT: Always call IS_ClearPendingState() after operations complete!
+; GLOBAL STATE
 ; ==============================================================================
 
-global IS_PendingContent := ""
-global IS_PendingImages := []
-global IS_CurrentImageIndex := 0
+global IS_PendingContent     := ""
+global IS_PendingImages      := []
+global IS_CurrentImageIndex  := 0
 
 ; ==============================================================================
-; STATE CLEANUP FUNCTION
-; ==============================================================================
-; Call this after sharing operations complete or on errors to prevent stale data
+; STATE CLEANUP
 ; ==============================================================================
 
 IS_ClearPendingState() {
     global IS_PendingContent, IS_PendingImages, IS_CurrentImageIndex
-    IS_PendingContent := ""
-    IS_PendingImages := []
+    IS_PendingContent    := ""
+    IS_PendingImages     := []
     IS_CurrentImageIndex := 0
-    
-    ; Also turn off any pending hotkeys
-    try {
-        Hotkey("^!v", "Off")
-    }
-    try {
-        Hotkey("^!i", "Off")
-    }
+    try { Hotkey("^!v", "Off") }
+    try { Hotkey("^!i", "Off") }
 }
 
 ; ==============================================================================
 ; SAFE CLIPBOARD HELPER
-; ==============================================================================
-; Clears clipboard before setting to prevent stale content issues
 ; ==============================================================================
 
 IS_SafeClipboardSet(content) {
@@ -92,44 +77,125 @@ IS_SafeClipboardSet(content) {
 }
 
 ; ==============================================================================
-; MAIN ENTRY POINTS - Called by DynamicSuffixHandler
+; SQLITE HELPERS
 ; ==============================================================================
 
-; Single image to clipboard (img suffix)
+; Decode a Base64 string to a temp file. Returns path or "".
+; Detects image type from magic bytes.
+IS_Base64ToTempFile(b64) {
+    b64 := RegExReplace(b64, "\s+", "")
+    if b64 = ""
+        return ""
+
+    nBytes := 0
+    DllCall("Crypt32.dll\CryptStringToBinaryW",
+        "Str",   b64, "UInt", 0, "UInt", 1,
+        "Ptr",   0,   "UInt*", &nBytes, "Ptr", 0, "Ptr", 0)
+    if nBytes = 0
+        return ""
+
+    buf := Buffer(nBytes)
+    DllCall("Crypt32.dll\CryptStringToBinaryW",
+        "Str",   b64, "UInt", 0, "UInt", 1,
+        "Ptr",   buf, "UInt*", &nBytes, "Ptr", 0, "Ptr", 0)
+
+    ; Magic-byte type detection
+    ext := "jpg"
+    if nBytes >= 4 {
+        b0 := NumGet(buf, 0, "UChar")
+        b1 := NumGet(buf, 1, "UChar")
+        b2 := NumGet(buf, 2, "UChar")
+        b3 := NumGet(buf, 3, "UChar")
+        if      b0 = 0xFF && b1 = 0xD8                                  ; JPEG
+            ext := "jpg"
+        else if b0 = 0x89 && b1 = 0x50 && b2 = 0x4E && b3 = 0x47       ; PNG
+            ext := "png"
+        else if b0 = 0x47 && b1 = 0x49 && b2 = 0x46                     ; GIF
+            ext := "gif"
+        else if b0 = 0x42 && b1 = 0x4D                                   ; BMP
+            ext := "bmp"
+        else if b0 = 0x52 && b1 = 0x49 && b2 = 0x46 && b3 = 0x46       ; WEBP
+            ext := "webp"
+    }
+
+    tmpPath := A_Temp "\_ccpimg_" A_TickCount "." ext
+    try {
+        f := FileOpen(tmpPath, "w")
+        f.RawWrite(buf, nBytes)
+        f.Close()
+        return tmpPath
+    } catch {
+        return ""
+    }
+}
+
+; Look up captureName in images.db, decode to temp file(s). Returns [] or [path].
+IS_GetImagesFromSQLite(captureName) {
+    images := []
+    dbPath := A_ScriptDir "\images.db"
+    if !FileExist(dbPath)
+        return images
+    try {
+        db  := CCP_DB_Open(dbPath)
+        b64 := CCP_DB_GetImage(db, captureName)
+        CCP_DB_Close(db)
+        if b64 != "" {
+            tmpPath := IS_Base64ToTempFile(b64)
+            if tmpPath != ""
+                images.Push(tmpPath)
+        }
+    } catch {
+        ; DB unavailable — caller falls through to legacy system
+    }
+    return images
+}
+
+; Delete temp files created during this sharing session
+IS_CleanTempImages(images) {
+    for imgPath in images {
+        if InStr(imgPath, "_ccpimg_") && FileExist(imgPath)
+            try FileDelete(imgPath)
+    }
+}
+
+; ==============================================================================
+; MAIN ENTRY POINTS — Called by DynamicSuffixHandler
+; ==============================================================================
+
+; img suffix — copy image to clipboard as bitmap
 IS_CopyImageToClipboard(captureName) {
     global CaptureData, BaseDir
-    
+
     if !CaptureData.Has(captureName) {
         ShowNotification("Capture not found: " captureName, "Error", 2000)
         return false
     }
-    
+
     images := IS_GetCaptureImages(captureName)
     if images.Length = 0 {
         ShowNotification("No images attached to: " captureName, "No Image", 2000)
         return false
     }
-    
-    ; Copy first image to clipboard
+
     imagePath := images[1]
-    if IS_CopyImageFileToClipboard(imagePath) {
-        ShowNotification("Image copied to clipboard`n" IS_GetFileName(imagePath), "📷 Ready to Paste", 2000)
+    result    := IS_CopyImageFileToClipboard(imagePath)
+    IS_CleanTempImages(images)
+
+    if result {
+        ShowNotification("Image copied to clipboard`n" IS_GetFileName(imagePath),
+            "📷 Ready to Paste", 2000)
         return true
     }
     return false
 }
 
-; Open image in default viewer (imgo suffix)
+; imgo suffix — open image in default viewer
 IS_OpenImage(captureName) {
-    global CaptureData, BaseDir
-    
     images := IS_GetCaptureImages(captureName)
     if images.Length = 0 {
         ShowNotification("No images attached to: " captureName, "No Image", 2000)
         return false
     }
-    
-    ; Open first image (or all if multiple)
     for imagePath in images {
         if FileExist(imagePath)
             Run(imagePath)
@@ -137,76 +203,67 @@ IS_OpenImage(captureName) {
     return true
 }
 
-; Share to platform WITH image (fbi, xi, bsi, li, mti suffixes)
+; fbi / xi / bsi / lii / mti suffixes — share to platform with image
 IS_ShareWithImage(captureName, platform) {
     global CaptureData
-    
-    ; Clear any previous pending state first
+
     IS_ClearPendingState()
-    
+
     if !CaptureData.Has(captureName) {
         ShowNotification("Capture not found: " captureName, "Error", 2000)
         return false
     }
-    
-    cap := CaptureData[captureName]
-    images := IS_GetCaptureImages(captureName)
-    
-    ; Build content
+
+    cap     := CaptureData[captureName]
+    images  := IS_GetCaptureImages(captureName)
     content := IS_BuildShareContent(cap, platform)
-    
-    ; Determine sharing method based on platform
+
     switch platform {
-        case "facebook":
-            return IS_ShareToFacebook(content, images)
-        case "twitter", "x":
-            return IS_ShareToTwitter(content, images)
-        case "bluesky":
-            return IS_ShareToBluesky(content, images)
-        case "linkedin":
-            return IS_ShareToLinkedIn(content, images)
-        case "mastodon":
-            return IS_ShareToMastodon(content, images)
+        case "facebook":         return IS_ShareToFacebook(content, images)
+        case "twitter", "x":     return IS_ShareToTwitter(content, images)
+        case "bluesky":          return IS_ShareToBluesky(content, images)
+        case "linkedin":         return IS_ShareToLinkedIn(content, images)
+        case "mastodon":         return IS_ShareToMastodon(content, images)
         default:
             ShowNotification("Unknown platform: " platform, "Error", 2000)
+            IS_CleanTempImages(images)
             return false
     }
 }
 
-; Email with image attachment (emi suffix)
+; emi suffix — email with image attachment
 IS_EmailWithImage(captureName) {
     global CaptureData
-    
+
     if !CaptureData.Has(captureName) {
         ShowNotification("Capture not found: " captureName, "Error", 2000)
         return false
     }
-    
-    cap := CaptureData[captureName]
-    images := IS_GetCaptureImages(captureName)
-    
-    ; Build email content
+
+    cap     := CaptureData[captureName]
+    images  := IS_GetCaptureImages(captureName)
     subject := cap.Has("title") ? cap["title"] : captureName
-    body := IS_BuildEmailBody(cap)
-    
+    body    := IS_BuildEmailBody(cap)
+
     return IS_SendOutlookEmailWithImages(subject, body, images)
 }
 
 ; ==============================================================================
-; IMAGE RETRIEVAL
+; IMAGE RETRIEVAL — Priority: 1) SQLite  2) images.dat  3) CaptureData fields
 ; ==============================================================================
 
-; Get all images associated with a capture
 IS_GetCaptureImages(captureName) {
     global BaseDir
     images := []
-    
-    ; Check images.dat for associations
+
+    ; 1. SQLite images.db
+    for imgPath in IS_GetImagesFromSQLite(captureName)
+        images.Push(imgPath)
+
+    ; 2. Legacy images.dat (pipe-delimited file)
     imagesFile := BaseDir "\images.dat"
     if FileExist(imagesFile) {
         content := FileRead(imagesFile)
-        
-        ; Parse images.dat - format: captureName|imagePath1|imagePath2|...
         Loop Parse, content, "`n", "`r" {
             if A_LoopField = ""
                 continue
@@ -215,10 +272,9 @@ IS_GetCaptureImages(captureName) {
                 Loop parts.Length - 1 {
                     imgPath := parts[A_Index + 1]
                     if imgPath != "" {
-                        ; Handle relative paths
                         if !InStr(imgPath, ":") && !InStr(imgPath, "\\")
                             imgPath := BaseDir "\images\" imgPath
-                        if FileExist(imgPath)
+                        if FileExist(imgPath) && !IS_ArrayContains(images, imgPath)
                             images.Push(imgPath)
                     }
                 }
@@ -226,8 +282,8 @@ IS_GetCaptureImages(captureName) {
             }
         }
     }
-    
-    ; Also check CaptureData for image field
+
+    ; 3. Legacy CaptureData image fields
     global CaptureData
     if CaptureData.Has(captureName) {
         cap := CaptureData[captureName]
@@ -238,7 +294,6 @@ IS_GetCaptureImages(captureName) {
             if FileExist(imgPath) && !IS_ArrayContains(images, imgPath)
                 images.Push(imgPath)
         }
-        ; Check for multiple images field
         if cap.Has("images") && cap["images"] != "" {
             for imgPath in StrSplit(cap["images"], "|") {
                 if imgPath = ""
@@ -250,15 +305,14 @@ IS_GetCaptureImages(captureName) {
             }
         }
     }
-    
+
     return images
 }
 
 IS_ArrayContains(arr, value) {
-    for item in arr {
+    for item in arr
         if item = value
             return true
-    }
     return false
 }
 
@@ -268,45 +322,40 @@ IS_GetFileName(path) {
 }
 
 ; ==============================================================================
-; CLIPBOARD IMAGE HANDLING (GDI+)
+; GDI+ CLIPBOARD IMAGE COPY
 ; ==============================================================================
 
 IS_CopyImageFileToClipboard(imagePath) {
-    if !FileExist(imagePath) {
+    if !FileExist(imagePath)
         return false
-    }
-    
-    ; Initialize GDI+
+
     pToken := 0
-    si := Buffer(24, 0)  ; GdiplusStartupInput
-    NumPut("UInt", 1, si, 0)  ; GdiplusVersion
+    si     := Buffer(24, 0)
+    NumPut("UInt", 1, si, 0)
     DllCall("gdiplus\GdiplusStartup", "Ptr*", &pToken, "Ptr", si, "Ptr", 0)
-    
-    ; Load image
+
     pBitmap := 0
     DllCall("gdiplus\GdipCreateBitmapFromFile", "Str", imagePath, "Ptr*", &pBitmap)
-    
+
     if !pBitmap {
         DllCall("gdiplus\GdiplusShutdown", "Ptr", pToken)
         return false
     }
-    
-    ; Get HBITMAP
+
     hBitmap := 0
-    DllCall("gdiplus\GdipCreateHBITMAPFromBitmap", "Ptr", pBitmap, "Ptr*", &hBitmap, "UInt", 0xFFFFFFFF)
-    
-    ; Copy to clipboard
+    DllCall("gdiplus\GdipCreateHBITMAPFromBitmap",
+        "Ptr", pBitmap, "Ptr*", &hBitmap, "UInt", 0xFFFFFFFF)
+
     if hBitmap {
-        DllCall("OpenClipboard", "Ptr", A_ScriptHwnd)
+        DllCall("OpenClipboard",    "Ptr", A_ScriptHwnd)
         DllCall("EmptyClipboard")
-        DllCall("SetClipboardData", "UInt", 2, "Ptr", hBitmap)  ; CF_BITMAP = 2
+        DllCall("SetClipboardData", "UInt", 2, "Ptr", hBitmap)  ; CF_BITMAP
         DllCall("CloseClipboard")
     }
-    
-    ; Cleanup
-    DllCall("gdiplus\GdipDisposeImage", "Ptr", pBitmap)
-    DllCall("gdiplus\GdiplusShutdown", "Ptr", pToken)
-    
+
+    DllCall("gdiplus\GdipDisposeImage",  "Ptr", pBitmap)
+    DllCall("gdiplus\GdiplusShutdown",   "Ptr", pToken)
+
     return hBitmap != 0
 }
 
@@ -315,58 +364,44 @@ IS_CopyImageFileToClipboard(imagePath) {
 ; ==============================================================================
 
 IS_BuildShareContent(cap, platform) {
-    content := ""
-    
-    ; Get character limit for platform
+    content   := ""
     charLimit := IS_GetCharLimit(platform)
-    
-    ; Build base content
-    if cap.Has("body") && cap["body"] != ""
+
+    if cap.Has("body")  && cap["body"]  != ""
         content := cap["body"]
     else if cap.Has("title") && cap["title"] != ""
         content := cap["title"]
-    
-    ; Add URL if present
+
     if cap.Has("url") && cap["url"] != "" {
-        url := cap["url"]
-        ; Clean tracking parameters
-        url := IS_CleanURL(url)
-        if content != ""
-            content .= "`n`n" url
-        else
-            content := url
+        url := IS_CleanURL(cap["url"])
+        content := content != "" ? content "`n`n" url : url
     }
-    
-    ; Truncate if needed (leave room for images reducing URL preview)
-    if StrLen(content) > charLimit {
+
+    if StrLen(content) > charLimit
         content := SubStr(content, 1, charLimit - 3) "..."
-    }
-    
+
     return content
 }
 
 IS_BuildEmailBody(cap) {
     body := ""
-    
-    if cap.Has("body") && cap["body"] != ""
+    if cap.Has("body")  && cap["body"]  != ""
         body := cap["body"]
     else if cap.Has("title") && cap["title"] != ""
         body := cap["title"]
-    
     if cap.Has("url") && cap["url"] != "" {
         if body != ""
             body .= "`n`n"
         body .= cap["url"]
     }
-    
     return body
 }
 
 IS_GetCharLimit(platform) {
     limits := Map(
-        "twitter", 280,
-        "x", 280,
-        "bluesky", 300,
+        "twitter",  280,
+        "x",        280,
+        "bluesky",  300,
         "facebook", 63206,
         "linkedin", 3000,
         "mastodon", 500
@@ -375,15 +410,13 @@ IS_GetCharLimit(platform) {
 }
 
 IS_CleanURL(url) {
-    ; Remove common tracking parameters
-    trackingParams := ["utm_source", "utm_medium", "utm_campaign", "utm_content", 
-                       "utm_term", "fbclid", "gclid", "ref", "source"]
-    
+    trackingParams := ["utm_source","utm_medium","utm_campaign","utm_content",
+                       "utm_term","fbclid","gclid","ref","source"]
     if InStr(url, "?") {
-        parts := StrSplit(url, "?", , 2)
+        parts   := StrSplit(url, "?", , 2)
         baseUrl := parts[1]
         if parts.Length > 1 {
-            params := StrSplit(parts[2], "&")
+            params      := StrSplit(parts[2], "&")
             cleanParams := []
             for param in params {
                 isTracking := false
@@ -418,73 +451,61 @@ IS_JoinArray(arr, delimiter) {
 ; PLATFORM-SPECIFIC SHARING
 ; ==============================================================================
 
-; Facebook sharing with images
 IS_ShareToFacebook(content, images) {
     global IS_PendingContent, IS_PendingImages, IS_CurrentImageIndex
-    
-    ; Detect if we're in a Facebook post or comment
+
     isComment := IS_DetectFacebookContext()
-    maxImages := isComment ? IS_ImageLimits["facebook_comment"] : IS_ImageLimits["facebook_post"]
-    
-    ; Limit images to platform max
+    maxImages := isComment ? IS_ImageLimits["facebook_comment"]
+                           : IS_ImageLimits["facebook_post"]
+
     imagesToShare := []
     Loop Min(images.Length, maxImages)
         imagesToShare.Push(images[A_Index])
-    
-    ; Ask user preference: Image first or Text first?
+
     if imagesToShare.Length > 0 {
-        result := MsgBox("Share to Facebook with " imagesToShare.Length " image(s)?`n`n"
-                        "YES = Upload image(s) first, then paste text`n"
-                        "NO = Paste text first, then upload image(s)`n"
-                        "CANCEL = Text only (no images)",
-                        "📷 Facebook Share", "YesNoCancel Icon?")
-        
+        result := MsgBox(
+            "Share to Facebook with " imagesToShare.Length " image(s)?`n`n"
+            "YES = Upload image(s) first, then paste text`n"
+            "NO = Paste text first, then upload image(s)`n"
+            "CANCEL = Text only (no images)",
+            "📷 Facebook Share", "YesNoCancel Icon?")
+
         if result = "Cancel" {
-            ; Text only - use safe clipboard set
             IS_SafeClipboardSet(content)
             ShowNotification("Text copied - paste with Ctrl+V", "📋 Ready", 2000)
-            IS_ClearPendingState()  ; Clean up
+            IS_CleanTempImages(images)
+            IS_ClearPendingState()
             return true
         }
-        
-        if result = "Yes" {
-            ; Images first approach
+        if result = "Yes"
             return IS_FacebookImagesFirst(content, imagesToShare)
-        } else {
-            ; Text first approach
+        else
             return IS_FacebookTextFirst(content, imagesToShare)
-        }
     } else {
-        ; No images, just copy text - use safe clipboard set
         IS_SafeClipboardSet(content)
         ShowNotification("Text copied - paste with Ctrl+V", "📋 Ready", 2000)
-        IS_ClearPendingState()  ; Clean up
+        IS_ClearPendingState()
         return true
     }
 }
 
 IS_FacebookImagesFirst(content, images) {
     global IS_PendingContent, IS_PendingImages, IS_CurrentImageIndex
-    
-    ; Copy first image to clipboard
+
     if images.Length > 0 {
         IS_CopyImageFileToClipboard(images[1])
-        
-        ShowNotification("Image on clipboard!`n"
-                        "1. Click in Facebook post area`n"
-                        "2. Press Ctrl+V to paste image`n"
-                        "3. Wait for upload`n"
-                        "4. Press Ctrl+Alt+V for text",
-                        "📷 Step 1: Paste Image", 5000)
-        
-        ; Store content for second paste
-        IS_PendingContent := content
-        IS_PendingImages := images
+        ShowNotification(
+            "Image on clipboard!`n"
+            "1. Click in Facebook post area`n"
+            "2. Ctrl+V to paste image`n"
+            "3. Wait for upload`n"
+            "4. Ctrl+Alt+V for text",
+            "📷 Step 1: Paste Image", 5000)
+
+        IS_PendingContent    := content
+        IS_PendingImages     := images
         IS_CurrentImageIndex := 2
-        
-        ; Set up hotkey for text paste
         Hotkey("^!v", IS_FacebookPasteText, "On")
-        
         return true
     }
     return false
@@ -492,241 +513,196 @@ IS_FacebookImagesFirst(content, images) {
 
 IS_FacebookPasteText(*) {
     global IS_PendingContent, IS_PendingImages, IS_CurrentImageIndex
-    
-    ; Disable hotkey
     Hotkey("^!v", IS_FacebookPasteText, "Off")
-    
-    ; Paste the text using safe clipboard
     IS_SafeClipboardSet(IS_PendingContent)
     Send("^v")
-    
-    ; If more images, offer to add them
+
     if IS_PendingImages.Length >= IS_CurrentImageIndex {
         Sleep(500)
-        ShowNotification("Text pasted!`n"
-                        "More images available.`n"
-                        "Press Ctrl+Alt+I to add next image",
-                        "📝 Text Added", 3000)
+        ShowNotification(
+            "Text pasted!`nMore images available.`nCtrl+Alt+I for next image",
+            "📝 Text Added", 3000)
         Hotkey("^!i", IS_FacebookNextImage, "On")
     } else {
         ShowNotification("Share complete!", "✅ Done", 2000)
-        IS_ClearPendingState()  ; Clean up when done
+        IS_CleanTempImages(IS_PendingImages)
+        IS_ClearPendingState()
     }
 }
 
 IS_FacebookNextImage(*) {
     global IS_PendingImages, IS_CurrentImageIndex
-    
+
     if IS_CurrentImageIndex <= IS_PendingImages.Length {
         IS_CopyImageFileToClipboard(IS_PendingImages[IS_CurrentImageIndex])
         IS_CurrentImageIndex++
-        
+
         if IS_CurrentImageIndex <= IS_PendingImages.Length {
-            ShowNotification("Image " (IS_CurrentImageIndex-1) " ready!`n"
-                            "Press Ctrl+V to paste`n"
-                            "Press Ctrl+Alt+I for next",
-                            "📷 Image Ready", 3000)
+            ShowNotification(
+                "Image " (IS_CurrentImageIndex-1) " ready!`n"
+                "Ctrl+V to paste, Ctrl+Alt+I for next",
+                "📷 Image Ready", 3000)
         } else {
             Hotkey("^!i", IS_FacebookNextImage, "Off")
-            ShowNotification("Last image ready!`nPress Ctrl+V to paste",
-                            "📷 Final Image", 3000)
-            ; Clear state after last image is ready
-            SetTimer(() => IS_ClearPendingState(), -5000)
+            ShowNotification("Last image ready! Ctrl+V to paste",
+                "📷 Final Image", 3000)
+            SetTimer(() => (IS_CleanTempImages(IS_PendingImages), IS_ClearPendingState()), -5000)
         }
     }
 }
 
 IS_FacebookTextFirst(content, images) {
     global IS_PendingImages, IS_CurrentImageIndex
-    
-    ; Copy text first using safe clipboard
+
     IS_SafeClipboardSet(content)
-    
-    ShowNotification("Text on clipboard!`n"
-                    "1. Click in Facebook post area`n"
-                    "2. Press Ctrl+V to paste text`n"
-                    "3. Press Ctrl+Alt+I for image",
-                    "📝 Step 1: Paste Text", 4000)
-    
-    ; Store images for later
-    IS_PendingImages := images
+    ShowNotification(
+        "Text on clipboard!`n"
+        "1. Click in Facebook post area`n"
+        "2. Ctrl+V to paste text`n"
+        "3. Ctrl+Alt+I for image",
+        "📝 Step 1: Paste Text", 4000)
+
+    IS_PendingImages     := images
     IS_CurrentImageIndex := 1
-    
-    ; Set up hotkey for image paste
     Hotkey("^!i", IS_FacebookNextImage, "On")
-    
     return true
 }
 
 IS_DetectFacebookContext() {
-    ; Try to detect if user is in a comment field vs post field
-    ; Returns true if comment, false if post
     title := WinGetTitle("A")
     return InStr(title, "Comment") || InStr(title, "Reply")
 }
 
-; Twitter/X sharing
 IS_ShareToTwitter(content, images) {
     global IS_PendingImages, IS_CurrentImageIndex
-    
-    maxImages := IS_ImageLimits["twitter"]
+
     imagesToShare := []
-    Loop Min(images.Length, maxImages)
+    Loop Min(images.Length, IS_ImageLimits["twitter"])
         imagesToShare.Push(images[A_Index])
-    
-    ; Open Twitter compose
+
     composeUrl := "https://twitter.com/intent/tweet?text=" IS_EncodeURIComponent(content)
     Run(composeUrl)
-    
+
     if imagesToShare.Length > 0 {
         Sleep(2000)
-        ShowNotification("Twitter opened!`n"
-                        imagesToShare.Length " image(s) ready.`n"
-                        "Press Ctrl+Alt+I to copy each image",
-                        "🐦 Add Images", 4000)
-        
-        IS_PendingImages := imagesToShare
+        ShowNotification(
+            "Twitter opened!`n" imagesToShare.Length " image(s) ready.`nCtrl+Alt+I to copy each",
+            "🐦 Add Images", 4000)
+        IS_PendingImages     := imagesToShare
         IS_CurrentImageIndex := 1
         Hotkey("^!i", IS_GenericNextImage, "On")
     } else {
-        IS_ClearPendingState()  ; No images, clean up
+        IS_CleanTempImages(images)
+        IS_ClearPendingState()
     }
-    
     return true
 }
 
-; Bluesky sharing  
 IS_ShareToBluesky(content, images) {
     global IS_PendingImages, IS_CurrentImageIndex
-    
-    maxImages := IS_ImageLimits["bluesky"]
+
     imagesToShare := []
-    Loop Min(images.Length, maxImages)
+    Loop Min(images.Length, IS_ImageLimits["bluesky"])
         imagesToShare.Push(images[A_Index])
-    
-    ; Bluesky intent URL (if logged in)
-    ; Note: Bluesky doesn't have a standard intent URL yet, so we open the site
+
     Run("https://bsky.app/")
-    
     Sleep(2000)
-    
-    ; Copy content using safe clipboard
     IS_SafeClipboardSet(content)
-    
+
     if imagesToShare.Length > 0 {
-        ShowNotification("Bluesky opened!`n"
-                        "Text on clipboard (Ctrl+V)`n"
-                        imagesToShare.Length " image(s) ready.`n"
-                        "Press Ctrl+Alt+I after pasting text",
-                        "🦋 Bluesky Share", 4000)
-        
-        IS_PendingImages := imagesToShare
+        ShowNotification(
+            "Bluesky opened!`nText on clipboard (Ctrl+V)`n"
+            imagesToShare.Length " image(s) ready.`nCtrl+Alt+I after pasting text",
+            "🦋 Bluesky Share", 4000)
+        IS_PendingImages     := imagesToShare
         IS_CurrentImageIndex := 1
         Hotkey("^!i", IS_GenericNextImage, "On")
     } else {
-        ShowNotification("Bluesky opened!`nText on clipboard - paste with Ctrl+V",
-                        "🦋 Bluesky Share", 3000)
-        IS_ClearPendingState()  ; No images, clean up
+        ShowNotification("Bluesky opened! Text on clipboard - paste with Ctrl+V",
+            "🦋 Bluesky Share", 3000)
+        IS_CleanTempImages(images)
+        IS_ClearPendingState()
     }
-    
     return true
 }
 
-; LinkedIn sharing
 IS_ShareToLinkedIn(content, images) {
     global IS_PendingImages, IS_CurrentImageIndex
-    
-    maxImages := IS_ImageLimits["linkedin_post"]
+
     imagesToShare := []
-    Loop Min(images.Length, maxImages)
+    Loop Min(images.Length, IS_ImageLimits["linkedin_post"])
         imagesToShare.Push(images[A_Index])
-    
-    ; LinkedIn share URL
-    url := ""
-    global CaptureData
-    ; Try to extract URL from content or use share URL
+
     Run("https://www.linkedin.com/feed/")
-    
     Sleep(2000)
     IS_SafeClipboardSet(content)
-    
+
     if imagesToShare.Length > 0 {
-        ShowNotification("LinkedIn opened!`n"
-                        "Text on clipboard (Ctrl+V)`n"
-                        imagesToShare.Length " image(s) ready.`n"
-                        "Press Ctrl+Alt+I for images",
-                        "💼 LinkedIn Share", 4000)
-        
-        IS_PendingImages := imagesToShare
+        ShowNotification(
+            "LinkedIn opened!`nText on clipboard (Ctrl+V)`n"
+            imagesToShare.Length " image(s) ready.`nCtrl+Alt+I for images",
+            "💼 LinkedIn Share", 4000)
+        IS_PendingImages     := imagesToShare
         IS_CurrentImageIndex := 1
         Hotkey("^!i", IS_GenericNextImage, "On")
     } else {
-        ShowNotification("LinkedIn opened!`nText on clipboard - paste with Ctrl+V",
-                        "💼 LinkedIn Share", 3000)
-        IS_ClearPendingState()  ; No images, clean up
+        ShowNotification("LinkedIn opened! Text on clipboard - paste with Ctrl+V",
+            "💼 LinkedIn Share", 3000)
+        IS_CleanTempImages(images)
+        IS_ClearPendingState()
     }
-    
     return true
 }
 
-; Mastodon sharing
 IS_ShareToMastodon(content, images) {
     global IS_PendingImages, IS_CurrentImageIndex
-    
-    maxImages := IS_ImageLimits["mastodon"]
+
     imagesToShare := []
-    Loop Min(images.Length, maxImages)
+    Loop Min(images.Length, IS_ImageLimits["mastodon"])
         imagesToShare.Push(images[A_Index])
-    
-    ; Mastodon doesn't have universal intent - user needs to be on their instance
-    ; Copy content using safe clipboard
+
     IS_SafeClipboardSet(content)
-    
+
     if imagesToShare.Length > 0 {
-        ShowNotification("Text on clipboard!`n"
-                        "Open your Mastodon instance`n"
-                        imagesToShare.Length " image(s) ready.`n"
-                        "Press Ctrl+Alt+I for images",
-                        "🐘 Mastodon Share", 4000)
-        
-        IS_PendingImages := imagesToShare
+        ShowNotification(
+            "Text on clipboard!`nOpen your Mastodon instance`n"
+            imagesToShare.Length " image(s) ready.`nCtrl+Alt+I for images",
+            "🐘 Mastodon Share", 4000)
+        IS_PendingImages     := imagesToShare
         IS_CurrentImageIndex := 1
         Hotkey("^!i", IS_GenericNextImage, "On")
     } else {
-        ShowNotification("Text on clipboard!`nOpen your Mastodon instance and paste",
-                        "🐘 Mastodon Share", 3000)
-        IS_ClearPendingState()  ; No images, clean up
+        ShowNotification("Text on clipboard! Open your Mastodon instance and paste",
+            "🐘 Mastodon Share", 3000)
+        IS_CleanTempImages(images)
+        IS_ClearPendingState()
     }
-    
     return true
 }
 
-; Generic image cycling for all platforms
 IS_GenericNextImage(*) {
     global IS_PendingImages, IS_CurrentImageIndex
-    
+
     if IS_CurrentImageIndex <= IS_PendingImages.Length {
         IS_CopyImageFileToClipboard(IS_PendingImages[IS_CurrentImageIndex])
-        
         remaining := IS_PendingImages.Length - IS_CurrentImageIndex
         IS_CurrentImageIndex++
-        
+
         if remaining > 0 {
-            ShowNotification("Image " (IS_CurrentImageIndex-1) "/" IS_PendingImages.Length " ready!`n"
-                            "Press Ctrl+V to paste`n"
-                            "Press Ctrl+Alt+I for next (" remaining " more)",
-                            "📷 Image Ready", 3000)
+            ShowNotification(
+                "Image " (IS_CurrentImageIndex-1) "/" IS_PendingImages.Length " ready!`n"
+                "Ctrl+V to paste, Ctrl+Alt+I for next (" remaining " more)",
+                "📷 Image Ready", 3000)
         } else {
             Hotkey("^!i", IS_GenericNextImage, "Off")
-            ShowNotification("Final image ready!`nPress Ctrl+V to paste",
-                            "📷 Last Image", 3000)
-            ; Clear state after a delay (give user time to paste)
-            SetTimer(() => IS_ClearPendingState(), -5000)
+            ShowNotification("Final image ready! Ctrl+V to paste", "📷 Last Image", 3000)
+            SetTimer(() => (IS_CleanTempImages(IS_PendingImages), IS_ClearPendingState()), -5000)
         }
     } else {
         Hotkey("^!i", IS_GenericNextImage, "Off")
         ShowNotification("All images shared!", "✅ Complete", 2000)
-        IS_ClearPendingState()  ; Clean up
+        IS_CleanTempImages(IS_PendingImages)
+        IS_ClearPendingState()
     }
 }
 
@@ -737,21 +713,17 @@ IS_GenericNextImage(*) {
 IS_SendOutlookEmailWithImages(subject, body, images) {
     try {
         outlookApp := ComObject("Outlook.Application")
-        email := outlookApp.CreateItem(0)  ; olMailItem
-        
+        email      := outlookApp.CreateItem(0)
         email.Subject := subject
-        email.Body := body
-        
-        ; Add image attachments
+        email.Body    := body
         for imagePath in images {
             if FileExist(imagePath)
                 email.Attachments.Add(imagePath)
         }
-        
-        email.Display()  ; Show email for user to review/send
-        
+        email.Display()
         ShowNotification("Email created with " images.Length " image(s) attached",
-                        "📧 Ready to Send", 3000)
+            "📧 Ready to Send", 3000)
+        IS_CleanTempImages(images)
         return true
     } catch as err {
         ShowNotification("Outlook error: " err.Message, "Error", 3000)
@@ -760,7 +732,7 @@ IS_SendOutlookEmailWithImages(subject, body, images) {
 }
 
 ; ==============================================================================
-; URL ENCODING HELPER
+; URL ENCODING
 ; ==============================================================================
 
 IS_EncodeURIComponent(str) {
@@ -773,11 +745,10 @@ IS_EncodeURIComponent(str) {
 }
 
 ; ==============================================================================
-; NOTIFICATION HELPER (if not already defined)
+; NOTIFICATION HELPER
 ; ==============================================================================
 
 ShowNotification(message, title := "ContentCapture Pro", duration := 3000) {
-    ; Use TrayTip for notifications
     TrayTip(message, title)
     if duration > 0
         SetTimer(() => TrayTip(), -duration)
