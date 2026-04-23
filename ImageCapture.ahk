@@ -1,4 +1,4 @@
-#Requires AutoHotkey v2.0+
+﻿#Requires AutoHotkey v2.0+
 
 ; ==============================================================================
 ; ImageCapture.ahk - Image Attachment System for ContentCapture Pro
@@ -58,7 +58,9 @@ IC_SaveImageData() {
     content := ""
     for name, path in ImageData
         content .= name "|" path "`n"
-    try { FileDelete(ImageDataFile) }
+    try {
+        FileDelete(ImageDataFile)
+    }
     if content != ""
         FileAppend(content, ImageDataFile, "UTF-8")
 }
@@ -220,8 +222,11 @@ IC_RemoveImage(name) {
     if !ImageData.Has(name)
         return
     path := ImageData[name]
-    if FileExist(path)
-        try { FileDelete(path) }
+    if FileExist(path) {
+        try {
+            FileDelete(path)
+        }
+    }
     ImageData.Delete(name)
     IC_SaveImageData()
 }

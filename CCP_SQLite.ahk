@@ -1,139 +1,149 @@
 ﻿; CCP_SQLite.ahk
 ; ContentCapture Pro - SQLite Wrapper
-; Uses winsqlite3.dll — checks script folder first, then Windows System32
+; Uses winsqlite3.dll (Windows 10/11 built-in)
 ; AHK v2 - UTF-8 with BOM
-;
-; CHANGELOG:
-;   v1.2 2026-03-23
-;     - FIXED: DLL resolution now checks A_ScriptDir first (winsqlite3.dll is
-;       included in the CCP folder), then falls back to Windows System32.
-;       The old approach (hardcoded System32 path) failed because winsqlite3.dll
-;       in System32 does not reliably export sqlite3_open16 on all Windows builds.
-;     - FIXED: Switched from sqlite3_open16 back to sqlite3_open_v2 which is
-;       consistently exported by both the bundled DLL and System32 copy.
-;     - FIXED: CCP_DB_Begin/Commit/Rollback were one-liners — expanded to
-;       multi-line bodies which AHK v2 requires.
-;     - ADDED: CCP_SQLite_DLL() helper centralises DLL path resolution.
 
 #Requires AutoHotkey v2.0
 
-; ---------------------------------------------------------------------------
-; DLL RESOLUTION — call this instead of hardcoding the path anywhere
-; ---------------------------------------------------------------------------
-CCP_SQLite_DLL() {
-    scriptDll := A_ScriptDir "\winsqlite3.dll"
-    sysDll    := A_WinDir   "\System32\winsqlite3.dll"
-    if FileExist(scriptDll)
-        return scriptDll
-    if FileExist(sysDll)
-        return sysDll
-    throw Error("winsqlite3.dll not found.`n`nChecked:`n  " scriptDll "`n  " sysDll
-        . "`n`nCopy winsqlite3.dll from System32 into your CCP folder.")
+global CCP_SQLITE_DLL := A_ScriptDir "\winsqlite3.dll"
+
+; -- Open database -----------------------------------------------------------
+; Uses sqlite3_open (UTF-8) - confirmed working on winsqlite3.dll
+; Global DLL handle - loaded once, reused for all calls
+global _CCP_hDll   := 0
+global _CCP_pOpen  := 0
+global _CCP_pClose := 0
+
+; -- Load DLL and cache function pointers ------------------------------------
+CCP_DB_LoadDll() {
+    global CCP_SQLITE_DLL, _CCP_hDll, _CCP_pOpen, _CCP_pClose
+    if _CCP_hDll
+        return  ; already loaded
+
+    if !FileExist(CCP_SQLITE_DLL)
+        throw Error("winsqlite3.dll not found at: " CCP_SQLITE_DLL)
+
+    _CCP_hDll := DllCall("LoadLibraryW", "Str", CCP_SQLITE_DLL, "Ptr")
+    if !_CCP_hDll
+        throw Error("LoadLibrary failed for: " CCP_SQLITE_DLL)
+
+    _CCP_pOpen := DllCall("GetProcAddress",
+        "Ptr", _CCP_hDll, "AStr", "sqlite3_open", "Ptr")
+    if !_CCP_pOpen
+        throw Error("sqlite3_open not found in winsqlite3.dll")
+
+    _CCP_pClose := DllCall("GetProcAddress",
+        "Ptr", _CCP_hDll, "AStr", "sqlite3_close", "Ptr")
 }
 
-; ---------------------------------------------------------------------------
-; OPEN / CLOSE
-; ---------------------------------------------------------------------------
+; -- Open database -----------------------------------------------------------
 CCP_DB_Open(dbPath) {
-    dll := CCP_SQLite_DLL()
-    ; Delete zero-byte DB left by a previously failed open
-    if FileExist(dbPath) && FileGetSize(dbPath) = 0
-        FileDelete(dbPath)
+    global _CCP_pOpen
+
+    CCP_DB_LoadDll()
+
+    ; Call sqlite3_open through cached function pointer
     pathBuf := Buffer(StrPut(dbPath, "UTF-8"))
     StrPut(dbPath, pathBuf, "UTF-8")
+
     db := 0
-    try {
-        rc := DllCall(dll "\sqlite3_open_v2",
-            "Ptr",   pathBuf,
-            "UPtr*", &db,
-            "Int",   6,          ; SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE
-            "Ptr",   0,
-            "Int")
-    } catch as e {
-        throw Error("sqlite3_open_v2 DllCall failed.`nDLL: " dll "`nError: " e.Message)
-    }
+    rc := DllCall(_CCP_pOpen,
+        "Ptr",   pathBuf,
+        "UPtr*", &db,
+        "Int")
+
     if rc != 0 || !db
-        throw Error("sqlite3_open_v2 rc=" rc " db=" db "`nPath: " dbPath "`nDLL: " dll)
+        throw Error("sqlite3_open failed (rc=" rc ") for: " dbPath)
     return db
 }
 
+; -- Close database ----------------------------------------------------------
 CCP_DB_Close(db) {
-    if db
-        DllCall(CCP_SQLite_DLL() "\sqlite3_close", "UPtr", db)
+    global _CCP_pClose, CCP_SQLITE_DLL
+    if !db
+        return
+    if _CCP_pClose
+        DllCall(_CCP_pClose, "UPtr", db)
+    else
+        DllCall(CCP_SQLITE_DLL "\sqlite3_close", "UPtr", db)
 }
 
-; ---------------------------------------------------------------------------
-; EXECUTE (no result set)
-; Uses prepare_v2/step/finalize instead of sqlite3_exec to avoid access
-; violations that occur with sqlite3_exec on some winsqlite3.dll builds.
-; ---------------------------------------------------------------------------
+; -- Execute SQL (no result set) - INSERT, UPDATE, DELETE, CREATE TABLE ------
 CCP_DB_Execute(db, sql) {
-    dll    := CCP_SQLite_DLL()
     sqlBuf := Buffer(StrPut(sql, "UTF-8"))
     StrPut(sql, sqlBuf, "UTF-8")
-    stmt := 0
-    rc := DllCall(dll "\sqlite3_prepare_v2",
-        "UPtr", db, "Ptr", sqlBuf, "Int", -1,
-        "UPtr*", &stmt, "Ptr", 0, "Int")
-    if rc != 0 || !stmt
-        throw Error("sqlite3_prepare_v2 failed (rc=" rc ")`nSQL: " sql)
-    rc := DllCall(dll "\sqlite3_step", "UPtr", stmt, "Int")
-    DllCall(dll "\sqlite3_finalize", "UPtr", stmt)
-    ; rc=100 (SQLITE_ROW) or rc=101 (SQLITE_DONE) are both success for execute
-    if rc != 101 && rc != 100
-        throw Error("sqlite3_step failed (rc=" rc ")`nSQL: " sql)
+    errPtr := 0
+    rc := DllCall(CCP_SQLITE_DLL "\sqlite3_exec",
+        "UPtr",  db,
+        "Ptr",   sqlBuf,
+        "Ptr",   0,
+        "Ptr",   0,
+        "UPtr*", &errPtr,
+        "Int")
+    if rc != 0 {
+        msg := errPtr ? StrGet(errPtr, "UTF-8") : "unknown error"
+        if errPtr
+            DllCall(CCP_SQLITE_DLL "\sqlite3_free", "Ptr", errPtr)
+        throw Error("SQL error [rc=" rc "]: " msg)
+    }
 }
 
-; ---------------------------------------------------------------------------
-; QUERY (returns array of Maps)
-; ---------------------------------------------------------------------------
+; -- Query rows - returns Array of Map objects, keys = column names ----------
 CCP_DB_Query(db, sql) {
-    dll    := CCP_SQLite_DLL()
     sqlBuf := Buffer(StrPut(sql, "UTF-8"))
     StrPut(sql, sqlBuf, "UTF-8")
     stmt := 0
-    rc := DllCall(dll "\sqlite3_prepare_v2",
-        "UPtr", db, "Ptr", sqlBuf, "Int", -1, "UPtr*", &stmt, "Ptr", 0, "Int")
+    rc := DllCall(CCP_SQLITE_DLL "\sqlite3_prepare_v2",
+        "UPtr",  db,
+        "Ptr",   sqlBuf,
+        "Int",   -1,
+        "UPtr*", &stmt,
+        "Ptr",   0,
+        "Int")
     if rc != 0 || !stmt
-        throw Error("sqlite3_prepare_v2 failed (rc=" rc ")`nSQL: " sql)
-    colCount := DllCall(dll "\sqlite3_column_count", "UPtr", stmt, "Int")
+        throw Error("sqlite3_prepare_v2 failed (rc=" rc ")")
+
+    colCount := DllCall(CCP_SQLITE_DLL "\sqlite3_column_count", "UPtr", stmt, "Int")
     colNames := []
     Loop colCount {
-        p := DllCall(dll "\sqlite3_column_name",
+        p := DllCall(CCP_SQLITE_DLL "\sqlite3_column_name",
             "UPtr", stmt, "Int", A_Index - 1, "UPtr")
         colNames.Push(p ? StrGet(p, "UTF-8") : "col" A_Index)
     }
+
     rows := []
     Loop {
-        rc := DllCall(dll "\sqlite3_step", "UPtr", stmt, "Int")
-        if rc = 101  ; SQLITE_DONE
+        rc := DllCall(CCP_SQLITE_DLL "\sqlite3_step", "UPtr", stmt, "Int")
+        if rc = 101   ; SQLITE_DONE
             break
         if rc != 100  ; SQLITE_ROW
             break
         row := Map()
         Loop colCount {
             ci  := A_Index - 1
-            typ := DllCall(dll "\sqlite3_column_type", "UPtr", stmt, "Int", ci, "Int")
-            if typ = 1      ; SQLITE_INTEGER
-                row[colNames[A_Index]] := DllCall(dll "\sqlite3_column_int64",
+            typ := DllCall(CCP_SQLITE_DLL "\sqlite3_column_type",
+                       "UPtr", stmt, "Int", ci, "Int")
+            if typ = 1
+                row[colNames[A_Index]] := DllCall(CCP_SQLITE_DLL "\sqlite3_column_int64",
                     "UPtr", stmt, "Int", ci, "Int64")
-            else if typ = 2 ; SQLITE_FLOAT
-                row[colNames[A_Index]] := DllCall(dll "\sqlite3_column_double",
+            else if typ = 2
+                row[colNames[A_Index]] := DllCall(CCP_SQLITE_DLL "\sqlite3_column_double",
                     "UPtr", stmt, "Int", ci, "Double")
-            else if typ = 5 ; SQLITE_NULL
+            else if typ = 5
                 row[colNames[A_Index]] := ""
-            else {           ; SQLITE_TEXT (3) or SQLITE_BLOB (4)
-                p := DllCall(dll "\sqlite3_column_text", "UPtr", stmt, "Int", ci, "UPtr")
+            else {
+                p := DllCall(CCP_SQLITE_DLL "\sqlite3_column_text",
+                    "UPtr", stmt, "Int", ci, "UPtr")
                 row[colNames[A_Index]] := p ? StrGet(p, "UTF-8") : ""
             }
         }
         rows.Push(row)
     }
-    DllCall(dll "\sqlite3_finalize", "UPtr", stmt)
+    DllCall(CCP_SQLITE_DLL "\sqlite3_finalize", "UPtr", stmt)
     return rows
 }
 
-; Return the first column of the first row, or default if no rows
+; -- Query single value ------------------------------------------------------
 CCP_DB_QueryOne(db, sql, default := "") {
     rows := CCP_DB_Query(db, sql)
     if rows.Length = 0
@@ -143,28 +153,17 @@ CCP_DB_QueryOne(db, sql, default := "") {
     return default
 }
 
-; ---------------------------------------------------------------------------
-; HELPERS
-; ---------------------------------------------------------------------------
+; -- Escape single quotes for SQL --------------------------------------------
 CCP_DB_Escape(str) {
     return StrReplace(String(str), "'", "''")
 }
 
-CCP_DB_Begin(db) {
-    CCP_DB_Execute(db, "BEGIN TRANSACTION")
-}
+; -- Transaction helpers -----------------------------------------------------
+CCP_DB_Begin(db)    => CCP_DB_Execute(db, "BEGIN TRANSACTION")
+CCP_DB_Commit(db)   => CCP_DB_Execute(db, "COMMIT")
+CCP_DB_Rollback(db) => CCP_DB_Execute(db, "ROLLBACK")
 
-CCP_DB_Commit(db) {
-    CCP_DB_Execute(db, "COMMIT")
-}
-
-CCP_DB_Rollback(db) {
-    CCP_DB_Execute(db, "ROLLBACK")
-}
-
-; ---------------------------------------------------------------------------
-; IMAGES TABLE
-; ---------------------------------------------------------------------------
+; -- Create images table if it does not exist --------------------------------
 CCP_DB_InitImages(db) {
     CCP_DB_Execute(db,
         "CREATE TABLE IF NOT EXISTS images ("
@@ -179,6 +178,7 @@ CCP_DB_InitImages(db) {
         "CREATE INDEX IF NOT EXISTS idx_folder ON images (folder)")
 }
 
+; -- Insert or replace one image record -------------------------------------
 CCP_DB_UpsertImage(db, key, b64, srcFile, folder, origKB, b64KB, encDate) {
     CCP_DB_Execute(db,
         "INSERT OR REPLACE INTO images"
@@ -187,38 +187,43 @@ CCP_DB_UpsertImage(db, key, b64, srcFile, folder, origKB, b64KB, encDate) {
         . "'" CCP_DB_Escape(b64)     "',"
         . "'" CCP_DB_Escape(srcFile) "',"
         . "'" CCP_DB_Escape(folder)  "',"
-        . CCP_DB_Escape(origKB)      ","
-        . CCP_DB_Escape(b64KB)       ","
+        . CCP_DB_Escape(origKB)        ","
+        . CCP_DB_Escape(b64KB)         ","
         . "'" CCP_DB_Escape(encDate) "')")
 }
 
+; -- Retrieve b64 for a key --------------------------------------------------
 CCP_DB_GetImage(db, key) {
     return CCP_DB_QueryOne(db,
         "SELECT b64 FROM images WHERE key='" CCP_DB_Escape(key) "' LIMIT 1", "")
 }
 
+; -- Check if key exists -----------------------------------------------------
 CCP_DB_KeyExists(db, key) {
     return CCP_DB_QueryOne(db,
         "SELECT COUNT(*) FROM images WHERE key='" CCP_DB_Escape(key) "'", 0) > 0
 }
 
+; -- Delete image by key -----------------------------------------------------
 CCP_DB_DeleteImage(db, key) {
-    CCP_DB_Execute(db,
-        "DELETE FROM images WHERE key='" CCP_DB_Escape(key) "'")
+    CCP_DB_Execute(db, "DELETE FROM images WHERE key='" CCP_DB_Escape(key) "'")
 }
 
+; -- Rename image key --------------------------------------------------------
 CCP_DB_RenameImage(db, oldKey, newKey) {
     CCP_DB_Execute(db,
         "UPDATE images SET key='" CCP_DB_Escape(newKey)
         . "' WHERE key='" CCP_DB_Escape(oldKey) "'")
 }
 
+; -- Get all image rows (no b64) for list display ----------------------------
 CCP_DB_GetAllImages(db) {
     return CCP_DB_Query(db,
         "SELECT key,source_file,folder,orig_kb,b64_kb,encoded_date"
         . " FROM images ORDER BY folder,key")
 }
 
+; -- Search images -----------------------------------------------------------
 CCP_DB_SearchImages(db, srch) {
     s := CCP_DB_Escape(srch)
     return CCP_DB_Query(db,
@@ -229,6 +234,7 @@ CCP_DB_SearchImages(db, srch) {
         . " ORDER BY folder,key")
 }
 
+; -- Count images ------------------------------------------------------------
 CCP_DB_ImageCount(db) {
     return CCP_DB_QueryOne(db, "SELECT COUNT(*) FROM images", 0)
 }

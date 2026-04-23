@@ -14,6 +14,7 @@ global currentTemp := ""
 global pToken      := 0
 global mainGui, lvKeys, picPreview
 global ctlSearch, ctlKeyLabel, ctlHotstring, ctlMeta, ctlDbPath
+global ctlLog := 0
 
 pToken := Gdip_Startup()
 BuildGui()
@@ -22,6 +23,7 @@ LoadImages()
 BuildGui() {
     global mainGui, lvKeys, picPreview
     global ctlSearch, ctlKeyLabel, ctlHotstring, ctlMeta, ctlDbPath
+global ctlLog := 0
 
     mainGui := Gui("+Resize +MinSize800x500", "CCP Image Viewer")
     mainGui.SetFont("s9", "Segoe UI")
@@ -118,7 +120,7 @@ LoadImages(*) {
 }
 
 OnSearch(*) {
-    global allRows, dbPath, ctlSearch
+    global allRows, dbPath, ctlSearch, mainGui
     srch := Trim(ctlSearch.Value)
     if srch = "" {
         PopulateList(allRows)
@@ -144,7 +146,7 @@ PopulateList(rows) {
     ClearPreview()
 }
 
-OnSelect(lv, rowNum) {
+OnSelect(lv, rowNum, selected) {
     if rowNum > 0
         ShowPreview(rowNum)
 }
@@ -201,10 +203,14 @@ ShowPreview(rowNum) {
 
 GetExtFromB64(b64) {
     h := SubStr(b64, 1, 8)
-    if SubStr(h, 1, 6) = "R0lGOD" return "gif"
-    if SubStr(h, 1, 5) = "iVBOR" return "png"
-    if SubStr(h, 1, 4) = "/9j/" return "jpg"
-    if SubStr(h, 1, 3) = "Qk0"  return "bmp"
+    if SubStr(h, 1, 6) = "R0lGOD"
+        return "gif"
+    if SubStr(h, 1, 5) = "iVBOR"
+        return "png"
+    if SubStr(h, 1, 4) = "/9j/"
+        return "jpg"
+    if SubStr(h, 1, 3) = "Qk0"
+        return "bmp"
     return "png"
 }
 
@@ -423,6 +429,14 @@ OnClose(*) {
     ExitApp()
 }
 
+LogMsg(msg) {
+    global ctlLog
+    if !IsObject(ctlLog)
+        return
+    cur := ctlLog.Value
+    ctlLog.Value := cur . (cur ? "`n" : "") . msg
+}
+
 ; == GDI+ wrappers ============================================================
 
 Gdip_Startup() {
@@ -432,8 +446,12 @@ Gdip_Startup() {
     DllCall("gdiplus\GdiplusStartup", "UPtr*", &pt, "Ptr", si, "Ptr", 0)
     return pt
 }
-Gdip_Shutdown(pt)    => DllCall("gdiplus\GdiplusShutdown", "UPtr", pt)
-Gdip_DisposeImage(p) => DllCall("gdiplus\GdipDisposeImage", "UPtr", p)
+Gdip_Shutdown(pt) {
+    DllCall("gdiplus\GdiplusShutdown", "UPtr", pt)
+}
+Gdip_DisposeImage(p) {
+    DllCall("gdiplus\GdipDisposeImage", "UPtr", p)
+}
 
 Gdip_CreateBitmapFromFile(path) {
     pb := 0

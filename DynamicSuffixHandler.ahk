@@ -1,11 +1,19 @@
-#Requires AutoHotkey v2.0+
+﻿#Requires AutoHotkey v2.0+
 
 ; ==============================================================================
 ; DynamicSuffixHandler.ahk - Dynamic Suffix Detection for ContentCapture Pro
 ; ==============================================================================
-; Version:     2.7
+; Version:     2.8
 ; Author:      Brad (with Claude AI assistance)
 ; License:     MIT
+;
+; CHANGELOG v2.8:
+;   - NEW: Smart share suffixes s and scom
+;     * s    = share to auto-detected platform (image + text, right size)
+;     * scom = comment/reply (text first, then image)
+;     * Platform detected from active browser window title
+;     * Falls back to platform picker popup if not detected
+;     * Right image variant selected automatically (_bsky, _li, _pin)
 ;
 ; CHANGELOG v2.7:
 ;   - ENHANCED: ActionSocial now checks for attached images via SocialImageShare.ahk
@@ -62,6 +70,8 @@
 ;
 ; NOTE: Most suffixes are handled by static hotstrings in ContentCapture_Generated.ahk
 ; DSH only handles these EXTRA suffixes (type scriptnameSUFFIX then space/enter):
+;   s   → Smart share: auto-detect platform, right image, right format
+;   scom→ Smart comment: auto-detect platform, text+image in comment
 ;   u   → Paste URL only
 ;   fbi → Share to Facebook + image
 ;   xi  → Share to Twitter/X + image
@@ -88,6 +98,10 @@ class DynamicSuffixHandler {
     ; The Generated file handles: (base), ?, t, url, body, cp, i, ti, sh, em, go, rd, vi, d., ed, pr, oi, fb, x, bs, li, mt
     ; DSH handles ONLY these extras (no overlap = no double-fire):
     static SUFFIX_MAP := Map(
+        ; Smart share - universal platform-aware (new primary workflow)
+        "scom", "smartsharecomment",
+        "s",    "smartshare",
+
         ; URL only (not in Generated)
         "u",   "url",
 
@@ -285,6 +299,12 @@ class DynamicSuffixHandler {
             case "print":
                 this.ActionPrint(captureName)
             
+            ; === SMART SHARE (platform auto-detected) ===
+            case "smartshare":
+                this.ActionSmartShare(captureName, false)
+            case "smartsharecomment":
+                this.ActionSmartShare(captureName, true)
+
             ; === SOCIAL MEDIA (TEXT ONLY) ===
             case "facebook":
                 this.ActionSocial(captureName, "facebook")
@@ -499,11 +519,55 @@ class DynamicSuffixHandler {
         this.ActionSocial(captureName, "mastodon")
     }
     
+    ; Smart share - auto-detects platform from browser, picks right image variant
+    ; isComment=false → new post (image first)
+    ; isComment=true  → comment/reply (text first, then image)
+    static ActionSmartShare(captureName, isComment := false) {
+        if IsSet(IS_SmartShare) {
+            IS_SmartShare(captureName, isComment)
+        } else {
+            ; Fallback if ImageSharing.ahk not loaded
+            TrayTip("ImageSharing.ahk not loaded", "Smart Share Error", "2")
+        }
+    }
+
     static ActionSocial(captureName, platform) {
         cap := this.captureDataRef[captureName]
-        
-        ; ── CHECK FOR ATTACHED IMAGE ──
-        ; If SocialImageShare.ahk is loaded and record has an image, delegate to it
+
+        ; ── CHECK FOR DB IMAGE (imagekey field + domain detection) ──
+        ; If the capture has an imagekey, use CCP_DomainDetect to pick the
+        ; right platform variant automatically from images.db
+        if cap.Has("imagekey") && cap["imagekey"] != "" {
+            detectedPlatform := platform  ; use suffix-based platform as default
+            if IsSet(CCP_DetectActivePlatform)
+                detectedPlatform := CCP_DetectActivePlatform()
+            if detectedPlatform = ""
+                detectedPlatform := platform
+
+            ; Get the right image temp file for this platform
+            imgPath := ""
+            if IsSet(IS_GetImagesFromSQLite) {
+                imgs := IS_GetImagesFromSQLite(captureName, cap["imagekey"], detectedPlatform)
+                if imgs.Length > 0
+                    imgPath := imgs[1]
+            }
+
+            if imgPath != "" && FileExist(imgPath) {
+                socialContent := this._BuildSocialContent(cap, detectedPlatform)
+                url := cap.Has("url") && cap["url"] != "" ? cap["url"] : ""
+                ; Use IS_ShareWithImage which handles the full platform workflow
+                if IsSet(IS_ShareWithImage) {
+                    IS_ShareWithImage(captureName, detectedPlatform)
+                } else if IsSet(SI_SharePost) {
+                    SI_SharePost(detectedPlatform, captureName, cap, socialContent, url)
+                }
+                ; Clean up temp file after a delay
+                SetTimer(() => (FileExist(imgPath) ? FileDelete(imgPath) : ""), -10000)
+                return
+            }
+        }
+
+        ; ── CHECK FOR LEGACY ATTACHED IMAGE FILE (IC_HasImage) ──
         if IsSet(SI_SharePost) {
             imgPath := ""
             try {

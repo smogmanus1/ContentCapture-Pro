@@ -1,4 +1,4 @@
-; ==============================================================================
+﻿; ==============================================================================
 ; ImageSharing.ahk - Multi-Image Social Media Sharing for ContentCapture Pro
 ; ==============================================================================
 ; Version:     2.3
@@ -57,8 +57,12 @@ IS_ClearPendingState() {
     IS_PendingContent    := ""
     IS_PendingImages     := []
     IS_CurrentImageIndex := 0
-    try { Hotkey("^!v", "Off") }
-    try { Hotkey("^!i", "Off") }
+    try {
+        Hotkey("^!v", "Off")
+    }
+    try {
+        Hotkey("^!i", "Off")
+    }
 }
 
 ; ==============================================================================
@@ -129,15 +133,42 @@ IS_Base64ToTempFile(b64) {
     }
 }
 
-; Look up captureName in images.db, decode to temp file(s). Returns [] or [path].
-IS_GetImagesFromSQLite(captureName) {
+; Look up image from images.db, decode to temp file. Returns [] or [path].
+; imageKey = explicit DB key to look up (from capture's imagekey field)
+;            If "", falls back to looking up captureName directly.
+; platform = detected platform ("bluesky","linkedin","pinterest","facebook",...)
+;            Used to select the right canvas-fitted variant (_bsky, _li, _pin)
+IS_GetImagesFromSQLite(captureName, imageKey := "", platform := "") {
     images := []
     dbPath := A_ScriptDir "\images.db"
     if !FileExist(dbPath)
         return images
+
+    ; Determine which DB key to look up
+    if imageKey != "" {
+        ; Use the explicit imagekey with platform variant
+        dbKey := IsSet(CCP_GetPlatformImageKey)
+            ? CCP_GetPlatformImageKey(imageKey, platform)
+            : imageKey
+    } else {
+        ; Legacy: look up by capture name directly (no platform variant)
+        dbKey := captureName
+    }
+
     try {
         db  := CCP_DB_Open(dbPath)
-        b64 := CCP_DB_GetImage(db, captureName)
+        b64 := CCP_DB_GetImage(db, dbKey)
+
+        ; If platform variant not found, fall back to base imageKey
+        if b64 = "" && imageKey != "" && dbKey != imageKey {
+            b64 := CCP_DB_GetImage(db, imageKey)
+        }
+
+        ; Last resort: try captureName directly
+        if b64 = "" && imageKey != "" {
+            b64 := CCP_DB_GetImage(db, captureName)
+        }
+
         CCP_DB_Close(db)
         if b64 != "" {
             tmpPath := IS_Base64ToTempFile(b64)
@@ -154,7 +185,9 @@ IS_GetImagesFromSQLite(captureName) {
 IS_CleanTempImages(images) {
     for imgPath in images {
         if InStr(imgPath, "_ccpimg_") && FileExist(imgPath)
-            try FileDelete(imgPath)
+            try {
+            FileDelete(imgPath)
+        }
     }
 }
 
@@ -256,8 +289,18 @@ IS_GetCaptureImages(captureName) {
     global BaseDir
     images := []
 
-    ; 1. SQLite images.db
-    for imgPath in IS_GetImagesFromSQLite(captureName)
+    ; 1. SQLite images.db (platform-aware via imagekey field)
+    imageKey := ""
+    platform := ""
+    global CaptureData
+    if CaptureData.Has(StrLower(captureName)) {
+        cap := CaptureData[StrLower(captureName)]
+        if cap.Has("imagekey") && cap["imagekey"] != ""
+            imageKey := cap["imagekey"]
+    }
+    if IsSet(CCP_DetectActivePlatform)
+        platform := CCP_DetectActivePlatform()
+    for imgPath in IS_GetImagesFromSQLite(captureName, imageKey, platform)
         images.Push(imgPath)
 
     ; 2. Legacy images.dat (pipe-delimited file)
@@ -752,4 +795,229 @@ ShowNotification(message, title := "ContentCapture Pro", duration := 3000) {
     TrayTip(message, title)
     if duration > 0
         SetTimer(() => TrayTip(), -duration)
+}
+
+; ============================================================================
+; IS_SmartShare - Universal platform-aware sharing
+; Called by ;;nazipauls  (isComment=false)
+; Called by ;;nazipaulscom (isComment=true)
+;
+; Flow:
+;   1. Resolve platform (detect from browser or show picker)
+;   2. Get capture data
+;   3. Build content formatted for that platform
+;   4. Get right image variant from images.db
+;   5. Share: image first then text (post) OR text first then image (comment)
+; ============================================================================
+IS_SmartShare(captureName, isComment := false) {
+    global CaptureData
+
+    ; Step 1: Resolve platform
+    platform := IsSet(CCP_ResolvePlatform) ? CCP_ResolvePlatform() : ""
+    if platform = "" {
+        ShowNotification("Share cancelled.", "ContentCapture Pro", 2000)
+        return false
+    }
+
+    ; Step 2: Get capture
+    if !CaptureData.Has(StrLower(captureName)) {
+        ShowNotification("Capture not found: " captureName, "Error", 2000)
+        return false
+    }
+    cap := CaptureData[StrLower(captureName)]
+
+    ; Step 3: Build platform-formatted content
+    content := IS_BuildSmartContent(cap, platform)
+
+    ; Step 4: Get image temp file
+    imageKey := cap.Has("imagekey") ? cap["imagekey"] : ""
+    imgPath  := ""
+    if imageKey != "" {
+        dbKey := IsSet(CCP_GetPlatformImageKey)
+            ? CCP_GetPlatformImageKey(imageKey, platform)
+            : imageKey
+        images := IS_GetImagesFromSQLite(captureName, imageKey, platform)
+        if images.Length > 0
+            imgPath := images[1]
+    }
+
+    ; Step 5: Share with correct order and platform behavior
+    IS_ClearPendingState()
+
+    if isComment
+        return IS_SmartShareComment(platform, content, imgPath, captureName)
+    else
+        return IS_SmartSharePost(platform, content, imgPath, captureName)
+}
+
+; -- Build content formatted for the detected platform --------------------
+IS_BuildSmartContent(cap, platform) {
+    limits := Map(
+        "facebook",  63000,
+        "twitter",   280,
+        "bluesky",   300,
+        "linkedin",  3000,
+        "pinterest", 500,
+        "mastodon",  500,
+        "instagram", 2200
+    )
+    limit := limits.Has(platform) ? limits[platform] : 5000
+
+    ; Use short version if available and platform has tight limit
+    tightLimit := (limit <= 500)
+    if tightLimit && cap.Has("short") && cap["short"] != "" {
+        content := cap["short"]
+    } else if cap.Has("opinion") && cap["opinion"] != "" {
+        content := cap["opinion"]
+        if cap.Has("title") && cap["title"] != ""
+            content .= "`n`n" cap["title"]
+    } else if cap.Has("body") && cap["body"] != "" {
+        content := cap["body"]
+    } else if cap.Has("title") && cap["title"] != "" {
+        content := cap["title"]
+    } else {
+        content := ""
+    }
+
+    ; Append URL (Pinterest is image-only - skip URL)
+    if platform != "pinterest" && cap.Has("url") && cap["url"] != "" {
+        url := IS_CleanURL(cap["url"])
+        if !InStr(content, url) {
+            withUrl := content != "" ? content "`n`n" url : url
+            if StrLen(withUrl) <= limit
+                content := withUrl
+            else if content = ""
+                content := url
+        }
+    }
+
+    ; Trim to limit
+    if StrLen(content) > limit
+        content := SubStr(content, 1, limit - 3) "..."
+
+    return Trim(content)
+}
+
+; -- New post: image first, then text -------------------------------------
+IS_SmartSharePost(platform, content, imgPath, captureName) {
+
+    ; Pinterest: image only, open site
+    if platform = "pinterest" {
+        if imgPath != "" && FileExist(imgPath) {
+            IS_CopyImageFileToClipboard(imgPath)
+            Run("https://www.pinterest.com/pin/creation/button/")
+            ShowNotification(
+                "Pinterest opened!`nCtrl+V to paste your image.",
+                "Pinterest Share", 3000)
+            SetTimer(() => IS_CleanTempImages([imgPath]), -10000)
+        } else {
+            Run("https://www.pinterest.com/pin/creation/button/")
+            ShowNotification("No image attached — add one in the Edit GUI.",
+                "Pinterest Share", 3000)
+        }
+        return true
+    }
+
+    ; Facebook: text first (FB generates link preview card)
+    if platform = "facebook" {
+        IS_SafeClipboardSet(content)
+        url := ""
+        if imgPath != "" && FileExist(imgPath) {
+            ; Set up pending image for Ctrl+Shift+V
+            global IS_PendingImages, IS_CurrentImageIndex
+            IS_PendingImages     := [imgPath]
+            IS_CurrentImageIndex := 1
+            Hotkey("^!i", IS_GenericNextImage, "On")
+            ShowNotification(
+                "Text copied — paste with Ctrl+V`n"
+                "Then Ctrl+Alt+I to add your image.",
+                "Facebook Share", 4000)
+        } else {
+            ShowNotification("Text copied — paste with Ctrl+V", "Facebook Share", 3000)
+        }
+        Run("https://www.facebook.com/")
+        return true
+    }
+
+    ; All other platforms: image first, then text
+    platformUrls := Map(
+        "twitter",   "https://x.com/compose/post",
+        "bluesky",   "https://bsky.app/",
+        "linkedin",  "https://www.linkedin.com/feed/",
+        "mastodon",  "",
+        "instagram", "https://www.instagram.com/"
+    )
+
+    if imgPath != "" && FileExist(imgPath) {
+        IS_CopyImageFileToClipboard(imgPath)
+        ShowNotification(
+            "Image on clipboard — Ctrl+V to paste`n"
+            "Then Ctrl+Alt+V for your text.",
+            IS_PlatformLabel(platform) " Share", 4000)
+
+        ; Set up text for Ctrl+Alt+V
+        global IS_PendingContent
+        IS_PendingContent := content
+        Hotkey("^!v", IS_SmartPasteText, "On")
+        SetTimer(() => (IS_CleanTempImages([imgPath]), IS_ClearPendingState()), -30000)
+    } else {
+        IS_SafeClipboardSet(content)
+        ShowNotification("Text copied — paste with Ctrl+V",
+            IS_PlatformLabel(platform) " Share", 3000)
+    }
+
+    url := platformUrls.Has(platform) ? platformUrls[platform] : ""
+    if url != ""
+        Run(url)
+
+    return true
+}
+
+; -- Comment/reply: text first, then image --------------------------------
+IS_SmartShareComment(platform, content, imgPath, captureName) {
+
+    ; Paste text into the focused comment box
+    CC_SafePaste(content)
+
+    if imgPath != "" && FileExist(imgPath) {
+        Sleep(600)
+        IS_CopyImageFileToClipboard(imgPath)
+        Sleep(300)
+        Send("^v")
+        ShowNotification("Text + image pasted into comment!",
+            IS_PlatformLabel(platform) " Comment", 2000)
+        SetTimer(() => IS_CleanTempImages([imgPath]), -5000)
+    } else {
+        ShowNotification("Text pasted into comment.",
+            IS_PlatformLabel(platform) " Comment", 2000)
+    }
+
+    return true
+}
+
+; -- Hotkey handler: paste text after image -------------------------------
+IS_SmartPasteText(*) {
+    global IS_PendingContent
+    Hotkey("^!v", IS_SmartPasteText, "Off")
+    if IS_PendingContent != "" {
+        IS_SafeClipboardSet(IS_PendingContent)
+        Send("^v")
+        IS_PendingContent := ""
+        ShowNotification("Text pasted!", "Share Complete", 2000)
+    }
+    IS_ClearPendingState()
+}
+
+; -- Platform display label -----------------------------------------------
+IS_PlatformLabel(platform) {
+    labels := Map(
+        "facebook",  "Facebook",
+        "twitter",   "X / Twitter",
+        "bluesky",   "Bluesky",
+        "linkedin",  "LinkedIn",
+        "pinterest", "Pinterest",
+        "mastodon",  "Mastodon",
+        "instagram", "Instagram"
+    )
+    return labels.Has(platform) ? labels[platform] : platform
 }

@@ -1,4 +1,4 @@
-; ==============================================================================
+﻿; ==============================================================================
 ; ContentCapture Pro - Professional Content Capture & Sharing System
 ; ==============================================================================
 ; Author:      Brad
@@ -502,7 +502,11 @@
 #Include CC_HelpWindow.ahk
 #Include CC_GrepAll.ahk
 #include SocialImageShare.ahk
+#Include CCP_DomainDetect.ahk
+#Include CCP_ImageAttach.ahk
 #Include CC_TranscriptFormat.ahk 
+#Include ccp_sqlite.ahk 
+#Include CC_FacebookComment.ahk
 
 global ContentCaptureDir := ""
 
@@ -3228,6 +3232,8 @@ CC_LoadCaptureData() {
                 currentCapture["research"] := SubStr(line, 10)
             } else if (SubStr(line, 1, 8) = "docpath=") {
                 currentCapture["docpath"] := SubStr(line, 9)
+            } else if (SubStr(line, 1, 9) = "imagekey=") {
+                currentCapture["imagekey"] := SubStr(line, 10)
             } else if (SubStr(line, 1, 6) = "short=") {
                 ; Legacy single-line format
                 currentCapture["short"] := SubStr(line, 7)
@@ -3311,6 +3317,9 @@ CC_SaveCaptureData() {
 
         if (cap.Has("docpath") && cap["docpath"] != "")
             content .= "docpath=" cap["docpath"] "`n"
+
+        if (cap.Has("imagekey") && cap["imagekey"] != "")
+            content .= "imagekey=" cap["imagekey"] "`n"
 
         if (cap.Has("short") && cap["short"] != "") {
             content .= "short=<<<SHORT`n"
@@ -4069,10 +4078,41 @@ CC_CaptureContent() {
     }
 
     if CaptureData.Has(StrLower(captureResult.name)) {
-        result := MsgBox("A capture named '" captureResult.name "' already exists.`n`nOverwrite it?", "Name Exists", "YesNo Icon!")
-        if (result = "No") {
+        result := MsgBox("A capture named '" captureResult.name "' already exists.`n`n  Yes    = Overwrite the existing record`n  No     = Save as a new record with a different name`n  Cancel = Abort", "Name Exists", "YesNoCancel Icon!")
+        if (result = "Cancel") {
             A_Clipboard := oldClip
             return
+        }
+        if (result = "No") {
+            CC_SuspendHotstrings()  ; Prevent hotstrings firing while typing in InputBox
+            loop {
+                IB := InputBox("Enter a new unique name:`n(letters, numbers, underscore, hyphen only — 40 chars max)", "New Capture Name", "w400")
+                if (IB.Result = "Cancel") {
+                    CC_ResumeHotstrings()
+                    A_Clipboard := oldClip
+                    return
+                }
+                newName := Trim(IB.Value)
+                if (newName = "") {
+                    MsgBox("Please enter a name.", "Name Required", "48")
+                    continue
+                }
+                if (StrLen(newName) > 40) {
+                    MsgBox("Name must be 40 characters or less.`nCurrent length: " StrLen(newName), "Name Too Long", "48")
+                    continue
+                }
+                if RegExMatch(newName, "[^a-zA-Z0-9_-]") {
+                    MsgBox("Name can only contain letters, numbers, underscore, and hyphen.", "Invalid Characters", "48")
+                    continue
+                }
+                if CaptureData.Has(StrLower(newName)) {
+                    MsgBox("'" newName "' also already exists. Please try a different name.", "Name Exists", "48")
+                    continue
+                }
+                captureResult.name := newName
+                break
+            }
+            CC_ResumeHotstrings()  ; Restore hotstring processing
         }
     }
 
@@ -4264,9 +4304,35 @@ CC_SaveManualCapture(manualGui, nameEdit, urlEdit, titleEdit, bodyEdit, noteEdit
     
     ; Check for duplicate
     if CaptureData.Has(StrLower(name)) {
-        result := MsgBox("A capture named '" name "' already exists.`n`nOverwrite it?", "Name Exists", "YesNo Icon!")
-        if (result = "No")
+        result := MsgBox("A capture named '" name "' already exists.`n`n  Yes    = Overwrite the existing record`n  No     = Save as a new record with a different name`n  Cancel = Abort", "Name Exists", "YesNoCancel Icon!")
+        if (result = "Cancel")
             return
+        if (result = "No") {
+            loop {
+                IB := InputBox("Enter a new unique name:`n(letters, numbers, underscore, hyphen only — 40 chars max)", "New Capture Name", "w400")
+                if (IB.Result = "Cancel")
+                    return
+                newName := Trim(IB.Value)
+                if (newName = "") {
+                    MsgBox("Please enter a name.", "Name Required", "48")
+                    continue
+                }
+                if (StrLen(newName) > 40) {
+                    MsgBox("Name must be 40 characters or less.`nCurrent length: " StrLen(newName), "Name Too Long", "48")
+                    continue
+                }
+                if RegExMatch(newName, "[^a-zA-Z0-9_-]") {
+                    MsgBox("Name can only contain letters, numbers, underscore, and hyphen.", "Invalid Characters", "48")
+                    continue
+                }
+                if CaptureData.Has(StrLower(newName)) {
+                    MsgBox("'" newName "' also already exists. Please try a different name.", "Name Exists", "48")
+                    continue
+                }
+                name := newName
+                break
+            }
+        }
     }
     
     ; Build tags string
@@ -5306,6 +5372,8 @@ CC_OpenImportBrowser(filePath) {
                 currentCapture["research"] := SubStr(line, 10)
             } else if (SubStr(line, 1, 8) = "docpath=") {
                 currentCapture["docpath"] := SubStr(line, 9)
+            } else if (SubStr(line, 1, 9) = "imagekey=") {
+                currentCapture["imagekey"] := SubStr(line, 10)
             } else if (SubStr(line, 1, 6) = "short=") {
                 currentCapture["short"] := SubStr(line, 7)
             } else if (line = "body=<<<BODY") {
@@ -7114,20 +7182,43 @@ CC_EditCapture(name, clearOnly := false) {
         editGui.Add("Button", "x540 y677 w80 h22", "📝 Format").OnEvent("Click", TF_ShowFormatMenu)
     }
 
-    ; Image attachment section
+    ; Image attachment section (DB-based via imagekey field)
     editGui.SetFont("s9 c666666")
     editGui.Add("Text", "x15 y785", "📷 Image (optional):")
     editGui.SetFont("s9", "Segoe UI")
-    
-    hasImage := IsSet(IC_HasImage) && IC_HasImage(name)
-    if hasImage {
-        editGui.Add("Text", "x120 y785 c0066CC", "✓ Image attached")
-        editGui.Add("Button", "x230 y782 w70 h24", "View").OnEvent("Click", (*) => IC_OpenImage(name))
-        editGui.Add("Button", "x305 y782 w70 h24", "Change").OnEvent("Click", (*) => IC_AttachImage(name))
-        editGui.Add("Button", "x380 y782 w70 h24", "Remove").OnEvent("Click", (*) => IC_RemoveImage(name))
+
+    currentImageKey := cap.Has("imagekey") ? cap["imagekey"] : ""
+
+    ; Callback used by both Change and Attach buttons
+    OnImageKeySelected := (newKey) => (
+        CaptureData[StrLower(name)]["imagekey"] := newKey,
+        CC_SaveCaptureData(),
+        TrayTip("Image key set: " newKey, "Image Attached", 1)
+    )
+
+    OnChangeImage(*) {
+        if IsSet(CIA_ShowPicker)
+            CIA_ShowPicker(currentImageKey, OnImageKeySelected)
+    }
+    OnAttachImage(*) {
+        if IsSet(CIA_ShowPicker)
+            CIA_ShowPicker("", OnImageKeySelected)
+        else
+            MsgBox("CCP_ImageAttach.ahk is not loaded.", "Not Available", "Icon!")
+    }
+    OnRemoveImage(*) {
+        CaptureData[StrLower(name)].Delete("imagekey")
+        CC_SaveCaptureData()
+        TrayTip("Image removed", "Image Detached", 1)
+    }
+
+    if currentImageKey != "" {
+        editGui.Add("Text", "x120 y785 c0066CC w180", "✓ " currentImageKey)
+        editGui.Add("Button", "x305 y782 w70 h24", "Change").OnEvent("Click", OnChangeImage)
+        editGui.Add("Button", "x380 y782 w70 h24", "Remove").OnEvent("Click", OnRemoveImage)
     } else {
-        attachBtn := editGui.Add("Button", "x120 y782 w120 h24", "Attach Image...")
-        attachBtn.OnEvent("Click", (*) => IC_AttachImage(name))
+        attachBtn := editGui.Add("Button", "x120 y782 w140 h24", "Attach DB Image...")
+        attachBtn.OnEvent("Click", OnAttachImage)
     }
 
     ; Document attachment section (NEW)
